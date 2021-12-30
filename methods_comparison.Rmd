@@ -1,0 +1,999 @@
+---
+title: "Comparison of Methods"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+***
+
+# Introduction
+
+Here, we will evaluate methods for deriving TWAS SNP-weights based on eQTL summary statistics.
+
+There are two stages to this process, 1) Determining which genes to derive TWAS SNP-weights for, and 2) Derive SNP-weights predicting gene expression.
+
+***
+
+## Determining which genes to derive TWAS SNP-weights for
+
+Existing approaches:
+
+- For SMR this is done by analysing any gene with a genome-wide significant eQTL
+- For FUSION this is done by analysing any gene with cis-SNPh2 p < 0.01
+- For MetaXcan this is done by analysing any gene with significant positive R2 using SNP-weights
+
+The FUSION and MetaXcan approach is better for determining genes to include in a GWAS as it better reflects the power that TWAS would have. We may not always have a target sample to test the variance explained by the SNP-weights, so the MetaXcan approach is less applicable. So, I think we should use the same criteria as FUSION, except we must use a summary statistic based approach to estimate SNP-based heritability. We should compare summary statistic approaches to estimates from GREML as reported in FUSION released SNP-weights. The approach also need to be fast as it will need to be implemented for each gene seperately.
+
+***
+
+## Derive SNP-weights predicting gene expression
+
+SMR uses single eQTL summary statistics, making it applicable to a wider range of datasets and results from meta-analyses. TWAS based methods are not currently relevent when only eQTL summary statistics are available, as the advantage of these methods over SMR is their ability to incorporate the effects of multiple SNPs on gene expression. Currently, TWAS methods use SNP-weights derived using individual level data, which means TWAS cannot use meta-analysis results for eQTLs, and often TWAS weights are unavailable for the latest eQTL datasets. So, here we will compare a range of summary statistic approaches to derive TWAS weights. Again, the method will need to be fast since it will need to be applied to each genes seperately. Summary statistic based polygenic scoring methods will likely be of use, though given the lack of target samples for validation, a pseudovalidation approach will be necessary, which estimates the optimal parameters without a target sample for validation.
+
+Possible methods for deriving SNP-weights:
+- SBayesR
+- DBSLMM
+- PRScs auto
+- Mega-PRS
+
+An alternative method suggested is to use SuSiE posteriors as SNP-weights.
+
+***
+
+# Methods
+
+***
+
+## Comparison using GTEx v7 eQTL data and FUSION SNP-weights
+
+Comparison to FUSION weights is not ideal as by chance different leads SNP could be selected. Ideally we would compare summary statistic-based and observed TWAS weights to observed expression. However, lets start with this as it will allow comparison of heritability estimates and be a good opputunity to design the study.
+
+We will use whole blood for the comparison. eQTL summary statistics are downloaded from [here](https://storage.googleapis.com/gtex_analysis_v7/single_tissue_eqtl_data/all_snp_gene_associations/Whole_Blood.allpairs.txt.gz). FUSION TWAS SNP-weights were downloaded from [here](http://gusevlab.org/projects/fusion/weights/GTEx.Whole_Blood.P01.tar.bz2).
+
+***
+
+### Compare SNP-h2 estimates
+
+We will compare different version of GCTB Bayes models and LDSC. If LDSC doesn't work, then LDAK model is unlikely to make a difference. To avoid unessecary compuational burden, only estimate hsq for 100 genes on chromosome 22.
+
+```{bash, eval=F, echo=T}
+
+for chr in $(seq 1 22);do
+pattern=$(echo ^${chr}_)
+awk -v pat="$pattern" '$2 ~ pat { print }' /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/Whole_Blood.allpairs.txt > /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/Whole_Blood.allpairs.chr${chr}.txt_tmp
+cat <(head -n1 /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/Whole_Blood.allpairs.txt) /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/Whole_Blood.allpairs.chr${chr}.txt_tmp > /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/Whole_Blood.allpairs.chr${chr}.txt
+rm /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/Whole_Blood.allpairs.chr${chr}.txt_tmp
+done
+
+```
+
+```{r, eval=F, echo=T}
+library(data.table)
+
+# Make output directory
+dir.create('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/SBayesR')
+dir.create('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/SBayesS')
+dir.create('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/LDSC')
+dir.create('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/SBayesR/RDat_files')
+
+# Read in HapMap3 SNP-list
+hm3_snp<-fread('/users/k1806347/brc_scratch/Data/ldsc/w_hm3.snplist')
+
+sbayesr_h2<-NULL
+sbayesr_robust_h2<-NULL
+sbayess_h2<-NULL
+ldsc_h2<-NULL
+
+# Run across each chromosome seperately
+for(chr_i in 22){
+  # Read in eQTL data
+  eqtl<-fread(paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/Whole_Blood.allpairs.chr',chr_i,'.txt'))
+  
+  # Create CHR, BP, A1, A2, and Build columns
+  var_id<-data.table(do.call(rbind, strsplit(eqtl$variant_id, '_')))
+  names(var_id)<-c('CHR','BP','A1','A2','Build')
+  var_id$CHR<-as.numeric(var_id$CHR)
+  var_id$BP<-as.numeric(var_id$BP)
+  
+  eqtl<-cbind(eqtl, var_id)
+  
+  # Insert IUPAC codes for SNPs
+  eqtl$IUPAC[eqtl$A1 == 'A' & eqtl$A2 =='T' | eqtl$A1 == 'T' & eqtl$A2 =='A']<-'W'
+  eqtl$IUPAC[eqtl$A1 == 'C' & eqtl$A2 =='G' | eqtl$A1 == 'G' & eqtl$A2 =='C']<-'S'
+  eqtl$IUPAC[eqtl$A1 == 'A' & eqtl$A2 =='G' | eqtl$A1 == 'G' & eqtl$A2 =='A']<-'R'
+  eqtl$IUPAC[eqtl$A1 == 'C' & eqtl$A2 =='T' | eqtl$A1 == 'T' & eqtl$A2 =='C']<-'Y'
+  eqtl$IUPAC[eqtl$A1 == 'G' & eqtl$A2 =='T' | eqtl$A1 == 'T' & eqtl$A2 =='G']<-'K'
+  eqtl$IUPAC[eqtl$A1 == 'A' & eqtl$A2 =='C' | eqtl$A1 == 'C' & eqtl$A2 =='A']<-'M'
+  
+  # Remove INDELS
+  eqtl<-eqtl[!is.na(eqtl$IUPAC),]
+  
+  # Calculate N for each association
+  eqtl$N<-round((eqtl$ma_count/eqtl$maf)/2,1)
+  
+  # Check the build
+  table(eqtl$Build) 
+  # They are all b37
+  
+  ###
+  # Insert RSIDs
+  ###
+  
+  # Read in 1KG reference SNP data
+  ref_bim_i<-fread(paste0('/mnt/lustre/groups/biomarkers-brc-mh/Reference_data/1KG_Phase3/PLINK/all_phase3.chr',chr_i,'.bim'))
+  names(ref_bim_i)<-c('CHR','SNP','POS','BP','A1','A2')
+  
+  # Extract hm3 SNPs
+  ref_bim_i<-ref_bim_i[ref_bim_i$SNP %in% hm3_snp$SNP,]
+  
+  # Insert IUPAC codes
+  ref_bim_i$IUPAC[ref_bim_i$A1 == 'A' & ref_bim_i$A2 =='T' | ref_bim_i$A1 == 'T' & ref_bim_i$A2 =='A']<-'W'
+  ref_bim_i$IUPAC[ref_bim_i$A1 == 'C' & ref_bim_i$A2 =='G' | ref_bim_i$A1 == 'G' & ref_bim_i$A2 =='C']<-'S'
+  ref_bim_i$IUPAC[ref_bim_i$A1 == 'A' & ref_bim_i$A2 =='G' | ref_bim_i$A1 == 'G' & ref_bim_i$A2 =='A']<-'R'
+  ref_bim_i$IUPAC[ref_bim_i$A1 == 'C' & ref_bim_i$A2 =='T' | ref_bim_i$A1 == 'T' & ref_bim_i$A2 =='C']<-'Y'
+  ref_bim_i$IUPAC[ref_bim_i$A1 == 'G' & ref_bim_i$A2 =='T' | ref_bim_i$A1 == 'T' & ref_bim_i$A2 =='G']<-'K'
+  ref_bim_i$IUPAC[ref_bim_i$A1 == 'A' & ref_bim_i$A2 =='C' | ref_bim_i$A1 == 'C' & ref_bim_i$A2 =='A']<-'M'
+
+  # Merge target and reference based on position
+  ref_target<-merge(eqtl, ref_bim_i, by=c('CHR','BP'))
+  
+  # I have used the GTEx reference data as well, and the same number is returned. 
+  # Note: The A1 allele is the ref allele.
+  # Small number of SNPs remaining highlights the limitation of using HapMap3 SNPs only.
+  
+  # Identify SNPs for which alleles need to be flipped
+  flip_tmp<-ref_target[(ref_target$IUPAC.x == 'R' & ref_target$IUPAC.y == 'Y' | 
+                          ref_target$IUPAC.x == 'Y' & ref_target$IUPAC.y == 'R' | 
+                          ref_target$IUPAC.x == 'K' & ref_target$IUPAC.y == 'M' |
+                          ref_target$IUPAC.x == 'M' & ref_target$IUPAC.y == 'K'),]
+  
+  # Idenitfy SNPs which match the reference alleles
+  incl<-ref_target[ ref_target$IUPAC.x == 'R' & ref_target$IUPAC.y == 'R' | 
+                      ref_target$IUPAC.x == 'Y' & ref_target$IUPAC.y == 'Y' | 
+                      ref_target$IUPAC.x == 'K' & ref_target$IUPAC.y == 'K' |
+                      ref_target$IUPAC.x == 'M' & ref_target$IUPAC.y == 'M' ]
+  
+  # If a SNP that needs to be flipped has a duplicate that is on the correct strand, remove it.
+  flip<-flip_tmp[!(flip_tmp$SNP %in% incl$SNP)]
+  
+  # Flip alleles where necessary
+  flip_tmp$A1_flipped<-flip_tmp$A1.x
+  flip_tmp$A1_flipped[flip_tmp$A1.x == 'A']<-'T'
+  flip_tmp$A1_flipped[flip_tmp$A1.x == 'T']<-'C'
+  flip_tmp$A1_flipped[flip_tmp$A1.x == 'G']<-'C'
+  flip_tmp$A1_flipped[flip_tmp$A1.x == 'C']<-'G'
+  flip_tmp$A1.x<-flip_tmp$A1_flipped
+  flip_tmp$A1_flipped<-NULL
+  
+  flip_tmp$A2_flipped<-flip_tmp$A2.x
+  flip_tmp$A2_flipped[flip_tmp$A2.x == 'A']<-'T'
+  flip_tmp$A2_flipped[flip_tmp$A2.x == 'T']<-'C'
+  flip_tmp$A2_flipped[flip_tmp$A2.x == 'G']<-'C'
+  flip_tmp$A2_flipped[flip_tmp$A2.x == 'C']<-'G'
+  flip_tmp$A2.x<-flip_tmp$A2_flipped
+  flip_tmp$A2_flipped<-NULL
+  
+  # Recombine and format
+  eqtl_harm<-rbind(flip_tmp, incl)
+  eqtl_harm<-eqtl_harm[,c('CHR','SNP','BP','A1.x','A2.x',"gene_id","variant_id","tss_distance","ma_samples","ma_count","maf","pval_nominal","slope","slope_se","N"), with=F]
+  names(eqtl_harm)[names(eqtl_harm) == 'A1.x']<-'A1'
+  names(eqtl_harm)[names(eqtl_harm) == 'A2.x']<-'A2'
+
+  # Remove variants with MAF < 1%
+  eqtl_harm<-eqtl_harm[eqtl_harm$maf >= 0.01,]
+  
+  eqtl<-eqtl_harm
+  rm(eqtl_harm)
+  
+  # Identify unique genes 
+  genes<-unique(eqtl$gene_id)
+  genes<-genes[1:100]
+
+  # Run for each gene seperately
+  for(gene_i in genes){
+    print(which(genes == gene_i))
+
+    eqtl_gene_i<-eqtl[eqtl$gene_id == gene_i,]
+    
+    #######
+    # SBayesR
+    #######
+    
+    # Format for SBayesR
+    eqtl_gene_i_sbayesr<-eqtl_gene_i[,c('SNP','A1','A2','maf','slope','slope_se','pval_nominal','N'), with=F]
+    names(eqtl_gene_i_sbayesr)<-c('SNP','A1','A2','freq','b','se','p','N')
+    
+    # write in SBayesR format
+    fwrite(eqtl_gene_i_sbayesr, paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/SBayesR/',gene_i,'.txt'), sep=' ', na = "NA", quote=F)
+    
+    # Run SBayesR
+    log<-system(paste0('/users/k1806347/brc_scratch/Software/gctb_2.03beta_Linux/gctb_203.sh --sbayes R --ldm /users/k1806347/brc_scratch/Data/1KG/Phase3/LD_matrix/GCTB_shared/ukbEURu_hm3_shrunk_sparse/ukbEURu_hm3_v3_50k_chr',chr_i,'.ldm.sparse --pi 0.95,0.02,0.02,0.01 --gamma 0.0,0.01,0.1,1 --gwas-summary /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/SBayesR/',gene_i,'.txt --chain-length 10000 --exclude-mhc --burn-in 2000 --out-freq 1000 --out /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/SBayesR/',gene_i,'.SBayesR'), intern=T)
+    
+    # Run SBayesR
+    log2<-system(paste0('/users/k1806347/brc_scratch/Software/gctb_2.03beta_Linux/gctb_203.sh --sbayes R --ldm /users/k1806347/brc_scratch/Data/1KG/Phase3/LD_matrix/GCTB_shared/ukbEURu_hm3_shrunk_sparse/ukbEURu_hm3_v3_50k_chr',chr_i,'.ldm.sparse --pi 0.95,0.02,0.02,0.01 --gamma 0.0,0.01,0.1,1 --gwas-summary /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/SBayesR/',gene_i,'.txt --chain-length 10000 --robust --exclude-mhc --burn-in 2000 --out-freq 1000 --out /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/SBayesR/',gene_i,'.SBayesR_robust'), intern=T)
+    
+    #######
+    # SBayesS
+    #######
+    
+    # Run SBayesS
+    log3<-system(paste0('/users/k1806347/brc_scratch/Software/gctb_2.03beta_Linux/gctb_203.sh --sbayes S --ldm /users/k1806347/brc_scratch/Data/1KG/Phase3/LD_matrix/GCTB_shared/ukbEURu_hm3_shrunk_sparse/ukbEURu_hm3_v3_50k_chr',chr_i,'.ldm.sparse --pi 0.1 --hsq 0.5 --chain-length 25000 --burn-in 5000 --gwas-summary /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/SBayesR/',gene_i,'.txt --exclude-mhc --out-freq 1000 --out /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/SBayesS/',gene_i,'.SBayesS'), intern=T)
+    
+    #######
+    # LDSC
+    #######
+    
+    # Format for LDSC
+    eqtl_gene_i_ldsc<-eqtl_gene_i[,c('SNP','A1','A2','slope','slope_se','N'), with=F]
+    names(eqtl_gene_i_ldsc)<-c('SNP','A1','A2','BETA','SE','N')
+    eqtl_gene_i_ldsc$Z<-eqtl_gene_i_ldsc$BETA/eqtl_gene_i_ldsc$SE
+    eqtl_gene_i_ldsc<-eqtl_gene_i_ldsc[,c('SNP','A1','A2','Z','N'), with=F]
+    
+    # write in LDSC format
+    fwrite(eqtl_gene_i_ldsc, paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/LDSC/',gene_i,'.txt'), sep=' ', na = "NA", quote=F)
+    
+    # Run LDSC
+    log4<-system(paste0('/users/k1806347/brc_scratch/Software/ldsc.sh --h2 /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/LDSC/',gene_i,'.txt --ref-ld-chr /users/k1806347/brc_scratch/Data/ldsc/eur_w_ld_chr/ --w-ld-chr /users/k1806347/brc_scratch/Data/ldsc/eur_w_ld_chr/ --out /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/LDSC/',gene_i,'.h2'), intern=T)
+
+    ########
+    # Tabulate SNP-h2 results
+    ########
+    
+    # Read SbayesR heritability result
+    if(file.exists(paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/SBayesR/',gene_i,'.SBayesR.parRes'))){
+      
+      par_res_file_i<-fread(paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/SBayesR/',gene_i,'.SBayesR.parRes'))
+      par_res_file_i<-par_res_file_i[par_res_file_i$V1 == 'hsq',2:3, with=F]
+      par_res_file_i$P<-pnorm(-abs(par_res_file_i$Mean/par_res_file_i$SD))
+      par_res_file_i$Gene<-gene_i
+      par_res_file_i<-par_res_file_i[,c('Gene','Mean','SD','P'), with=F]
+      names(par_res_file_i)<-c('gene','hsq','se','p')
+      sbayesr_h2<-rbind(sbayesr_h2, par_res_file_i)
+    }
+
+    if(file.exists(paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/SBayesR/',gene_i,'.SBayesR_robust.parRes'))){
+      
+      par_res_file_i<-fread(paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/SBayesR/',gene_i,'.SBayesR_robust.parRes'))
+      par_res_file_i<-par_res_file_i[par_res_file_i$V1 == 'hsq',2:3, with=F]
+      par_res_file_i$P<-pnorm(-abs(par_res_file_i$Mean/par_res_file_i$SD))
+      par_res_file_i$Gene<-gene_i
+      par_res_file_i<-par_res_file_i[,c('Gene','Mean','SD','P'), with=F]
+      names(par_res_file_i)<-c('gene','hsq','se','p')
+      sbayesr_robust_h2<-rbind(sbayesr_robust_h2, par_res_file_i)
+    }
+
+    # Read SbayesS heritability result
+    if(file.exists(paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/SBayesS/',gene_i,'.SBayesS.parRes'))){
+      
+      par_res_file_i<-fread(paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/SBayesS/',gene_i,'.SBayesS.parRes'))
+      par_res_file_i<-par_res_file_i[par_res_file_i$V1 == 'hsq',2:3, with=F]
+      par_res_file_i$P<-pnorm(-abs(par_res_file_i$Mean/par_res_file_i$SD))
+      par_res_file_i$Gene<-gene_i
+      par_res_file_i<-par_res_file_i[,c('Gene','Mean','SD','P'), with=F]
+      names(par_res_file_i)<-c('gene','hsq','se','p')
+      sbayess_h2<-rbind(sbayess_h2, par_res_file_i)
+    }
+    
+    # Read LDSC heritability result
+    if(file.exists(paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/LDSC/',gene_i,'.h2.log'))){
+      
+      par_res_file_i<-readLines(paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/LDSC/',gene_i,'.h2.log'))
+      par_res_file_i<-gsub('.*: ','',par_res_file_i[grepl('Total Observed scale h2',par_res_file_i)])
+      hsq<-as.numeric(gsub(' .*','',par_res_file_i))
+      se<-as.numeric(gsub(")",'',gsub(".*\\(",'',par_res_file_i)))
+      p<-pnorm(hsq/se, lower.tail = F)
+      
+      ldsc_h2<-rbind(ldsc_h2, data.frame(gene=gene_i,
+                                         hsq=hsq,
+                                         se=se,
+                                         p=p))
+      
+    }
+  }
+}
+
+# Compare hsq estimates across methods
+fusion_files<-list.files(path='/scratch/groups/biomarkers-brc-mh/TWAS_resource/FUSION/SNP-weights/Whole_Blood/Whole_Blood/', pattern='.RDat')
+fusion_files<-gsub('.wgt.RDat','',gsub('Whole_Blood.','',fusion_files))
+fusion_files<-intersect(fusion_files, genes)
+
+greml_h2<-NULL
+
+for(genes_i in fusion_files){
+  load(paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/FUSION/SNP-weights/Whole_Blood/Whole_Blood/Whole_Blood.',genes_i,'.wgt.RDat'))
+  fusion<-data.frame(wgt.matrix)
+  fusion$SNP<-row.names(fusion)
+  greml<-c(hsq, hsq.pv)
+
+  greml_h2<-rbind(greml_h2, data.frame(gene=genes_i,
+                                         hsq=greml[1],
+                                         se=greml[2],
+                                         p=greml[3]))
+}
+
+# Combine results across methods
+sbayesr_h2$method<-'sbayesr'
+sbayesr_robust_h2$method<-'sbayesr_robust'
+sbayess_h2$method<-'sbayess'
+ldsc_h2$method<-'ldsc'
+greml_h2$method<-'greml'
+
+all_h2<-do.call(rbind, list(sbayesr_h2, 
+                            sbayesr_robust_h2, 
+                            sbayess_h2, 
+                            ldsc_h2, 
+                            greml_h2))
+
+write.table(all_h2, '/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/h2_estimates.txt', col.names=T, row.names=F, quote=F)
+
+```
+
+```{r, eval=T, echo=T}
+library(data.table)
+
+all_h2<-fread('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/h2_estimates.txt')
+
+library(UpSetR)
+
+# Remove estimates which did not converge
+all_h2<-all_h2[all_h2$se != 0,]
+
+# Merge estimates an check correlation
+all_h2_full_list<-split(all_h2[,c('gene','hsq'),with=F], f = all_h2$method)
+
+for(i in names(all_h2_full_list)){
+  names(all_h2_full_list[[which(names(all_h2_full_list) == i)]])<-c('gene',i)
+}
+
+all_h2_full_dat<-Reduce(function(...) merge(..., by='gene', all=T), all_h2_full_list)
+
+library("ggplot2")
+library("GGally")   
+
+ggpairs(all_h2_full_dat[,-1])  
+# Note. LDSC estimates are very inaccurate and do not correlated well with other methods. SBayesR correlates best wit GREML, and SBayesR and SBayesR with robust setting are highly correlated. The SBayesS method correlates less well with other methods, but this doesn't mean it is inaccurate as we don't know the truth.
+
+# Check the number of genes that are significant in each method and how they overlap across methods.
+
+# Extract significant estimates
+all_h2_sig<-all_h2[all_h2$p < 0.01,]
+table(all_h2_sig$method)
+# The number is similar across methods, but SBayesR has the highest.
+all_h2_sig_list<-split(all_h2_sig[['gene']], f = all_h2_sig$method)
+
+# Plot number of genes with valid and significant estimates
+upset(fromList(all_h2_sig_list), nsets=10, order.by = "freq")
+# Again LDSC is least concordant with other methods.
+
+# Compare number overlapping with GREML list
+all_h2_greml_sig_list<-all_h2_sig_list
+for(i in names(all_h2_greml_sig_list)){
+  tmp<-all_h2_greml_sig_list[[which(names(all_h2_greml_sig_list) == i)]]
+  tmp<-tmp[tmp %in% all_h2_greml_sig_list[['greml']]]
+  all_h2_greml_sig_list[[which(names(all_h2_greml_sig_list) == i)]]<-tmp
+}
+
+for(i in 1:length(all_h2_greml_sig_list)){
+  print(names(all_h2_greml_sig_list)[i])
+  print(length(all_h2_greml_sig_list[[i]]))
+}
+
+# Note. SBayesR has the largest overlap with GREML. Given this, and that SBayesR finds the most significant genes, I think we should use SBayesR without robust parameteristation to estimate heritability.
+
+```
+
+***
+
+### Compare methods for generating SNP-weights
+
+Now we have decided which genes to create SNP-weights for, we will generate SNP-weights for predicting gene expression using a range of methods. Then we will compare these SNP-weights to those derived by FUSION. Again, to avoid computational burden, start by running for the first 100 genes on chromosome 22.
+
+```{r, eval=F, echo=T}
+
+library(data.table)
+
+# Make output directory
+dir.create('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/snp_weight_comp')
+dir.create('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/snp_weight_comp/SBayesR')
+dir.create('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/snp_weight_comp/SBayesR_robust')
+dir.create('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/snp_weight_comp/DBSLMM')
+dir.create('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/snp_weight_comp/PRScs')
+dir.create('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/snp_weight_comp/SuSiE')
+dir.create('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/snp_weight_comp/RDat_files')
+
+# Read in HapMap3 SNP-list
+hm3_snp<-fread('/users/k1806347/brc_scratch/Data/ldsc/w_hm3.snplist')
+
+sbayesr_h2<-NULL
+
+# Run across each chromosome seperately
+for(chr_i in 22){
+  # Read in eQTL data
+  eqtl<-fread(paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/Whole_Blood.allpairs.chr',chr_i,'.txt'))
+  
+  # Create CHR, BP, A1, A2, and Build columns
+  var_id<-data.table(do.call(rbind, strsplit(eqtl$variant_id, '_')))
+  names(var_id)<-c('CHR','BP','A1','A2','Build')
+  var_id$CHR<-as.numeric(var_id$CHR)
+  var_id$BP<-as.numeric(var_id$BP)
+  
+  eqtl<-cbind(eqtl, var_id)
+  
+  # Insert IUPAC codes for SNPs
+  eqtl$IUPAC[eqtl$A1 == 'A' & eqtl$A2 =='T' | eqtl$A1 == 'T' & eqtl$A2 =='A']<-'W'
+  eqtl$IUPAC[eqtl$A1 == 'C' & eqtl$A2 =='G' | eqtl$A1 == 'G' & eqtl$A2 =='C']<-'S'
+  eqtl$IUPAC[eqtl$A1 == 'A' & eqtl$A2 =='G' | eqtl$A1 == 'G' & eqtl$A2 =='A']<-'R'
+  eqtl$IUPAC[eqtl$A1 == 'C' & eqtl$A2 =='T' | eqtl$A1 == 'T' & eqtl$A2 =='C']<-'Y'
+  eqtl$IUPAC[eqtl$A1 == 'G' & eqtl$A2 =='T' | eqtl$A1 == 'T' & eqtl$A2 =='G']<-'K'
+  eqtl$IUPAC[eqtl$A1 == 'A' & eqtl$A2 =='C' | eqtl$A1 == 'C' & eqtl$A2 =='A']<-'M'
+  
+  # Remove INDELS
+  eqtl<-eqtl[!is.na(eqtl$IUPAC),]
+  
+  # Calculate N for each association
+  eqtl$N<-round((eqtl$ma_count/eqtl$maf)/2,1)
+  
+  # Check the build
+  table(eqtl$Build) 
+  # They are all b37
+  
+  ###
+  # Insert RSIDs
+  ###
+  
+  # Read in 1KG reference SNP data
+  ref_bim_i<-fread(paste0('/mnt/lustre/groups/biomarkers-brc-mh/Reference_data/1KG_Phase3/PLINK/all_phase3.chr',chr_i,'.bim'))
+  names(ref_bim_i)<-c('CHR','SNP','POS','BP','A1','A2')
+  
+  # Extract hm3 SNPs
+  ref_bim_i<-ref_bim_i[ref_bim_i$SNP %in% hm3_snp$SNP,]
+  
+  # Insert IUPAC codes
+  ref_bim_i$IUPAC[ref_bim_i$A1 == 'A' & ref_bim_i$A2 =='T' | ref_bim_i$A1 == 'T' & ref_bim_i$A2 =='A']<-'W'
+  ref_bim_i$IUPAC[ref_bim_i$A1 == 'C' & ref_bim_i$A2 =='G' | ref_bim_i$A1 == 'G' & ref_bim_i$A2 =='C']<-'S'
+  ref_bim_i$IUPAC[ref_bim_i$A1 == 'A' & ref_bim_i$A2 =='G' | ref_bim_i$A1 == 'G' & ref_bim_i$A2 =='A']<-'R'
+  ref_bim_i$IUPAC[ref_bim_i$A1 == 'C' & ref_bim_i$A2 =='T' | ref_bim_i$A1 == 'T' & ref_bim_i$A2 =='C']<-'Y'
+  ref_bim_i$IUPAC[ref_bim_i$A1 == 'G' & ref_bim_i$A2 =='T' | ref_bim_i$A1 == 'T' & ref_bim_i$A2 =='G']<-'K'
+  ref_bim_i$IUPAC[ref_bim_i$A1 == 'A' & ref_bim_i$A2 =='C' | ref_bim_i$A1 == 'C' & ref_bim_i$A2 =='A']<-'M'
+
+  # Merge target and reference based on position
+  ref_target<-merge(eqtl, ref_bim_i, by=c('CHR','BP'))
+  
+  # I have used the GTEx reference data as well, and the same number is returned. 
+  # Note: The A1 allele is the ref allele.
+  # Small number of SNPs remaining highlights the limitation of using HapMap3 SNPs only.
+  
+  # Identify SNPs for which alleles need to be flipped
+  flip_tmp<-ref_target[(ref_target$IUPAC.x == 'R' & ref_target$IUPAC.y == 'Y' | 
+                          ref_target$IUPAC.x == 'Y' & ref_target$IUPAC.y == 'R' | 
+                          ref_target$IUPAC.x == 'K' & ref_target$IUPAC.y == 'M' |
+                          ref_target$IUPAC.x == 'M' & ref_target$IUPAC.y == 'K'),]
+  
+  # Idenitfy SNPs which match the reference alleles
+  incl<-ref_target[ ref_target$IUPAC.x == 'R' & ref_target$IUPAC.y == 'R' | 
+                      ref_target$IUPAC.x == 'Y' & ref_target$IUPAC.y == 'Y' | 
+                      ref_target$IUPAC.x == 'K' & ref_target$IUPAC.y == 'K' |
+                      ref_target$IUPAC.x == 'M' & ref_target$IUPAC.y == 'M' ]
+  
+  # If a SNP that needs to be flipped has a duplicate that is on the correct strand, remove it.
+  flip<-flip_tmp[!(flip_tmp$SNP %in% incl$SNP)]
+  
+  # Flip alleles where necessary
+  flip_tmp$A1_flipped<-flip_tmp$A1.x
+  flip_tmp$A1_flipped[flip_tmp$A1.x == 'A']<-'T'
+  flip_tmp$A1_flipped[flip_tmp$A1.x == 'T']<-'C'
+  flip_tmp$A1_flipped[flip_tmp$A1.x == 'G']<-'C'
+  flip_tmp$A1_flipped[flip_tmp$A1.x == 'C']<-'G'
+  flip_tmp$A1.x<-flip_tmp$A1_flipped
+  flip_tmp$A1_flipped<-NULL
+  
+  flip_tmp$A2_flipped<-flip_tmp$A2.x
+  flip_tmp$A2_flipped[flip_tmp$A2.x == 'A']<-'T'
+  flip_tmp$A2_flipped[flip_tmp$A2.x == 'T']<-'C'
+  flip_tmp$A2_flipped[flip_tmp$A2.x == 'G']<-'C'
+  flip_tmp$A2_flipped[flip_tmp$A2.x == 'C']<-'G'
+  flip_tmp$A2.x<-flip_tmp$A2_flipped
+  flip_tmp$A2_flipped<-NULL
+  
+  # Recombine and format
+  eqtl_harm<-rbind(flip_tmp, incl)
+  eqtl_harm<-eqtl_harm[,c('CHR','SNP','BP','A1.x','A2.x',"gene_id","variant_id","tss_distance","ma_samples","ma_count","maf","pval_nominal","slope","slope_se","N"), with=F]
+  names(eqtl_harm)[names(eqtl_harm) == 'A1.x']<-'A1'
+  names(eqtl_harm)[names(eqtl_harm) == 'A2.x']<-'A2'
+
+  # Remove variants with MAF < 1%
+  eqtl_harm<-eqtl_harm[eqtl_harm$maf >= 0.01,]
+  
+  eqtl<-eqtl_harm
+  rm(eqtl_harm)
+  
+  # Identify unique genes 
+  genes<-unique(eqtl$gene_id)
+  genes<-genes[1:100]
+
+  # Run for each gene seperately
+  for(gene_i in genes[-1:-3]){
+    print(which(genes == gene_i))
+
+    eqtl_gene_i<-eqtl[eqtl$gene_id == gene_i,]
+    
+    # Filter SNPs to those with N > 80% of max(N)
+    eqtl_gene_i<-eqtl_gene_i[eqtl_gene_i$N >= 0.8*max(eqtl_gene_i$N),]
+    
+    #######
+    # SBayesR
+    #######
+    
+    # Format for SBayesR
+    eqtl_gene_i_sbayesr<-eqtl_gene_i[,c('SNP','A1','A2','maf','slope','slope_se','pval_nominal','N'), with=F]
+    names(eqtl_gene_i_sbayesr)<-c('SNP','A1','A2','freq','b','se','p','N')
+    
+    # write in SBayesR format
+    fwrite(eqtl_gene_i_sbayesr, paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/snp_weight_comp/SBayesR/',gene_i,'.txt'), sep=' ', na = "NA", quote=F)
+    
+    # Run SBayesR
+    log<-system(paste0('/users/k1806347/brc_scratch/Software/gctb_2.03beta_Linux/gctb_203.sh --sbayes R --ldm /users/k1806347/brc_scratch/Data/1KG/Phase3/LD_matrix/GCTB_shared/ukbEURu_hm3_shrunk_sparse/ukbEURu_hm3_v3_50k_chr',chr_i,'.ldm.sparse --pi 0.95,0.02,0.02,0.01 --gamma 0.0,0.01,0.1,1 --gwas-summary /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/snp_weight_comp/SBayesR/',gene_i,'.txt --chain-length 10000 --exclude-mhc --burn-in 2000 --out-freq 1000 --out /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/snp_weight_comp/SBayesR/',gene_i,'.SBayesR'), intern=T)
+    
+    # Read SbayesR heritability result
+    if(file.exists(paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/snp_weight_comp/SBayesR/',gene_i,'.SBayesR.parRes'))){
+      
+      par_res_file_i<-fread(paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/snp_weight_comp/SBayesR/',gene_i,'.SBayesR.parRes'))
+      par_res_file_i<-par_res_file_i[par_res_file_i$V1 == 'hsq',2:3, with=F]
+      par_res_file_i$P<-pnorm(-abs(par_res_file_i$Mean/par_res_file_i$SD))
+      par_res_file_i$Gene<-gene_i
+      par_res_file_i<-par_res_file_i[,c('Gene','Mean','SD','P'), with=F]
+      names(par_res_file_i)<-c('gene','hsq','se','p')
+      sbayesr_h2<-rbind(sbayesr_h2, par_res_file_i)
+      
+      # If SNP-h2 p < 0.01, generate SNP-weights
+      if(par_res_file_i$p < 0.01){
+        # Flip the effect of each method to match eqtl sumstats
+        ref_tmp<-eqtl_gene_i[, c('SNP','A1','A2'), with=F]
+        
+        #############
+        # SBayesR
+        #############
+        # SBayesR has already been run, so just read in the SNP-weights
+        sbayesr_score<-fread(paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/snp_weight_comp/SBayesR/',gene_i,'.SBayesR.snpRes'))
+        sbayesr_score<-sbayesr_score[,c('Name','A1','A2','A1Effect'), with=F]
+        names(sbayesr_score)<-c('SNP','A1','A2','BETA')
+        
+        # Flip effects so allele match eQTL sumstats
+        sbayesr_score<-merge(ref_tmp, sbayesr_score, by='SNP', all=T)
+        sbayesr_score$BETA[which(sbayesr_score$A1.x == sbayesr_score$A2.y)]<--sbayesr_score$BETA[which(sbayesr_score$A1.x == sbayesr_score$A2.y)]
+        sbayesr_score<-sbayesr_score[,c('SNP','A1.x','A2.x','BETA'), with=F]
+        names(sbayesr_score)<-c('SNP','A1','A2','BETA')
+        
+        #############
+        # SBayesR robust
+        #############
+        # SBayesR format sumstats are already available
+        # So just run SBayesR with robust setting
+        
+        log<-system(paste0('/users/k1806347/brc_scratch/Software/gctb_2.03beta_Linux/gctb_203.sh --sbayes R --ldm /users/k1806347/brc_scratch/Data/1KG/Phase3/LD_matrix/GCTB_shared/ukbEURu_hm3_shrunk_sparse/ukbEURu_hm3_v3_50k_chr',chr_i,'.ldm.sparse --pi 0.95,0.02,0.02,0.01 --gamma 0.0,0.01,0.1,1 --gwas-summary /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/snp_weight_comp/SBayesR/',gene_i,'.txt --robust --chain-length 10000 --exclude-mhc --burn-in 2000 --out-freq 1000 --out /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/snp_weight_comp/SBayesR_robust/',gene_i,'.SBayesR'), intern=T)
+
+        # Read in the results
+        sbayesr_robust_score<-fread(paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/snp_weight_comp/SBayesR_robust/',gene_i,'.SBayesR.snpRes'))
+        sbayesr_robust_score<-sbayesr_robust_score[,c('Name','A1','A2','A1Effect'), with=F]
+        names(sbayesr_robust_score)<-c('SNP','A1','A2','BETA')
+        
+        # Flip effects so allele match eQTL sumstats
+        sbayesr_robust_score<-merge(ref_tmp, sbayesr_robust_score, by='SNP', all=T)
+        sbayesr_robust_score$BETA[which(sbayesr_robust_score$A1.x == sbayesr_robust_score$A2.y)]<--sbayesr_robust_score$BETA[which(sbayesr_robust_score$A1.x == sbayesr_robust_score$A2.y)]
+        sbayesr_robust_score<-sbayesr_robust_score[,c('SNP','A1.x','A2.x','BETA'), with=F]
+        names(sbayesr_robust_score)<-c('SNP','A1','A2','BETA')
+
+        #############
+        # DBSLMM
+        #############
+        
+        # Convert to GEMMA format
+        eqtl_gene_i_dbslmm<-eqtl_gene_i
+        eqtl_gene_i_dbslmm$N_MISS<-max(eqtl_gene_i_dbslmm$N)-eqtl_gene_i_dbslmm$N
+        eqtl_gene_i_dbslmm<-eqtl_gene_i_dbslmm[,c('CHR','SNP','BP','N_MISS','N','A1','A2','maf','slope','slope_se','pval_nominal'),with=F]
+          names(eqtl_gene_i_dbslmm)<-c('chr','rs','ps','n_mis','n_obs','allele1','allele0','af','beta','se','p_wald')
+        
+        # Match allele1 and 0 with A1 and 2 in reference (DBSLMM calls this allele discrepancy)
+        ref_bim_subset<-fread(paste0('/scratch/groups/biomarkers-brc-mh/Reference_data/1KG_Phase3/PLINK/EUR/EUR_phase3.MAF_001.chr',chr_i,'.bim'))
+      
+        GWAS_match<-merge(eqtl_gene_i_dbslmm, ref_bim_subset[,c('V2','V5','V6'),with=F], by.x=c('rs','allele1','allele0'), by.y=c('V2','V5','V6'))
+        GWAS_switch<-merge(eqtl_gene_i_dbslmm, ref_bim_subset[,c('V2','V5','V6'),with=F], by.x=c('rs','allele1','allele0'), by.y=c('V2','V6','V5'))
+        GWAS_switch$allele_tmp<-GWAS_switch$allele0
+        GWAS_switch$allele0<-GWAS_switch$allele1
+        GWAS_switch$allele1<-GWAS_switch$allele_tmp
+        GWAS_switch$allele_tmp<-NULL
+        GWAS_switch$beta<--GWAS_switch$beta
+        GWAS_switch$af<-1-GWAS_switch$af
+        GWAS<-rbind(GWAS_match, GWAS_switch)
+        
+        GWAS<-GWAS[order(GWAS$chr, GWAS$ps),]
+        GWAS<-GWAS[,c('chr','rs','ps','n_mis','n_obs','allele1','allele0','af','beta','se','p_wald'),with=F]
+        GWAS_N<-mean(GWAS$n_obs)
+        nsnp<-nrow(GWAS)
+        
+        # Write out formatted sumstats
+        fwrite(GWAS, paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/snp_weight_comp/DBSLMM/',gene_i,'.DBSLMM'), sep='\t', col.names=F)
+
+        # Run dbslmm
+        system('chmod 777 /users/k1806347/brc_scratch/Software/DBSLMM/software/dbslmm')
+        system(paste0('/users/k1806347/brc_scratch/Software/Rscript.sh /users/k1806347/brc_scratch/Software/DBSLMM/software/DBSLMM.R --plink /users/k1806347/brc_scratch/Software/plink1.9.sh --block /users/k1806347/brc_scratch/Data/LDetect/EUR/fourier_ls-chr',chr_i,'.bed --dbslmm /users/k1806347/brc_scratch/Software/DBSLMM/software/dbslmm --h2 ',par_res_file_i$hsq,' --ref /scratch/groups/biomarkers-brc-mh/Reference_data/1KG_Phase3/PLINK/EUR/EUR_phase3.MAF_001.chr',chr_i,' --summary /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/snp_weight_comp/DBSLMM/',gene_i,'.DBSLMM --n ',round(GWAS_N,0),' --nsnp ',nsnp,' --outPath /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/snp_weight_comp/DBSLMM/ --thread 1'))
+
+        # Read in the results
+        dbslmm_score<-fread(paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/snp_weight_comp/DBSLMM/',gsub('\\..*','',gene_i),'.dbslmm.txt'))
+        dbslmm_score<-dbslmm_score[,c(1,2,4), with=T]
+        names(dbslmm_score)<-c('SNP','A1','BETA')
+
+        # Flip effects so allele match eQTL sumstats
+        dbslmm_score<-merge(ref_tmp, dbslmm_score, by='SNP', all=T)
+        dbslmm_score$BETA[which(dbslmm_score$A1.x != dbslmm_score$A1.y)]<--dbslmm_score$BETA[which(dbslmm_score$A1.x != dbslmm_score$A1.y)]
+        dbslmm_score<-dbslmm_score[,c('SNP','A1.x','A2','BETA'), with=F]
+        names(dbslmm_score)<-c('SNP','A1','A2','BETA')
+
+        ##############
+        # PRScs
+        ##############
+        
+        # Format for PRScs
+        eqtl_gene_i_prscs<-eqtl_gene_i[,c('SNP','A1','A2','slope','pval_nominal'), with=F]
+        names(eqtl_gene_i_prscs)<-c('SNP','A1','A2','BETA','P')
+        
+        # write in PRScs format
+        fwrite(eqtl_gene_i_prscs, paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/snp_weight_comp/PRScs/',gene_i,'.txt'), sep=' ', na = "NA", quote=F)
+
+        system(paste0('/users/k1806347/brc_scratch/Software/PRScs.sh --ref_dir=/users/k1806347/brc_scratch/Software/PRScs/ldblk_1kg_eur --bim_prefix=/scratch/groups/biomarkers-brc-mh/Reference_data/1KG_Phase3/PLINK/EUR/EUR_phase3.MAF_001.chr',chr_i,' --sst_file=/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/snp_weight_comp/PRScs/',gene_i,'.txt --n_gwas=',round(GWAS_N,0),' --out_dir=/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/snp_weight_comp/PRScs/',gene_i,' --chrom=',chr_i))
+
+        # Read in the results
+        prscs_score<-fread(paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/snp_weight_comp/PRScs/',gene_i,'_pst_eff_a1_b0.5_phiauto_chr22.txt'))
+        prscs_score<-prscs_score[,c('V2','V4','V6'), with=F]
+        names(prscs_score)<-c('SNP','A1','BETA')
+
+        # Flip effects so allele match eQTL sumstats
+        prscs_score<-merge(ref_tmp, prscs_score, by='SNP', all=T)
+        prscs_score$BETA[which(prscs_score$A1.x != prscs_score$A1.y)]<--prscs_score$BETA[which(prscs_score$A1.x != prscs_score$A1.y)]
+        prscs_score<-prscs_score[,c('SNP','A1.x','A2','BETA'), with=F]
+        names(prscs_score)<-c('SNP','A1','A2','BETA')
+        
+        # Note PRScs takes a lot longer than other methods.
+        
+        ################
+        # SuSiE finemapping
+        ################
+        
+        # Read LD estimates for eQTL sumstats
+        write.table(eqtl_gene_i$SNP, paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/snp_weight_comp/SuSiE/',gene_i,'_snps.txt'), col.names=F, row.names=F, quote=F)
+        system(paste0('/users/k1806347/brc_scratch/Software/plink1.9.sh --bfile /scratch/groups/biomarkers-brc-mh/Reference_data/1KG_Phase3/PLINK/EUR/EUR_phase3.MAF_001.chr',chr_i,' --extract /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/snp_weight_comp/SuSiE/',gene_i,'_snps.txt --r square --out /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/snp_weight_comp/SuSiE/',gene_i))
+
+        ld<-as.matrix(fread(paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/snp_weight_comp/SuSiE/',gene_i,'.ld')))
+
+        library(susieR)
+        
+        tryCatch(fitted_rss <- susie_rss(eqtl_gene_i$slope/eqtl_gene_i$slope_se, ld, L = 10), error = function(e){skip_to_next <<- TRUE})
+        
+        if(skip_to_next == TRUE){
+          susie_score<-data.table(SNP=eqtl_gene_i$SNP,
+                                  A1=eqtl_gene_i$A1,
+                                  BETA=0)
+        } else {
+          susie_score<-data.table(SNP=eqtl_gene_i$SNP,
+                        A1=eqtl_gene_i$A1,
+                        BETA=fitted_rss$pip)
+        }
+        
+        # Flip effects so allele match eQTL sumstats
+        susie_score<-merge(ref_tmp, susie_score, by='SNP', all=T)
+        susie_score$BETA[which(susie_score$A1.x != susie_score$A1.y)]<--susie_score$BETA[which(susie_score$A1.x != susie_score$A1.y)]
+        susie_score<-susie_score[,c('SNP','A1.x','A2','BETA'), with=F]
+        names(susie_score)<-c('SNP','A1','A2','BETA')
+        
+        # Create RDat file for FUSION
+        cv.performance<-as.matrix(data.frame(sbayesr=c(NA,NA),
+                                             sbayesr_robust=c(NA,NA),
+                                             dbslmm=c(NA,NA),
+                                             prscs=c(NA,NA),
+                                             susie=c(NA,NA),
+                                             top1=c(NA,NA), 
+                                             row.names=c('rsq','pval')))
+        
+        # Sort eQTL data into the same order as other score files
+        eqtl_gene_i<-eqtl_gene_i[match(sbayesr_score$SNP, eqtl_gene_i$SNP),]
+        
+        hsq<-c(par_res_file_i$hsq, par_res_file_i$se)
+        hsq.pv<-par_res_file_i$p
+        N.tot<-max(eqtl_gene_i$N)
+        eqtl_gene_i$POS<-0
+        snps<-eqtl_gene_i[,c('CHR','SNP','POS','BP','A1','A2')]
+        names(snps)<-paste0('V',1:length(names(snps)))
+        
+        wgt.matrix<-as.matrix(data.frame(sbayesr=sbayesr_score$BETA,
+                                         sbayesr_robust=sbayesr_robust_score$BETA,
+                                         dbslmm=dbslmm_score$BETA,
+                                         prscs=prscs_score$BETA,
+                                         susie=susie_score$BETA,
+                                         top1=eqtl_gene_i$slope,
+                                         row.names=snps$V2))
+        
+        save(cv.performance, 
+             hsq,
+             hsq.pv,
+             N.tot,
+             snps,
+             wgt.matrix,
+             file = paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/snp_weight_comp/RDat_files/',gene_i,'.RDat'))
+      }
+    }
+  }
+}
+
+```
+
+```{r, echo=T, eval=F}
+
+library(data.table)
+
+fusion_pos<-fread('/scratch/groups/biomarkers-brc-mh/TWAS_resource/FUSION/SNP-weights/Whole_Blood/Whole_Blood.pos')
+fusion_pos<-fusion_pos[fusion_pos$CHR == 22,]
+
+dim(fusion_pos) # 234
+
+eqtl_derived_files<-list.files(path='/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/snp_weight_comp/RDat_files/', pattern='.RDat')
+fusion_files<-list.files(path='/scratch/groups/biomarkers-brc-mh/TWAS_resource/FUSION/SNP-weights/Whole_Blood/Whole_Blood/', pattern='.RDat')
+
+length(eqtl_derived_files) # 159
+length(fusion_files) # 6006
+
+eqtl_derived_files<-gsub('.RDat','',eqtl_derived_files)
+fusion_files<-gsub('.wgt.RDat','',gsub('Whole_Blood.','',fusion_files))
+
+genes<-intersect(eqtl_derived_files, fusion_files)
+length(genes) # 33
+
+nsnp_res<-NULL
+hsq_res<-NULL
+cor_res<-list()
+
+for(genes_i in genes){
+  load(paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/snp_weight_comp/RDat_files/',genes_i,'.RDat'))
+  eqtl_derived<-data.frame(wgt.matrix)
+  if(sum(eqtl_derived$susie) == 0){
+    eqtl_derived$susie<-NA
+  }
+  eqtl_derived$SNP<-row.names(eqtl_derived)
+  sbayesr<-c(hsq, hsq.pv)
+  
+  load(paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/FUSION/SNP-weights/Whole_Blood/Whole_Blood/Whole_Blood.',genes_i,'.wgt.RDat'))
+  fusion<-data.frame(wgt.matrix)
+  fusion$SNP<-row.names(fusion)
+  greml<-c(hsq, hsq.pv)
+  
+  nsnp_res<-rbind(nsnp_res, data.frame(gene_id=genes_i,
+                                       nsnp_eqtl_derived=nrow(eqtl_derived),
+                                       nsnp_fusion=nrow(fusion)))
+  
+  hsq_res<-rbind(hsq_res, data.frame(gene_id=genes_i,
+                                     sbayesr_h2=sbayesr[1],
+                                     sbayesr_se=sbayesr[2],
+                                     sbayesr_p=sbayesr[3],
+                                     greml_h2=greml[1],
+                                     greml_se=greml[2],
+                                     greml_p=greml[3]))
+
+  both<-merge(eqtl_derived, fusion, by='SNP')
+  
+  if(nrow(both) > 0){
+    cor_res[[genes_i]]<-cor(both[,-1], use='p')
+  }
+}
+
+# Compare h2
+cor(hsq_res$sbayesr_h2, hsq_res$greml_h2) # 0.7500682
+
+library(ggplot2)
+bitmap('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/snp_weight_comp/h2_comp.png', units='px', width=1000, height=1000, res=300)
+ggplot(hsq_res, aes(x=sbayesr_h2, y=greml_h2)) +
+  geom_abline(intercept =0 , slope = 1, colour='red') +
+  geom_point() +
+  coord_fixed() +
+  xlim(0,1) +
+  ylim(0,1)
+dev.off()
+
+# Compare nsnp
+cor(nsnp_res$nsnp_eqtl_derived, nsnp_res$nsnp_fusion) # 0.4849533
+
+library(ggplot2)
+bitmap('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/snp_weight_comp/nsnp_comp.png', units='px', width=1000, height=1000, res=300)
+ggplot(nsnp_res, aes(x=nsnp_eqtl_derived, y=nsnp_fusion)) +
+  geom_abline(intercept =0 , slope = 1, colour='red') +
+  geom_point() +
+  coord_fixed()
+dev.off()
+
+# Check SNP-weight correlations
+cor_res_melt<-melt(cor_res)
+cor_res_melt$Var1<-gsub('top1.x','top1.GTEx',cor_res_melt$Var1)
+cor_res_melt$Var2<-gsub('top1.x','top1.GTEx',cor_res_melt$Var2)
+cor_res_melt$Var1<-gsub('top1.y','top1.FUSION',cor_res_melt$Var1)
+cor_res_melt$Var2<-gsub('top1.y','top1.FUSION',cor_res_melt$Var2)
+cor_res_melt$test<-paste0(cor_res_melt$Var1,'_',cor_res_melt$Var2)
+
+cor_res_average<-NULL
+for(i in unique(cor_res_melt$test)){
+  cor_res_average<-rbind(cor_res_average, data.frame(test=i,
+                                                     Mean=mean(cor_res_melt$value[cor_res_melt$test == i])))
+}
+
+bitmap('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/snp_weight_comp/cor_plot.png', units='px', width=3000, height=3000, res=300)
+ggplot(cor_res_melt, aes(x=paste0(Var1,' vs. ',Var2), y=value)) +
+  geom_boxplot() +
+  coord_flip()
+dev.off()
+
+# SuSiE results are only available for 1 gene. LD mismatch seems too severe. Am I doing somthing wrong or is it required for an in sample LD reference to be used?
+
+```
+
+The correlation between eQTL derived TWAS weights and FUSION derived TWAS weights is similar to correlation between different FUSION models. The correlation between eQTL derived and FUSION weights is of interest, but not a good evaluation metric of methods, We should compare the correlation between predicted and observed expression, when using eQTL derived TWAS weights or largest FUSION TWAS weights. The low correlation between topSNP results from FUSION and GTEx indicates comparison of FUSION and eQTL susmtat derived weights are not very informative.
+
+***
+
+## Comparing predicted and observed gene expression in GTEx v8
+
+Here we will predict gene expression levels in the GTEx v8 sample and then test the correlation with observered expression levels. Initially, we will use FUSION SNP-weights derived using the YFS whole blood sample, and eQTL data from eQTLGen whole blood meta-analysis (excl GTEx).
+
+I do not have access to individual level data from GTeX v8, so this project is being carried out in collaboration with Zac Gerring and Eske Derks. Here, I will prepare the SNP-weights, the code to predict gene expression levels, and the code to compare predicted and observed expression levels. As an example target sample, I will use the EUR subset of the 1KG Phase 3 reference.
+
+I have already written a script to predicted expression levels from TWAS weights. However, the script currently only uses the weights model with the best variance explained out of sample. To evaluate a range of methods, we will need predicted expression levels from all models.
+
+***
+
+### Generate SNP-weights from eQTLGen
+
+```{bash, eval=F, echo=T}
+# Download the cis-eQTL data exluding GTEx
+mkdir /users/k1806347/brc_scratch/Data/eQTLGen/excl_GTEx
+cd /users/k1806347/brc_scratch/Data/eQTLGen/excl_GTEx
+wget https://molgenis26.gcc.rug.nl/downloads/eqtlgen/replication/2019-12-11-cisEQTL-ReplicationOfTopEffectsInGTEx_WoGTEx_TwoCohortFix.txt.gz
+
+# I have realised that these replication results only inlcude the top SNP for each gene which we cannot use for deriving TWAS weights. I have emailed the eQTLGen PIs to ask for full leave-one-out results.
+
+```
+
+***
+
+### Generate SNP-weights from FUSION released YFS eQTL data
+
+FUSION only provide the N of the sample and the Z of each SNP for each gene. We can convert this to the required information using reference MAF, though using these approximations is not ideal. This may not be the best comparison since they are finish and there may therefore be MAF and LD mismatch with target sample. Though I assume FUSION developers restricted the analysis to those os EUR ancestry.
+
+***
+
+#### Format eQTL sumstats
+
+```{r, echo=T, eval=F}
+library(data.table)
+
+# Read in the pos file
+pos<-fread('/mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/SNP-weights/YFS.BLOOD.RNAARR/YFS.BLOOD.RNAARR.pos')
+
+# Read in EUR MAF
+frq<-NULL
+for(i in 1:22){
+  frq<-rbind(frq, fread(paste0('/mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR.',i,'.frq')))
+}
+
+for(i in 1:nrow(pos)){
+  print(i)
+  
+  load(paste0('/mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/SNP-weights/YFS.BLOOD.RNAARR/',pos$WGT[i]))
+  tmp<-data.table(cbind(snps, wgt.matrix[,which(colnames(wgt.matrix) == 'top1')]))
+  names(tmp)<-c('CHR','SNP','POS','BP','A1','A2','Z')
+  tmp$N<-pos$N[i]
+  
+  # Insert EUR MAF
+  tmp_match<-merge(tmp, frq[,c('SNP','A1','A2','MAF'),with=F], by=c('SNP','A1','A2'))
+  tmp_flip<-merge(tmp, frq[,c('SNP','A1','A2','MAF'),with=F], by.x=c('SNP','A1','A2'), by.y=c('SNP','A2','A1'))
+  tmp_flip$MAF<-1-tmp_flip$MAF
+  tmp<-rbind(tmp_match, tmp_flip)
+  
+  # Approximate BETA, SE, and P
+  tmp$P<-2*pnorm(-abs(tmp$Z))
+  tmp$BETA<-tmp$Z/sqrt((2*tmp$MAF)*(1-tmp$MAF)*(tmp$N+sqrt(abs(tmp$Z))))
+  tmp$SE<-abs(tmp$BETA)/abs(tmp$Z)
+  
+  tmp$GENE<-pos$ID[i]
+    
+  tmp<-tmp[,c('GENE','CHR','SNP','BP','A1','A2','BETA','SE','Z','P','MAF','N'),with=F]
+  
+  if(i == 1){
+    write.table(tmp, '/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/YFS_eQTL_from_fusion.txt', col.names=T, row.names=F, quote=F)
+  } else {
+    write.table(tmp, '/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/YFS_eQTL_from_fusion.txt', col.names=F, row.names=F, quote=F, append=T)
+  }
+}
+
+tmp<-fread('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/YFS_eQTL_from_fusion.txt')
+names(tmp)[names(tmp) == 'MAF']<-'FREQ'
+write.table(tmp, '/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/YFS_eQTL_from_fusion.txt', col.names=T, row.names=F, quote=F)
+
+# Make this the input format for eQTL_to_TWAS script.
+# Incorporate DENTIST QC of sumstats?
+
+```
+
+***
+
+#### Create TWAS weights
+
+```{bash, eval=F, echo=T}
+
+# Script modified to run only first 100 genes
+sbatch -p brc,shared --mem 10G -n 1 /users/k1806347/brc_scratch/Software/Rscript.sh /users/k1806347/brc_scratch/Software/MyGit/eQTL_to_TWAS/compute_weights.R \
+	--extract /users/k1806347/brc_scratch/Data/ldsc/w_hm3.snplist \
+	--sumstats /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/YFS_eQTL_from_fusion.txt \
+	--gctb /users/k1806347/brc_scratch/Software/gctb_2.03beta_Linux/gctb_203.sh \
+	--gctb_ref /users/k1806347/brc_scratch/Data/1KG/Phase3/LD_matrix/GCTB_shared/ukbEURu_hm3_shrunk_sparse/ukbEURu_hm3_v3_50k_chr \
+	--plink_ref_chr /users/k1806347/brc_scratch/Data/1KG/Phase3/1KGPhase3.w_hm3.chr \
+	--ld_blocks /users/k1806347/brc_scratch/Data/LDetect/EUR \
+  --rscript /users/k1806347/brc_scratch/Software/Rscript.sh \
+  --dbslmm /users/k1806347/brc_scratch/Software/DBSLMM/software \
+  --plink /users/k1806347/brc_scratch/Software/plink1.9.sh \
+  --PRScs_path /users/k1806347/brc_scratch/Software/PRScs.sh \
+  --PRScs_ref_path /users/k1806347/brc_scratch/Software/PRScs/ldblk_1kg_eur \
+	--output /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/twas_weights
+
+opt$extract<-'/users/k1806347/brc_scratch/Data/ldsc/w_hm3.snplist'
+opt$sumstats<-'/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/YFS_eQTL_from_fusion.txt'
+opt$output<-'/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/twas_weights_from_eQTL/YFS'
+opt$gctb<-'/users/k1806347/brc_scratch/Software/gctb_2.03beta_Linux/gctb_203.sh'
+opt$gctb_ref<-'/users/k1806347/brc_scratch/Data/1KG/Phase3/LD_matrix/GCTB_shared/ukbEURu_hm3_shrunk_sparse/ukbEURu_hm3_v3_50k_chr'
+opt$plink_ref_chr<-'/users/k1806347/brc_scratch/Data/1KG/Phase3/1KGPhase3.w_hm3.chr'
+opt$plink_ref_keep<-'/users/k1806347/brc_scratch/Data/1KG/Phase3/keep_files/EUR_samples.keep'
+opt$PRScs_path<-'/users/k1806347/brc_scratch/Software/PRScs.sh'
+opt$PRScs_ref_path<-'/users/k1806347/brc_scratch/Software/PRScs/ldblk_1kg_eur'
+opt$ld_blocks<-'/users/k1806347/brc_scratch/Data/LDetect/EUR'
+opt$rscript<-'/users/k1806347/brc_scratch/Software/Rscript.sh'
+opt$dbslmm<-'/users/k1806347/brc_scratch/Software/DBSLMM/software'
+opt$plink<-'/users/k1806347/brc_scratch/Software/plink1.9.sh'
+
+```
+
+***
+
+### Predict expression in 1KG
+
+***
+
+#### FUSION YFS models
+
+```{bash, eval=F, echo=T}
+sbatch -p brc,shared --mem 10G -n 1 /users/k1806347/brc_scratch/Software/Rscript.sh /users/k1806347/brc_scratch/Software/MyGit/Predicting-TWAS-features/FeaturePred.V2.0.R \
+	--PLINK_prefix_chr /mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
+	--weights /mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/SNP-weights/YFS.BLOOD.RNAARR/YFS.BLOOD.RNAARR.pos \
+	--weights_dir /mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/SNP-weights/YFS.BLOOD.RNAARR \
+	--ref_ld_chr /mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
+	--plink /users/k1806347/brc_scratch/Software/plink1.9.sh \
+	--n_cores 1 \
+	--score_files /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/1kg_pred_exp/YFS.BLOOD.RNAARR/SCORE_FILES \
+  --save_ref_expr T \
+	--memory 10000 \
+	--all_mod T \
+	--pigz /users/k1806347/brc_scratch/Software/pigz \
+	--ref_maf /mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
+	--output /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/1kg_pred_exp/YFS.BLOOD.RNAARR
+
+```
+
+***
+
+
+
+
+
+
+
+
+
+
+
