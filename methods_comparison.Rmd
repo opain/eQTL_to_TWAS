@@ -515,7 +515,7 @@ for(chr_i in 22){
   genes<-genes[1:100]
 
   # Run for each gene seperately
-  for(gene_i in genes[-1:-3]){
+  for(gene_i in genes){
     print(which(genes == gene_i))
 
     eqtl_gene_i<-eqtl[eqtl$gene_id == gene_i,]
@@ -943,21 +943,32 @@ sbatch -p brc,shared --mem 10G -n 1 /users/k1806347/brc_scratch/Software/Rscript
   --PRScs_ref_path /users/k1806347/brc_scratch/Software/PRScs/ldblk_1kg_eur \
 	--output /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/twas_weights
 
-opt$extract<-'/users/k1806347/brc_scratch/Data/ldsc/w_hm3.snplist'
-opt$sumstats<-'/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/YFS_eQTL_from_fusion.txt'
-opt$output<-'/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/twas_weights_from_eQTL/YFS'
-opt$gctb<-'/users/k1806347/brc_scratch/Software/gctb_2.03beta_Linux/gctb_203.sh'
-opt$gctb_ref<-'/users/k1806347/brc_scratch/Data/1KG/Phase3/LD_matrix/GCTB_shared/ukbEURu_hm3_shrunk_sparse/ukbEURu_hm3_v3_50k_chr'
-opt$plink_ref_chr<-'/users/k1806347/brc_scratch/Data/1KG/Phase3/1KGPhase3.w_hm3.chr'
-opt$plink_ref_keep<-'/users/k1806347/brc_scratch/Data/1KG/Phase3/keep_files/EUR_samples.keep'
-opt$PRScs_path<-'/users/k1806347/brc_scratch/Software/PRScs.sh'
-opt$PRScs_ref_path<-'/users/k1806347/brc_scratch/Software/PRScs/ldblk_1kg_eur'
-opt$ld_blocks<-'/users/k1806347/brc_scratch/Data/LDetect/EUR'
-opt$rscript<-'/users/k1806347/brc_scratch/Software/Rscript.sh'
-opt$dbslmm<-'/users/k1806347/brc_scratch/Software/DBSLMM/software'
-opt$plink<-'/users/k1806347/brc_scratch/Software/plink1.9.sh'
+```
+
+```{bash, eval=F, echo=T}
+# Rename RDat folder to match FUSION format weights
+mv /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/RDat_files /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/YFS.eQTL
 
 ```
+
+```{R, echo=T, eval=F}
+# Create .pos file
+library(data.table)
+pos<-fread('/mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/SNP-weights/YFS.BLOOD.RNAARR/YFS.BLOOD.RNAARR.pos')
+
+# Read in list of RDat files
+rdat_list<-list.files(path='/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/YFS.eQTL', pattern='.RDat')
+
+# Subset pos file to those with RDat file
+pos<-pos[pos$ID %in% gsub('.RDat','',rdat_list),]
+
+pos$PANEL<-'YFS.eQTL'
+pos$WGT<-paste0(pos$ID,'.RDat')
+
+write.table(pos, '/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/YFS.eQTL.pos', col.names=T, row.names=F, quote=F)
+
+```
+
 
 ***
 
@@ -975,8 +986,8 @@ sbatch -p brc,shared --mem 10G -n 1 /users/k1806347/brc_scratch/Software/Rscript
 	--ref_ld_chr /mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
 	--plink /users/k1806347/brc_scratch/Software/plink1.9.sh \
 	--n_cores 1 \
-	--score_files /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/1kg_pred_exp/YFS.BLOOD.RNAARR/SCORE_FILES \
-  --save_ref_expr T \
+	--save_score T \
+	--save_ref_expr T \
 	--memory 10000 \
 	--all_mod T \
 	--pigz /users/k1806347/brc_scratch/Software/pigz \
@@ -987,12 +998,203 @@ sbatch -p brc,shared --mem 10G -n 1 /users/k1806347/brc_scratch/Software/Rscript
 
 ***
 
+#### YFS eQTL-based models
+
+```{bash, eval=F, echo=T}
+sbatch -p brc,shared --mem 10G -n 1 /users/k1806347/brc_scratch/Software/Rscript.sh /users/k1806347/brc_scratch/Software/MyGit/Predicting-TWAS-features/FeaturePred.V2.0.R \
+	--PLINK_prefix_chr /mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
+	--weights /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/YFS.eQTL.pos \
+	--weights_dir /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS \
+	--ref_ld_chr /mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
+	--plink /users/k1806347/brc_scratch/Software/plink1.9.sh \
+	--n_cores 1 \
+	--save_score T \
+	--save_ref_expr T \
+	--memory 10000 \
+	--all_mod T \
+	--pigz /users/k1806347/brc_scratch/Software/pigz \
+	--ref_maf /mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
+	--output /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/1kg_pred_exp/YFS.eQTL
+
+```
+
+***
+
+### Check correlation between predicted expression for YFS models
+
+```{R, eval=F, echo=T}
+
+library(data.table)
+fusion<-fread('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/1kg_pred_exp/YFS.BLOOD.RNAARR/FeaturePredictions_YFS.BLOOD.RNAARR.txt.gz')
+eqtl<-fread('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/1kg_pred_exp/YFS.eQTL/FeaturePredictions_YFS.eQTL.txt.gz')
+
+genes<-unique(gsub('\\..*','',gsub('YFS.eQTL.','',names(eqtl)[-1:-2])))
+
+fusion<-fusion[,grepl(paste0('FID|IID|',paste(genes,collapse='|')),names(fusion)), with=F]
+both<-merge(fusion, eqtl, by=c('FID','IID'))
+
+cor_res<-list()
+for(i in genes){
+  tmp<-both[,grepl(paste0('\\.',i,'\\.'), names(both)), with=F]
+  names(tmp)<-gsub('YFS.eQTL.RDat.','eqtl.',gsub('YFS.BLOOD.RNAARR.YFS.','twas.',gsub(paste0(i,'.'),'', names(tmp))))
+  cor_res[[i]]<-cor(tmp, use='p')
+}
+
+# Check SNP-weight correlations
+cor_res_melt<-melt(cor_res)
+cor_res_melt$test<-paste0(cor_res_melt$Var1,'_',cor_res_melt$Var2)
+
+cor_res_average<-NULL
+for(i in unique(cor_res_melt$test)){
+  cor_res_average<-rbind(cor_res_average, data.frame(test=i,
+                                                     Mean=mean(cor_res_melt$value[cor_res_melt$test == i])))
+}
+
+library(ggplot2)
+bitmap('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/1kg_pred_exp/YFS_cor_plot.png', units='px', width=3000, height=3000, res=300)
+ggplot(cor_res_melt, aes(x=paste0(Var1,' vs. ',Var2), y=value)) +
+  geom_boxplot() +
+  coord_flip()
+dev.off()
+
+# Looks as expected, except eQTL.top1 model doesn't correlate well with fusion.top1 model. In many instances the correlation is 1, but there are many low correlation. This seems to be due to changing the top1 Z score in fusion files to a BETA estimated based on N and MAF. In some instances this changes the top SNP to a SNP that is uncorrelated with the top SNP in the fusion files. Perhaps I should select the top SNP based on the p-value, rather than the BETA. I think selecting based on p-value may be more concordant with standard pT+clump PRS methodology, and will avoid SNPs with small N and large SE being selected. Thougb since we are filtering by N, this shouldn;t be a problem, and usin the SNP with the largest BETA may be more appropriate. However, the correlation between top1 and other models is lower when using the largest abs(BETA), suggesting using the most significant SNP may be more appropriate. This should be discussed with Sasha.
+
+load('/mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/SNP-weights/YFS.BLOOD.RNAARR/YFS.BLOOD.RNAARR/YFS.TRNAU1AP.wgt.RDat')
+fusion_wgt<-data.frame(wgt.matrix)
+load('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/YFS.eQTL/TRNAU1AP.RDat')
+eqtl_wgt<-data.frame(wgt.matrix)
+
+head(fusion_wgt[rev(order(abs(fusion_wgt$top1))),])
+head(eqtl_wgt[rev(order(abs(eqtl_wgt$top1))),])
+
+```
+
+***
+
+### Predict expression in GTEx v8
+
+This will be run by Zac. I will send him the score files and reference expression, and fusion LD reference data. I don't know the file paths so I have just put file names.
+
+***
+
+#### FUSION YFS models
+
+```{bash, eval=F, echo=T}
+Rscript FeaturePred.V2.0.R \
+	--PLINK_prefix_chr LDREF/1000G.EUR. \
+	--weights YFS.BLOOD.RNAARR/YFS.BLOOD.RNAARR.pos \
+	--weights_dir YFS.BLOOD.RNAARR \
+	--ref_ld_chr LDREF/1000G.EUR. \
+	--plink plink \
+	--n_cores 1 \
+	--score_files YFS.BLOOD.RNAARR/SCORE_FILES \
+	--ref_expr YFS.BLOOD.RNAARR/Reference_Expression \
+	--memory 10000 \
+	--all_mod T \
+	--pigz pigz \
+	--ref_maf LDREF/1000G.EUR. \
+	--output gtex_v8/YFS.BLOOD.RNAARR
+
+```
+
+***
+
+#### YFS eQTL-based models
+
+```{bash, eval=F, echo=T}
+
+Rscript FeaturePred.V2.0.R \
+	--PLINK_prefix_chr LDREF/1000G.EUR. \
+	--weights YFS.eQTL/YFS.eQTL.pos \
+	--weights_dir YFS.eQTL \
+	--ref_ld_chr LDREF/1000G.EUR. \
+	--plink plink \
+	--n_cores 1 \
+	--score_files YFS.eQTL/SCORE_FILES \
+	--ref_expr YFS.eQTL/Reference_Expression \
+	--memory 10000 \
+	--all_mod T \
+	--pigz pigz \
+	--ref_maf LDREF/1000G.EUR. \
+	--output gtex_v8/YFS.eQTL
+
+```
+
+***
+
+### Compare predicted and observed expression in GTEx v8
+
+Again, this will be run by Zac. To develop the code, I will use the predicted expression levels in the 1KG reference, and pretend that the FUSION enet predicted expression levels are the observed gene expression.
+
+```{r, eval=F, echo=T}
+library(data.table)
+
+# Read in predicted expression
+fusion<-fread('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/1kg_pred_exp/YFS.BLOOD.RNAARR/FeaturePredictions_YFS.BLOOD.RNAARR.txt.gz')
+eqtl<-fread('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/1kg_pred_exp/YFS.eQTL/FeaturePredictions_YFS.eQTL.txt.gz')
+
+# Make column names more concise (format = <source>.<genename>.<method>)
+names(fusion)<-gsub('YFS.BLOOD.RNAARR.YFS','fusion', names(fusion))
+names(eqtl)<-gsub('.RDat','',gsub('YFS.','', names(eqtl)))
+
+# Identify genes available in fusion and eqtl based models
+fusion_eqtl_intersect<-intersect(unique(gsub('\\..*','',sub('.*?\\.','', names(fusion)[-1:-2]))),unique(gsub('\\..*','',sub('.*?\\.','', names(eqtl)[-1:-2]))))
+
+# Combine the predicted expression from FUSION and eQTL data
+pred_exp<-merge(fusion, eqtl, by=c('FID','IID'))
+pred_exp<-pred_exp[,grepl(paste0('FID$|IID$|',paste0('\\.',fusion_eqtl_intersect,'\\.',collapse='|')), names(pred_exp)), with=F]
+
+# Create pretend observed expression
+obs_exp<-pred_exp[, grepl('FID$|IID$|enet$', names(pred_exp)), with=F]
+names(obs_exp)<-gsub('.enet','',gsub('fusion.','',names(obs_exp)))
+
+#######
+# Compare predicted and observed expression
+#######
+# Identify genes available in predicted and observed datasets
+pred_exp_genes<-unique(gsub('\\..*','',sub('.*?\\.','', names(pred_exp)[-1:-2])))
+obs_exp_genes<-names(obs_exp)[-1:-2]
+
+genes<-intersect(pred_exp_genes,obs_exp_genes)
+
+# Calculate correlation between observed expression and predicted expression from each method
+cor_res<-list()
+for(i in genes){
+  # Rename columns to make output consistent across genes and label the observed expression
+  pred_exp_tmp<-pred_exp[,grepl(paste0('FID$|IID$|\\.',i,'\\.'), names(pred_exp)), with=F]
+  names(pred_exp_tmp)<-gsub(paste0('.',i), '', names(pred_exp_tmp))
+  
+  obs_exp_tmp<-obs_exp[,c('FID','IID',i), with=F]
+  names(obs_exp_tmp)[names(obs_exp_tmp) == i]<-'obs'
+  
+  # merge predicted and observed expression
+  both_exp_tmp<-merge(pred_exp_tmp, obs_exp_tmp, by=c('FID','IID'))
+
+  # Calculate correlation
+  cor_res[[i]]<-cor(both_exp_tmp[,-1:-2,with=F], use='p')
+}
+
+# melt and combine all the results
+cor_res_melt<-melt(cor_res)
+cor_res_melt_obs<-cor_res_melt[cor_res_melt$Var1 == 'obs',]
+cor_res_melt_obs$test<-paste0(cor_res_melt_obs$Var1,'_',cor_res_melt_obs$Var2)
+
+cor_res_average<-NULL
+for(i in unique(cor_res_melt_obs$test)){
+  cor_res_average<-rbind(cor_res_average, data.frame(test=i,
+                                                     Mean=mean(cor_res_melt_obs$value[cor_res_melt_obs$test == i])))
+}
+
+library(ggplot2)
+png('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/1kg_pred_exp/pred_obs_cor_plot_example.png', units='px', width=1500, height=1000, res=300)
+ggplot(cor_res_melt_obs, aes(x=paste0(Var1,' vs. ',Var2), y=value)) +
+  geom_boxplot() +
+  labs(x='Test', y='Correlation') +
+  coord_flip()
+dev.off()
 
 
-
-
-
-
+```
 
 
 
