@@ -1409,45 +1409,86 @@ head(eqtl_wgt[rev(order(abs(eqtl_wgt$top1))),])</code></pre>
 </div>
 <div id="predict-expression-in-gtex-v8" class="section level3">
 <h3>Predict expression in GTEx v8</h3>
+<hr />
 <p>This will be run by Zac. I will send him the score files and reference expression, and fusion LD reference data. I don’t know the file paths so I have just put file names.</p>
 <hr />
+<div id="compress-files-for-zac" class="section level4">
+<h4>Compress files for Zac</h4>
+<pre class="bash"><code>mkdir -p /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/for_zac
+cd /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/for_zac
+
+# Copy FUSION reference with allele frequency files
+cp -r /mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF ./
+
+# Copy FUSION .pos, .Rdat files, score files, and reference expression
+cd /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/for_zac
+mkdir FUSION.YFS
+cd FUSION.YFS
+
+cp /scratch/groups/biomarkers-brc-mh/TWAS_resource/FUSION/SNP-weights/YFS.BLOOD.RNAARR/YFS.BLOOD.RNAARR.pos ./
+cp -r /scratch/groups/biomarkers-brc-mh/TWAS_resource/FUSION/SNP-weights/YFS.BLOOD.RNAARR/YFS.BLOOD.RNAARR ./
+
+# Copy eQTL-based .pos, .Rdat files, score files, and reference expression
+cd /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/for_zac
+mkdir eQTL.YFS
+cd eQTL.YFS
+
+cp /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/YFS.eQTL.pos ./
+cp -r /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/YFS.eQTL ./
+
+# Copy pigz binary
+cd /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/for_zac
+cp /users/k1806347/brc_scratch/Software/pigz ./
+
+# Copy plink binary
+cd /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/for_zac
+cp /users/k1806347/brc_scratch/Software/plink1.9/plink ./
+
+# Copy FeaturePred.V2.0.R
+cd /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/for_zac
+cp /users/k1806347/brc_scratch/Software/MyGit/Predicting-TWAS-features/FeaturePred.V2.0.R ./
+
+cd /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS
+tar -zcvf for_zac.tar.gz for_zac
+</code></pre>
+<hr />
+</div>
 <div id="fusion-yfs-models-1" class="section level4">
 <h4>FUSION YFS models</h4>
-<pre class="bash"><code>Rscript FeaturePred.V2.0.R \
+<pre class="bash"><code>cd /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/for_zac
+
+Rscript FeaturePred.V2.0.R \
     --PLINK_prefix_chr LDREF/1000G.EUR. \
-    --weights YFS.BLOOD.RNAARR/YFS.BLOOD.RNAARR.pos \
-    --weights_dir YFS.BLOOD.RNAARR \
+    --weights FUSION.YFS/YFS.BLOOD.RNAARR.pos \
+    --weights_dir FUSION.YFS \
     --ref_ld_chr LDREF/1000G.EUR. \
-    --plink plink \
+    --plink ./plink \
     --n_cores 1 \
-    --score_files YFS.BLOOD.RNAARR/SCORE_FILES \
-    --ref_expr YFS.BLOOD.RNAARR/Reference_Expression \
     --memory 10000 \
     --all_mod T \
-    --pigz pigz \
+    --pigz ./pigz \
     --ref_maf LDREF/1000G.EUR. \
-    --output gtex_v8/YFS.BLOOD.RNAARR
+    --output test/FUSION.YFS
 </code></pre>
 <hr />
 </div>
 <div id="yfs-eqtl-based-models-1" class="section level4">
 <h4>YFS eQTL-based models</h4>
-<pre class="bash"><code>
+<pre class="bash"><code>cd /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/for_zac
+
 Rscript FeaturePred.V2.0.R \
     --PLINK_prefix_chr LDREF/1000G.EUR. \
-    --weights YFS.eQTL/YFS.eQTL.pos \
-    --weights_dir YFS.eQTL \
+    --weights eQTL.YFS/YFS.eQTL.pos \
+    --weights_dir eQTL.YFS \
     --ref_ld_chr LDREF/1000G.EUR. \
-    --plink plink \
+    --plink ./plink \
     --n_cores 1 \
-    --score_files YFS.eQTL/SCORE_FILES \
-    --ref_expr YFS.eQTL/Reference_Expression \
     --memory 10000 \
     --all_mod T \
-    --pigz pigz \
+    --pigz ./pigz \
     --ref_maf LDREF/1000G.EUR. \
-    --output gtex_v8/YFS.eQTL
-</code></pre>
+    --output test/eQTL.YFS
+    </code></pre>
 <hr />
 </div>
 </div>

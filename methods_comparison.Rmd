@@ -39,7 +39,7 @@ Possible methods for deriving SNP-weights:
 - PRScs auto
 - Mega-PRS
 
-An alternative method suggested is to use SuSiE posteriors as SNP-weights.
+An alternative method suggested is to use SuSiE posteriors to scale eQTL effect sizes as SNP-weights.
 
 ***
 
@@ -852,12 +852,143 @@ I have already written a script to predicted expression levels from TWAS weights
 ### Generate SNP-weights from eQTLGen
 
 ```{bash, eval=F, echo=T}
-# Download the cis-eQTL data exluding GTEx
+# Download the full cis-eQTL data exluding GTEx
+# This was sent privately by Urmo Vosa
 mkdir /users/k1806347/brc_scratch/Data/eQTLGen/excl_GTEx
-cd /users/k1806347/brc_scratch/Data/eQTLGen/excl_GTEx
-wget https://molgenis26.gcc.rug.nl/downloads/eqtlgen/replication/2019-12-11-cisEQTL-ReplicationOfTopEffectsInGTEx_WoGTEx_TwoCohortFix.txt.gz
 
-# I have realised that these replication results only inlcude the top SNP for each gene which we cannot use for deriving TWAS weights. I have emailed the eQTLGen PIs to ask for full leave-one-out results.
+```
+
+#### Format eQTL sumstats
+
+```{bash, eval=F, echo=T}
+# Download the full cis-eQTL data exluding GTEx
+# This was sent privately by Urmo Vosa
+mkdir /users/k1806347/brc_scratch/Data/eQTLGen/excl_GTEx
+
+# Extract relevent columns
+zcat /users/k1806347/brc_scratch/Data/eQTLGen/excl_GTEx/2019-12-11-cis-eQTLsFDR-ProbeLevel-CohortInfoRemoved-WoGTEx.txt.gz | cut -f 1-5,9-11,13 | gzip > /users/k1806347/brc_scratch/Data/eQTLGen/excl_GTEx/2019-12-11-cis-eQTLsFDR-ProbeLevel-CohortInfoRemoved-WoGTEx.small.txt.gz
+
+```
+
+```{r, eval=F, echo=T}
+library(data.table)
+
+# Read in relevent columns from the sumstats
+sumstats<-fread('/users/k1806347/brc_scratch/Data/eQTLGen/excl_GTEx/2019-12-11-cis-eQTLsFDR-ProbeLevel-CohortInfoRemoved-WoGTEx.small.txt.gz')
+
+# Extract data for each gene
+genes<-unique(sumstats$ProbeName)
+
+# Read in EUR MAF
+frq<-NULL
+for(i in 1:22){
+  frq<-rbind(frq, fread(paste0('/mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR.',i,'.frq')))
+}
+names(frq)[names(frq) == 'MAF']<-'FREQ'
+
+# Process eQTL sumstats for each gene
+# For testing use only first 100 genes
+dir.create('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen')
+for(i in 1:100){
+  print(i)
+  
+  tmp<-sumstats[sumstats$ProbeName == genes[i],]
+  
+  # Create A1 and A2 columns and update column names
+  tmp$A1<-gsub('.*/','',tmp$SNPType)
+  tmp$A2<-gsub('/.*','',tmp$SNPType)
+  tmp$A2[tmp$A1 != tmp$AlleleAssessed]<-gsub('.*/','',tmp$SNPType[tmp$A1 != tmp$AlleleAssessed])
+  tmp$A1[tmp$A1 != tmp$AlleleAssessed]<-gsub('/.*','',tmp$SNPType[tmp$A1 != tmp$AlleleAssessed])
+
+  tmp<-tmp[,c('ProbeName','SNPName','SNPChr','SNPChrPos', 'A1', 'A2','PValue','OverallZScore','SumNumberOfSamples'), with=F]
+  names(tmp)<-c('Gene','SNP','CHR','BP','A1','A2','P','Z','N')
+
+  # Insert FREQ from EUR reference
+  # There don't seem to be any strand flips
+  tmp_match<-merge(tmp, frq[,c('SNP','A1','A2','FREQ'),with=F], by=c('SNP','A1','A2'))
+  tmp_flip<-merge(tmp, frq[,c('SNP','A1','A2','FREQ'),with=F], by.x=c('SNP','A1','A2'), by.y=c('SNP','A2','A1'))
+  tmp_flip$FREQ<-1-tmp_flip$FREQ
+  tmp<-rbind(tmp_match, tmp_flip)
+  
+  # Approximate BETA, SE, and P
+  tmp$P<-2*pnorm(-abs(tmp$Z))
+  tmp$BETA<-tmp$Z/sqrt((2*tmp$FREQ)*(1-tmp$FREQ)*(tmp$N+sqrt(abs(tmp$Z))))
+  tmp$SE<-abs(tmp$BETA)/abs(tmp$Z)
+  
+  tmp$GENE<-genes[i]
+    
+  tmp<-tmp[,c('GENE','CHR','SNP','BP','A1','A2','BETA','SE','Z','P','FREQ','N'),with=F]
+  
+  if(i == 1){
+    write.table(tmp, '/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/eQTLGen_sumstats_exclGTeX.txt', col.names=T, row.names=F, quote=F)
+  } else {
+    write.table(tmp, '/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/eQTLGen_sumstats_exclGTeX.txt', col.names=F, row.names=F, quote=F, append=T)
+  }
+}
+
+```
+
+***
+
+#### Create TWAS weights
+
+```{bash, eval=F, echo=T}
+
+# Script modified to run only first 100 genes
+sbatch -p brc,shared --mem 10G -n 1 /users/k1806347/brc_scratch/Software/Rscript.sh /users/k1806347/brc_scratch/Software/MyGit/eQTL_to_TWAS/compute_weights.R \
+	--extract /users/k1806347/brc_scratch/Data/ldsc/w_hm3.snplist \
+	--sumstats /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/eQTLGen_sumstats_exclGTeX.txt \
+	--gctb /users/k1806347/brc_scratch/Software/gctb_2.03beta_Linux/gctb_203.sh \
+	--gctb_ref /users/k1806347/brc_scratch/Data/1KG/Phase3/LD_matrix/GCTB_shared/ukbEURu_hm3_shrunk_sparse/ukbEURu_hm3_v3_50k_chr \
+	--plink_ref_chr /users/k1806347/brc_scratch/Data/1KG/Phase3/1KGPhase3.w_hm3.chr \
+	--ld_blocks /users/k1806347/brc_scratch/Data/LDetect/EUR \
+  --rscript /users/k1806347/brc_scratch/Software/Rscript.sh \
+  --dbslmm /users/k1806347/brc_scratch/Software/DBSLMM/software \
+  --plink /users/k1806347/brc_scratch/Software/plink1.9.sh \
+  --PRScs_path /users/k1806347/brc_scratch/Software/PRScs.sh \
+  --PRScs_ref_path /users/k1806347/brc_scratch/Software/PRScs/ldblk_1kg_eur \
+	--output /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/twas_weights
+
+```
+
+```{bash, eval=F, echo=T}
+# Rename RDat folder to match FUSION format weights
+mv /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/RDat_files /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/eQTLGen.eQTL
+
+```
+
+```{R, echo=T, eval=F}
+# Create .pos file
+library(data.table)
+
+# Read in list of RDat files
+rdat_list<-list.files(path='/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/eQTLGen.eQTL', pattern='.RDat')
+
+# Start making pos file
+pos<-data.frame(PANEL='eQTLGen.eQTL',
+                WGT=paste0('eQTLGen.eQTL/',rdat_list),
+                ID=gsub('\\..*','',rdat_list))
+
+# Insert CHR, P0 and P1 (GRCh=37)
+library(biomaRt)
+ensembl = useEnsembl(biomart="ensembl", dataset="hsapiens_gene_ensembl", GRCh=37)
+Genes<-getBM(attributes=c('ensembl_gene_id_version','chromosome_name','start_position','end_position'), mart = ensembl)
+Genes$ensembl_gene_id_version<-gsub('\\..*','',Genes$ensembl_gene_id_version)
+names(Genes)<-c('ID','CHR','P0','P1')
+Genes<-Genes[complete.cases(Genes),]
+Genes<-Genes[!duplicated(Genes),]
+
+pos<-merge(pos, Genes, all.x=T, by='ID')
+
+# Read in each RDat file to retrieve N
+for(i in 1:length(rdat_list)){
+  load(paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/eQTLGen.eQTL/',rdat_list[i]))
+  pos$N[i]<-N.tot
+}
+
+pos<-pos[,c('PANEL','WGT','ID','CHR','P0','P1','N')]
+
+write.table(pos, '/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/eQTLGen.eQTL.pos', col.names=T, row.names=F, quote=F)
 
 ```
 
@@ -882,6 +1013,7 @@ frq<-NULL
 for(i in 1:22){
   frq<-rbind(frq, fread(paste0('/mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR.',i,'.frq')))
 }
+names(frq)[names(frq) == 'MAF']<-'FREQ'
 
 for(i in 1:nrow(pos)){
   print(i)
@@ -892,19 +1024,19 @@ for(i in 1:nrow(pos)){
   tmp$N<-pos$N[i]
   
   # Insert EUR MAF
-  tmp_match<-merge(tmp, frq[,c('SNP','A1','A2','MAF'),with=F], by=c('SNP','A1','A2'))
-  tmp_flip<-merge(tmp, frq[,c('SNP','A1','A2','MAF'),with=F], by.x=c('SNP','A1','A2'), by.y=c('SNP','A2','A1'))
-  tmp_flip$MAF<-1-tmp_flip$MAF
+  tmp_match<-merge(tmp, frq[,c('SNP','A1','A2','FREQ'),with=F], by=c('SNP','A1','A2'))
+  tmp_flip<-merge(tmp, frq[,c('SNP','A1','A2','FREQ'),with=F], by.x=c('SNP','A1','A2'), by.y=c('SNP','A2','A1'))
+  tmp_flip$FREQ<-1-tmp_flip$FREQ
   tmp<-rbind(tmp_match, tmp_flip)
   
   # Approximate BETA, SE, and P
   tmp$P<-2*pnorm(-abs(tmp$Z))
-  tmp$BETA<-tmp$Z/sqrt((2*tmp$MAF)*(1-tmp$MAF)*(tmp$N+sqrt(abs(tmp$Z))))
+  tmp$BETA<-tmp$Z/sqrt((2*tmp$FREQ)*(1-tmp$FREQ)*(tmp$N+sqrt(abs(tmp$Z))))
   tmp$SE<-abs(tmp$BETA)/abs(tmp$Z)
   
   tmp$GENE<-pos$ID[i]
     
-  tmp<-tmp[,c('GENE','CHR','SNP','BP','A1','A2','BETA','SE','Z','P','MAF','N'),with=F]
+  tmp<-tmp[,c('GENE','CHR','SNP','BP','A1','A2','BETA','SE','Z','P','FREQ','N'),with=F]
   
   if(i == 1){
     write.table(tmp, '/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/YFS_eQTL_from_fusion.txt', col.names=T, row.names=F, quote=F)
@@ -912,10 +1044,6 @@ for(i in 1:nrow(pos)){
     write.table(tmp, '/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/YFS_eQTL_from_fusion.txt', col.names=F, row.names=F, quote=F, append=T)
   }
 }
-
-tmp<-fread('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/YFS_eQTL_from_fusion.txt')
-names(tmp)[names(tmp) == 'MAF']<-'FREQ'
-write.table(tmp, '/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/YFS_eQTL_from_fusion.txt', col.names=T, row.names=F, quote=F)
 
 # Make this the input format for eQTL_to_TWAS script.
 # Incorporate DENTIST QC of sumstats?
@@ -942,7 +1070,7 @@ sbatch -p brc,shared --mem 10G -n 1 /users/k1806347/brc_scratch/Software/Rscript
   --PRScs_path /users/k1806347/brc_scratch/Software/PRScs.sh \
   --PRScs_ref_path /users/k1806347/brc_scratch/Software/PRScs/ldblk_1kg_eur \
 	--output /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/twas_weights
-
+	
 ```
 
 ```{bash, eval=F, echo=T}
@@ -968,7 +1096,6 @@ pos$WGT<-paste0(pos$ID,'.RDat')
 write.table(pos, '/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/YFS.eQTL.pos', col.names=T, row.names=F, quote=F)
 
 ```
-
 
 ***
 
@@ -998,9 +1125,31 @@ sbatch -p brc,shared --mem 10G -n 1 /users/k1806347/brc_scratch/Software/Rscript
 
 ***
 
+#### eQTLGen eQTL-based models
+
+```{bash, eval=F, echo=T}
+
+sbatch -p brc,shared --mem 10G -n 1 /users/k1806347/brc_scratch/Software/Rscript.sh /users/k1806347/brc_scratch/Software/MyGit/Predicting-TWAS-features/FeaturePred.V2.0.R \
+	--PLINK_prefix_chr /mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
+	--weights /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/eQTLGen.eQTL.pos \
+	--weights_dir /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen \
+	--ref_ld_chr /mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
+	--plink /users/k1806347/brc_scratch/Software/plink1.9.sh \
+	--n_cores 1 \
+	--save_score T \
+	--save_ref_expr T \
+	--memory 10000 \
+	--all_mod T \
+	--pigz /users/k1806347/brc_scratch/Software/pigz \
+	--ref_maf /mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
+	--output /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/1kg_pred_exp/eQTLGen.eQTL
+
+```
+
 #### YFS eQTL-based models
 
 ```{bash, eval=F, echo=T}
+
 sbatch -p brc,shared --mem 10G -n 1 /users/k1806347/brc_scratch/Software/Rscript.sh /users/k1806347/brc_scratch/Software/MyGit/Predicting-TWAS-features/FeaturePred.V2.0.R \
 	--PLINK_prefix_chr /mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
 	--weights /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/YFS.eQTL.pos \
@@ -1051,7 +1200,7 @@ for(i in unique(cor_res_melt$test)){
 }
 
 library(ggplot2)
-bitmap('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/1kg_pred_exp/YFS_cor_plot.png', units='px', width=3000, height=3000, res=300)
+png('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/1kg_pred_exp/YFS_cor_plot.png', units='px', width=3000, height=3000, res=300)
 ggplot(cor_res_melt, aes(x=paste0(Var1,' vs. ',Var2), y=value)) +
   geom_boxplot() +
   coord_flip()
@@ -1118,6 +1267,32 @@ cp /users/k1806347/brc_scratch/Software/MyGit/Predicting-TWAS-features/FeaturePr
 
 cd /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS
 tar -zcvf for_zac.tar.gz for_zac
+
+##########
+# Make a new folder containing updated YFS and eQTLGen TWAS weights
+##########
+
+mkdir -p /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/for_zac_26042022
+
+# Copy YFS eQTL-based .pos, .Rdat files, score files, and reference expression
+cd /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/for_zac_26042022
+mkdir eQTL.YFS
+cd eQTL.YFS
+
+cp /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/YFS.eQTL.pos ./
+cp -r /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/YFS.eQTL ./
+
+# Copy eQTL-Gen eQTL-based .pos, .Rdat files, score files, and reference expression
+cd /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/for_zac_26042022
+mkdir eQTL.eQTLGen
+cd eQTL.eQTLGen
+
+cp /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/eQTLGen.eQTL.pos ./
+cp -r /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/eQTLGen.eQTL ./
+
+cd /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS
+tar -zcvf for_zac_26042022.tar.gz for_zac_26042022
+
 
 ```
 
