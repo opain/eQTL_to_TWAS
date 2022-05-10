@@ -865,7 +865,7 @@ for(genes_i in genes){
 cor(hsq_res$sbayesr_h2, hsq_res$greml_h2) # 0.7500682
 
 library(ggplot2)
-bitmap('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/snp_weight_comp/h2_comp.png', units='px', width=1000, height=1000, res=300)
+png('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/snp_weight_comp/h2_comp.png', units='px', width=1000, height=1000, res=300)
 ggplot(hsq_res, aes(x=sbayesr_h2, y=greml_h2)) +
   geom_abline(intercept =0 , slope = 1, colour='red') +
   geom_point() +
@@ -878,7 +878,7 @@ dev.off()
 cor(nsnp_res$nsnp_eqtl_derived, nsnp_res$nsnp_fusion) # 0.4849533
 
 library(ggplot2)
-bitmap('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/snp_weight_comp/nsnp_comp.png', units='px', width=1000, height=1000, res=300)
+png('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/snp_weight_comp/nsnp_comp.png', units='px', width=1000, height=1000, res=300)
 ggplot(nsnp_res, aes(x=nsnp_eqtl_derived, y=nsnp_fusion)) +
   geom_abline(intercept =0 , slope = 1, colour='red') +
   geom_point() +
@@ -899,21 +899,40 @@ for(i in unique(cor_res_melt$test)){
                                                      Mean=mean(cor_res_melt$value[cor_res_melt$test == i])))
 }
 
-bitmap('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/snp_weight_comp/cor_plot.png', units='px', width=3000, height=3000, res=300)
+png('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/snp_weight_comp/cor_plot.png', units='px', width=3000, height=3000, res=300)
 ggplot(cor_res_melt, aes(x=paste0(Var1,' vs. ',Var2), y=value)) +
   geom_boxplot() +
   coord_flip()
 dev.off()
 
-# SuSiE results are only available for 1 gene. LD mismatch seems too severe. Am I doing somthing wrong or is it required for an in sample LD reference to be used?
-
 ```
 
 </details>
 
+<details><summary>Show GREML and SBayesR SNP-h2 estimates</summary>
+
+![](/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/snp_weight_comp/h2_comp.png)
+
+</details>
+
+<details><summary>Show number of variants in FUSION and eQTL-based models</summary>
+
+![](/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/snp_weight_comp/nsnp_comp.png)
+
+</details>
+
+<details><summary>Show correlation between FUSION and eQTL-based models</summary>
+
+![](/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/snp_weight_comp/cor_plot.png)
+
+</details>
+
+<br/>
+
 The correlation between eQTL derived TWAS weights and FUSION derived TWAS weights is similar to correlation between different FUSION models. 
 
-The correlation between eQTL derived and FUSION weights is of interest, but not a good evaluation metric of methods, We should compare the correlation between predicted and observed expression, when using eQTL derived TWAS weights or largest FUSION TWAS weights. 
+The correlation between eQTL derived and FUSION weights is of interest, but not a good evaluation metric of methods, We should compare the correlation between predicted and observed expression, when using eQTL derived TWAS weights or largest FUSION TWAS weights.
+
 The low correlation between topSNP results from FUSION and GTEx indicates comparison of FUSION and eQTL susmtat derived weights are not very informative.
 
 ***
@@ -1219,31 +1238,6 @@ sbatch -p brc,shared --mem 10G -n 1 /users/k1806347/brc_scratch/Software/Rscript
 
 ***
 
-#### eQTLGen eQTL-based models
-
-<details><summary>Show code</summary>
-
-```{bash, eval=F, echo=T}
-
-sbatch -p brc,shared --mem 10G -n 1 /users/k1806347/brc_scratch/Software/Rscript.sh /users/k1806347/brc_scratch/Software/MyGit/Predicting-TWAS-features/FeaturePred.V2.0.R \
-	--PLINK_prefix_chr /mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
-	--weights /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/eQTLGen.eQTL.pos \
-	--weights_dir /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen \
-	--ref_ld_chr /mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
-	--plink /users/k1806347/brc_scratch/Software/plink1.9.sh \
-	--n_cores 1 \
-	--save_score T \
-	--save_ref_expr T \
-	--memory 10000 \
-	--all_mod T \
-	--pigz /users/k1806347/brc_scratch/Software/pigz \
-	--ref_maf /mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
-	--output /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/1kg_pred_exp/eQTLGen.eQTL
-
-```
-
-</details>
-
 #### YFS eQTL-based models
 
 <details><summary>Show code</summary>
@@ -1264,6 +1258,33 @@ sbatch -p brc,shared --mem 10G -n 1 /users/k1806347/brc_scratch/Software/Rscript
 	--pigz /users/k1806347/brc_scratch/Software/pigz \
 	--ref_maf /mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
 	--output /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/1kg_pred_exp/YFS.eQTL
+
+```
+
+</details>
+
+***
+
+#### eQTLGen eQTL-based models
+
+<details><summary>Show code</summary>
+
+```{bash, eval=F, echo=T}
+
+sbatch -p brc,shared --mem 10G -n 1 /users/k1806347/brc_scratch/Software/Rscript.sh /users/k1806347/brc_scratch/Software/MyGit/Predicting-TWAS-features/FeaturePred.V2.0.R \
+	--PLINK_prefix_chr /mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
+	--weights /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/eQTLGen.eQTL.pos \
+	--weights_dir /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen \
+	--ref_ld_chr /mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
+	--plink /users/k1806347/brc_scratch/Software/plink1.9.sh \
+	--n_cores 1 \
+	--save_score T \
+	--save_ref_expr T \
+	--memory 10000 \
+	--all_mod T \
+	--pigz /users/k1806347/brc_scratch/Software/pigz \
+	--ref_maf /mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
+	--output /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/1kg_pred_exp/eQTLGen.eQTL
 
 ```
 
@@ -1324,6 +1345,14 @@ head(eqtl_wgt[rev(order(abs(eqtl_wgt$top1))),])
 
 </details>
 
+<details><summary>Show correlation between SNP-weights from each method</summary>
+
+![](/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/1kg_pred_exp/YFS_cor_plot.png)
+
+Looks as expected, except eQTL.top1 model doesn't correlate well with fusion.top1 model. In many instances the correlation is 1, but there are many low correlation. This seems to be due to changing the top1 Z score in fusion files to a BETA estimated based on N and MAF. In some instances this changes the top SNP to a SNP that is uncorrelated with the top SNP in the fusion files. Perhaps I should select the top SNP based on the p-value, rather than the BETA. I think selecting based on p-value may be more concordant with standard pT+clump PRS methodology, and will avoid SNPs with small N and large SE being selected. Though since we are filtering by N, this shouldn't be a problem, and using the SNP with the largest BETA may be more appropriate. However, the correlation between top1 and other models is lower when using the largest abs(BETA), suggesting using the most significant SNP may be more appropriate.
+
+</details>
+
 ***
 
 ### Predict expression in GTEx v8
@@ -1334,7 +1363,11 @@ This will be run by Zac. I will send him the score files and reference expressio
 
 ***
 
-#### Compress files for Zac
+#### For Zac
+
+***
+
+#### Prepare files
 
 <details><summary>Show code</summary>
 
@@ -1439,6 +1472,7 @@ Rscript FeaturePred.V2.0.R \
 <details><summary>Show code</summary>
 
 ```{bash, eval=F, echo=T}
+
 cd /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/for_zac
 
 /users/k1806347/brc_scratch/Software/Rscript.sh FeaturePred.V2.0.nodel2.R \
@@ -1464,175 +1498,11 @@ cd /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/for_zac
 
 Zac now sends me the predicted expression data for GTEx v8 so I can compare predicted and observed expression. Observed expression in GTEx is publicly available. 
 
-Here I am reading in observed and predicted expression values, testing their correlation, and then summarising the results across gene expression imputation methods.
+Here I am reading in observed and predicted expression values, testing their correlation, and then summarising the results across gene expression imputation methods. I am using the processed and normalised observed expression in GTEx. First I covary observed expression for covariates used in the original eQTL analysis by GTEx.
 
 ***
 
-#### Using TPM data
-
-<details><summary>Show code</summary>
-
-```{r, eval=F, echo=T}
-library(data.table)
-
-# Read in the observed expression
-obs<-fread('/users/k1806347/brc_scratch/Data/GTeX/v8/GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_tpm.gct.gz')
-samp_dat<-fread('/users/k1806347/brc_scratch/Data/GTeX/v8/GTEx_Analysis_v8_Annotations_SampleAttributesDS.txt')
-
-# Extract Whole blood data
-samp_dat<-samp_dat[samp_dat$SMTSD == 'Whole Blood',]
-obs<-obs[,c('Description',names(obs)[names(obs) %in% samp_dat$SAMPID]), with=F]
-obs<-t(obs)
-colnames(obs)<-obs[1,]
-obs<-obs[-1,]
-obs<-cbind(row.names(obs),obs)
-colnames(obs)[1]<-'ID'
-obs<-data.table(obs)
-obs$ID<-gsub('-$','',gsub('([^-]+)(?:-[^-]+){2}$','',obs$ID))
-
-# Read in predicted expression
-eqtl<-fread('/mnt/lustre/users/k1806347/Data/GTeX/v8/Zac/eQTL.YFS.26042022/FeaturePredictions_YFS.eQTL.txt.gz')
-names(eqtl)<-gsub('.RDat','',gsub('YFS.','', names(eqtl)))
-
-# Identify genes available in fusion and eqtl based models
-obs_genes<-names(obs)[-1]
-eqtl_genes<-unique(gsub('\\..*','',gsub('eQTL.','',names(eqtl)[-1:-2])))
-both_genes<-intersect(obs_genes, eqtl_genes)
-
-# Calculate correlation between observed expression and predicted expression from each method
-cor_res<-list()
-for(i in both_genes){
-  # Rename columns to make output consistent across genes and label the observed expression
-  pred_exp_tmp<-eqtl[,grepl(paste0('FID$|IID$|\\.',i,'\\.'), names(eqtl)), with=F]
-  names(pred_exp_tmp)<-gsub(paste0('.',i), '', names(pred_exp_tmp))
-  
-  obs_exp_tmp<-obs[,c('ID',i), with=F]
-  names(obs_exp_tmp)[names(obs_exp_tmp) == i]<-'obs'
-  
-  # merge predicted and observed expression
-  both_exp_tmp<-merge(pred_exp_tmp, obs_exp_tmp, by.x='IID', by.y='ID')
-  
-  both_exp_tmp$obs<-as.numeric(both_exp_tmp$obs)
-
-  # Calculate correlation
-  cor_res[[i]]<-cor(both_exp_tmp[,-1:-2,with=F], use='p')
-}
-
-# melt and combine all the results
-cor_res_melt<-melt(cor_res)
-cor_res_melt_obs<-cor_res_melt[cor_res_melt$Var1 == 'obs',]
-cor_res_melt_obs<-cor_res_melt_obs[cor_res_melt_obs$Var1 != cor_res_melt_obs$Var2,]
-cor_res_melt_obs$test<-paste0(cor_res_melt_obs$Var1,'_',cor_res_melt_obs$Var2)
-
-cor_res_average<-NULL
-for(i in unique(cor_res_melt_obs$test)){
-  cor_res_average<-rbind(cor_res_average, data.frame(test=i,
-                                                     Mean=mean(cor_res_melt_obs$value[cor_res_melt_obs$test == i])))
-}
-
-library(ggplot2)
-bitmap('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_plot_example.png', units='px', width=1500, height=1000, res=300)
-ggplot(cor_res_melt_obs, aes(x=paste0(Var1,' vs. ',Var2), y=value)) +
-  geom_boxplot() +
-  labs(x='Test', y='Correlation') +
-  coord_flip()
-dev.off()
-
-# Read in reported R2 by weights
-yfs.profile<-fread('/mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/SNP-weights/YFS.BLOOD.RNAARR/YFS.BLOOD.RNAARR.profile')
-
-```
-
-</details>
-
-***
-
-#### Using processed and normalised data
-
-<details><summary>Show code</summary>
-
-```{r, eval=F, echo=T}
-library(data.table)
-
-# Read in the observed expression
-obs<-fread('/users/k1806347/brc_scratch/Data/GTeX/v8/GTEx_Analysis_v8_eQTL_expression_matrices/Whole_Blood.v8.normalized_expression.bed.gz')
-
-# Insert external_gene_name
-obs<-obs[,-1:-3]
-obs$gene_id<-gsub('\\..*','',obs$gene_id)
-
-library(biomaRt)
-ensembl = useEnsembl(biomart="ensembl", dataset="hsapiens_gene_ensembl", GRCh=37)
-Genes<-getBM(attributes=c('ensembl_gene_id_version','external_gene_name'), mart = ensembl)
-Genes$ensembl_gene_id_version<-gsub('\\..*','',Genes$ensembl_gene_id_version)
-
-obs<-merge(obs, Genes, by.x='gene_id', by.y='ensembl_gene_id_version')
-obs<-obs[,c('external_gene_name',names(obs)[grepl('GTEX-', names(obs))]), with=F]
-obs<-t(obs)
-colnames(obs)<-obs[1,]
-obs<-obs[-1,]
-obs<-cbind(row.names(obs),obs)
-colnames(obs)[1]<-'ID'
-obs<-data.table(obs)
-
-# Read in predicted expression
-eqtl<-fread('/mnt/lustre/users/k1806347/Data/GTeX/v8/Zac/eQTL.YFS.26042022/FeaturePredictions_YFS.eQTL.txt.gz')
-names(eqtl)<-gsub('.RDat','',gsub('YFS.','', names(eqtl)))
-
-# Identify genes available in fusion and eqtl based models
-obs_genes<-names(obs)[-1]
-eqtl_genes<-unique(gsub('\\..*','',gsub('eQTL.','',names(eqtl)[-1:-2])))
-both_genes<-intersect(obs_genes, eqtl_genes)
-
-# Calculate correlation between observed expression and predicted expression from each method
-cor_res<-list()
-for(i in both_genes){
-  # Rename columns to make output consistent across genes and label the observed expression
-  pred_exp_tmp<-eqtl[,grepl(paste0('FID$|IID$|\\.',i,'\\.'), names(eqtl)), with=F]
-  names(pred_exp_tmp)<-gsub(paste0('.',i), '', names(pred_exp_tmp))
-  
-  obs_exp_tmp<-obs[,c('ID',i), with=F]
-  names(obs_exp_tmp)[names(obs_exp_tmp) == i]<-'obs'
-  
-  # merge predicted and observed expression
-  both_exp_tmp<-merge(pred_exp_tmp, obs_exp_tmp, by.x='IID', by.y='ID')
-  
-  both_exp_tmp$obs<-as.numeric(both_exp_tmp$obs)
-
-  # Calculate correlation
-  cor_res[[i]]<-cor(both_exp_tmp[,-1:-2,with=F], use='p')
-}
-
-# melt and combine all the results
-cor_res_melt<-melt(cor_res)
-cor_res_melt_obs<-cor_res_melt[cor_res_melt$Var1 == 'obs',]
-cor_res_melt_obs<-cor_res_melt_obs[cor_res_melt_obs$Var1 != cor_res_melt_obs$Var2,]
-cor_res_melt_obs$test<-paste0(cor_res_melt_obs$Var1,'_',cor_res_melt_obs$Var2)
-
-cor_res_average<-NULL
-for(i in unique(cor_res_melt_obs$test)){
-  cor_res_average<-rbind(cor_res_average, data.frame(test=i,
-                                                     Mean=mean(cor_res_melt_obs$value[cor_res_melt_obs$test == i])))
-}
-
-library(ggplot2)
-bitmap('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_plot_example2.png', units='px', width=1500, height=1000, res=300)
-ggplot(cor_res_melt_obs, aes(x=paste0(Var1,' vs. ',Var2), y=value)) +
-  geom_boxplot() +
-  labs(x='Test', y='Correlation') +
-  coord_flip()
-dev.off()
-
-# Read in reported R2 by weights
-yfs.profile<-fread('/mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/SNP-weights/YFS.BLOOD.RNAARR/YFS.BLOOD.RNAARR.profile')
-
-```
-
-</details>
-
-***
-
-#### Using processed and normalised data adjusted for covariates
+#### Evaluate FUSION and eQTL-based YFS models
 
 <details><summary>Show code</summary>
 
@@ -1731,7 +1601,7 @@ for(i in unique(cor_res_melt_obs$test)){
 }
 
 library(ggplot2)
-bitmap('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_boxplot.png', units='px', width=1500, height=1000, res=300)
+png('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_boxplot.png', units='px', width=1500, height=1000, res=300)
 ggplot(cor_res_melt_obs, aes(x=paste0(Var1,' vs. ',Var2), y=value)) +
   geom_boxplot() +
   labs(x='Test', y='Correlation') +
@@ -1763,7 +1633,7 @@ diagfun <- function(data,mapping){
     xlim(c(min(cor_res_melt_obs$value),max(cor_res_melt_obs$value)))
 }  
 
-bitmap('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_pairsplot.png', units='px', width=5000, height=5000, res=300)
+png('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_pairsplot.png', units='px', width=5000, height=5000, res=300)
 ggpairs(cor_res_melt_obs_unmelt[,-1], lower = list(continuous = wrap(lowerfun)), diag = list(continuous = wrap(diagfun)))
 dev.off()
 
@@ -1777,6 +1647,8 @@ for(i in unique(cor_res_melt_obs$Var2)){
 n_valid<-n_valid[order(-n_valid$N_valid),]
 n_valid$Freq_valid<-n_valid$N_valid/length(unique(cor_res_melt_obs$L1))
 
+write.csv(n_valid, '/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/n_valid.png', row.names=F)
+
 # Read in reported R2 by weights
 yfs.profile<-fread('/mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/SNP-weights/YFS.BLOOD.RNAARR/YFS.BLOOD.RNAARR.profile')
 
@@ -1784,7 +1656,21 @@ yfs.profile<-fread('/mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/SN
 
 </details>
 
-The correlations are very low compared the R2 reported in the FUSION profile. This is true when using fusion or eQTL based models. Is this due to poor generalisablity across YFS and GTEx, or am I doing something wrong?
+<details><summary>Show correlation between observed and predicted expression</summary>
+
+![](/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_boxplot.png)
+
+![](/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_pairsplot.png)
+
+```{r, eval=T, echo=F}
+n_valid<-fread('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/n_valid.png')
+kable(n_valid, rownames = FALSE)
+
+```
+
+The correlations are very low compared the R2 reported in the FUSION profile. This is true when using fusion or eQTL based models. Is this due to poor generalisablity across YFS and GTEx?
+
+</details>
 
 ***
 
@@ -1872,7 +1758,7 @@ for(i in unique(cor_res_melt_obs$test)){
 }
 
 library(ggplot2)
-bitmap('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_boxplot_eQTLGen.png', units='px', width=1500, height=1000, res=300)
+png('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_boxplot_eQTLGen.png', units='px', width=1500, height=1000, res=300)
 ggplot(cor_res_melt_obs, aes(x=paste0(Var1,' vs. ',Var2), y=value)) +
   geom_boxplot() +
   labs(x='Test', y='Correlation') +
@@ -1904,7 +1790,7 @@ diagfun <- function(data,mapping){
     xlim(c(min(cor_res_melt_obs$value),max(cor_res_melt_obs$value)))
 }  
 
-bitmap('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_pairsplot_eQTLGen.png', units='px', width=3000, height=3000, res=300)
+png('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_pairsplot_eQTLGen.png', units='px', width=3000, height=3000, res=300)
 ggpairs(cor_res_melt_obs_unmelt[,-1], lower = list(continuous = wrap(lowerfun)), diag = list(continuous = wrap(diagfun)))
 dev.off()
 
@@ -1918,10 +1804,28 @@ for(i in unique(cor_res_melt_obs$Var2)){
 n_valid<-n_valid[order(-n_valid$N_valid),]
 n_valid$Freq_valid<-n_valid$N_valid/length(unique(cor_res_melt_obs$L1))
 
+write.csv(n_valid, '/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/n_valid_eQTLGen.png', row.names=F)
+
 ```
 
 </details>
 
-The correlations are very low compared the R2 reported in the FUSION profile. This is true when using fusion or eQTL based models. Is this due to poor generalisablity across YFS and GTEx, or am I doing something wrong?
+<details><summary>Show correlation between observed and predicted expression</summary>
 
+![](/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_boxplot_eQTLGen.png)
+
+![](/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_pairsplot_eQTLGen.png)
+
+```{r, eval=T, echo=F}
+n_valid<-fread('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/n_valid_eQTLGen.png')
+kable(n_valid, rownames = FALSE)
+
+```
+
+The predicted-observed correlation is looking better here, with 87% of genes achieving a correlation > 0.1. However, the order of the methods has changed a bit, with top1 and SBayesR (in robust mode) performing best. I am not going to read into the order of methods until we have run across all genes.
+
+</details>
+
+***
+***
 
