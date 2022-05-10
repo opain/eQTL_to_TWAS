@@ -108,11 +108,18 @@ dir.create(paste0(opt$output_dir,'/PRScs'))
 dir.create(paste0(opt$output_dir,'/SuSiE'))
 dir.create(paste0(opt$output_dir,'/RDat_files'))
 
+if(length(genes) > 100){
+  genes<-genes[1:100]
+}
+
 for(gene_i in genes[1:100]){
   print(which(genes == gene_i))
   ss_gene_i<-ss[ss$GENE == gene_i,]
   
   chr_i<-ss_gene_i$CHR[1]
+  
+  # Sort by chromosome and bp
+  ss_gene_i<-ss_gene_i[order(ss_gene_i$CHR, ss_gene_i$BP),]
     
   # Filter SNPs to those with N > 80% of max(N)
   ss_gene_i<-ss_gene_i[ss_gene_i$N >= 0.8*max(ss_gene_i$N),]
@@ -142,7 +149,7 @@ for(gene_i in genes[1:100]){
     names(par_res_file_i)<-c('gene','hsq','se','p')
 
     # If SNP-h2 p < 0.01, generate SNP-weights
-    if(par_res_file_i$p < 0.01){
+    if(par_res_file_i$p < 0.01 & !is.na(par_res_file_i$p)){
       # Flip the effect of each method to match eqtl sumstats
       ref_tmp<-ss_gene_i[, c('SNP','A1','A2'), with=F]
       
@@ -160,6 +167,9 @@ for(gene_i in genes[1:100]){
       sbayesr_score<-sbayesr_score[,c('SNP','A1.x','A2.x','BETA'), with=F]
       names(sbayesr_score)<-c('SNP','A1','A2','BETA')
       
+      # Sort score file according ss_gene_i
+      sbayesr_score<-sbayesr_score[match(ss_gene_i$SNP, sbayesr_score$SNP),]
+      
       #############
       # SBayesR robust
       #############
@@ -168,16 +178,27 @@ for(gene_i in genes[1:100]){
       
       log<-system(paste0(opt$gctb,' --sbayes R --ldm ',opt$gctb_ref,chr_i,'.ldm.sparse --pi 0.95,0.02,0.02,0.01 --gamma 0.0,0.01,0.1,1 --gwas-summary ',opt$output_dir,'/SBayesR/',gene_i,'.txt --robust --chain-length 10000 --exclude-mhc --burn-in 2000 --out-freq 1000 --out ',opt$output_dir,'/SBayesR_robust/',gene_i,'.SBayesR'), intern=T)
       
-      # Read in the results
-      sbayesr_robust_score<-fread(paste0(opt$output_dir,'/SBayesR_robust/',gene_i,'.SBayesR.snpRes'))
-      sbayesr_robust_score<-sbayesr_robust_score[,c('Name','A1','A2','A1Effect'), with=F]
-      names(sbayesr_robust_score)<-c('SNP','A1','A2','BETA')
+      if(file.exists(paste0(opt$output_dir,'/SBayesR_robust/',gene_i,'.SBayesR.parRes'))){
+        
+        # Read in the results
+        sbayesr_robust_score<-fread(paste0(opt$output_dir,'/SBayesR_robust/',gene_i,'.SBayesR.snpRes'))
+        sbayesr_robust_score<-sbayesr_robust_score[,c('Name','A1','A2','A1Effect'), with=F]
+        names(sbayesr_robust_score)<-c('SNP','A1','A2','BETA')
+        
+        # Flip effects so allele match eQTL sumstats
+        sbayesr_robust_score<-merge(ref_tmp, sbayesr_robust_score, by='SNP', all=T)
+        sbayesr_robust_score$BETA[which(sbayesr_robust_score$A1.x == sbayesr_robust_score$A2.y)]<--sbayesr_robust_score$BETA[which(sbayesr_robust_score$A1.x == sbayesr_robust_score$A2.y)]
+        sbayesr_robust_score<-sbayesr_robust_score[,c('SNP','A1.x','A2.x','BETA'), with=F]
+        names(sbayesr_robust_score)<-c('SNP','A1','A2','BETA')
+        
+      } else {
+        sbayesr_robust_score<-data.table( SNP=ss_gene_i$SNP,
+                                          A1=ss_gene_i$A1,
+                                          BETA=NA)
+      }
       
-      # Flip effects so allele match eQTL sumstats
-      sbayesr_robust_score<-merge(ref_tmp, sbayesr_robust_score, by='SNP', all=T)
-      sbayesr_robust_score$BETA[which(sbayesr_robust_score$A1.x == sbayesr_robust_score$A2.y)]<--sbayesr_robust_score$BETA[which(sbayesr_robust_score$A1.x == sbayesr_robust_score$A2.y)]
-      sbayesr_robust_score<-sbayesr_robust_score[,c('SNP','A1.x','A2.x','BETA'), with=F]
-      names(sbayesr_robust_score)<-c('SNP','A1','A2','BETA')
+      # Sort score file according ss_gene_i
+      sbayesr_robust_score<-sbayesr_robust_score[match(ss_gene_i$SNP, sbayesr_robust_score$SNP),]
       
       #############
       # DBSLMM
@@ -231,6 +252,9 @@ for(gene_i in genes[1:100]){
                                 BETA=NA)
       }
       
+      # Sort score file according ss_gene_i
+      dbslmm_score<-dbslmm_score[match(ss_gene_i$SNP, dbslmm_score$SNP),]
+      
       ##############
       # PRScs
       ##############
@@ -255,6 +279,9 @@ for(gene_i in genes[1:100]){
       prscs_score<-prscs_score[,c('SNP','A1.x','A2','BETA'), with=F]
       names(prscs_score)<-c('SNP','A1','A2','BETA')
       
+      # Sort score file according ss_gene_i
+      prscs_score<-prscs_score[match(ss_gene_i$SNP, prscs_score$SNP),]
+      
       ################
       # SuSiE finemapping
       ################
@@ -265,8 +292,10 @@ for(gene_i in genes[1:100]){
       
       ld<-as.matrix(fread(paste0(opt$output_dir,'/SuSiE/',gene_i,'.ld')))
       
+      skip_to_next<-F
       tryCatch(fitted_rss <- susie_rss(ss_gene_i$BETA/ss_gene_i$SE, ld, L = 10), error = function(e){skip_to_next <<- TRUE})
       
+      # Scale BETAs by PIP
       if(skip_to_next == TRUE){
         susie_score<-data.table(SNP=ss_gene_i$SNP,
                                 A1=ss_gene_i$A1,
@@ -274,7 +303,7 @@ for(gene_i in genes[1:100]){
       } else {
         susie_score<-data.table(SNP=ss_gene_i$SNP,
                                 A1=ss_gene_i$A1,
-                                BETA=fitted_rss$pip)
+                                BETA=ss_gene_i$BETA*fitted_rss$pip)
       }
       
       # Flip effects so allele match eQTL sumstats
@@ -282,6 +311,9 @@ for(gene_i in genes[1:100]){
       susie_score$BETA[which(susie_score$A1.x != susie_score$A1.y)]<--susie_score$BETA[which(susie_score$A1.x != susie_score$A1.y)]
       susie_score<-susie_score[,c('SNP','A1.x','A2','BETA'), with=F]
       names(susie_score)<-c('SNP','A1','A2','BETA')
+      
+      # Sort score file according ss_gene_i
+      susie_score<-susie_score[match(ss_gene_i$SNP, susie_score$SNP),]
       
       # Create RDat file for FUSION
       cv.performance<-as.matrix(data.frame(sbayesr=c(NA,NA),
@@ -291,9 +323,6 @@ for(gene_i in genes[1:100]){
                                            susie=c(NA,NA),
                                            top1=c(NA,NA), 
                                            row.names=c('rsq','pval')))
-      
-      # Sort eQTL data into the same order as other score files
-      ss_gene_i<-ss_gene_i[match(sbayesr_score$SNP, ss_gene_i$SNP),]
       
       hsq<-c(par_res_file_i$hsq, par_res_file_i$se)
       hsq.pv<-par_res_file_i$p
@@ -327,7 +356,6 @@ system(paste0('rm -r ',opt$output_dir,'/DBSLMM'))
 system(paste0('rm -r ',opt$output_dir,'/SBayesR'))
 system(paste0('rm -r ',opt$output_dir,'/SBayesR_robust'))
 system(paste0('rm -r ',opt$output_dir,'/SuSiE'))
-system(paste0('rm ',opt$output_dir,'/dbslmm_ref*'))
 
 end.time <- Sys.time()
 time.taken <- end.time - start.time
