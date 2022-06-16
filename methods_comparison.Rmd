@@ -981,13 +981,15 @@ for(i in 1:22){
 }
 names(frq)[names(frq) == 'MAF']<-'FREQ'
 
+setkey(sumstats, ProbeName)
+
 # Process eQTL sumstats for each gene
 # For testing use only first 100 genes
 dir.create('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen')
-for(i in 1:100){
+for(i in 1:length(genes)){
   print(i)
   
-  tmp<-sumstats[sumstats$ProbeName == genes[i],]
+  tmp<-sumstats[.(genes[i])]
   
   # Create A1 and A2 columns and update column names
   tmp$A1<-gsub('.*/','',tmp$SNPType)
@@ -1000,8 +1002,8 @@ for(i in 1:100){
 
   # Insert FREQ from EUR reference
   # There don't seem to be any strand flips
-  tmp_match<-merge(tmp, frq[,c('SNP','A1','A2','FREQ'),with=F], by=c('SNP','A1','A2'))
-  tmp_flip<-merge(tmp, frq[,c('SNP','A1','A2','FREQ'),with=F], by.x=c('SNP','A1','A2'), by.y=c('SNP','A2','A1'))
+  tmp_match<-merge(tmp, frq[frq$CHR == tmp$CHR[1],c('SNP','A1','A2','FREQ'),with=F], by=c('SNP','A1','A2'))
+  tmp_flip<-merge(tmp, frq[frq$CHR == tmp$CHR[1],c('SNP','A1','A2','FREQ'),with=F], by.x=c('SNP','A1','A2'), by.y=c('SNP','A2','A1'))
   tmp_flip$FREQ<-1-tmp_flip$FREQ
   tmp<-rbind(tmp_match, tmp_flip)
   
@@ -1103,7 +1105,7 @@ write.table(pos, '/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/d
 # Run in parallel for first 100 genes
 
 # Create file listing GWAS that haven't been processed.
-cut -f 1 -d' ' /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/eQTLGen_sumstats_exclGTeX.txt | tail -n +2 | uniq > /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen2/gene_list.txt
+cut -f 1 -d' ' /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/eQTLGen_sumstats_exclGTeX.txt | tail -n +2 | uniq | head -n 100 > /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen2/gene_list.txt
 
 > /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen2/todo.txt
 for i in $(cat /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen2/gene_list.txt);do
@@ -1184,6 +1186,95 @@ write.table(pos, '/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/d
 
 </details>
 
+***
+
+#### Create TWAS weights in parallel for all genes
+
+<details><summary>Show code</summary>
+
+```{bash, eval=F, echo=T}
+# Create file listing GWAS that haven't been processed.
+mkdir /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall
+cut -f 1 -d' ' /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/eQTLGen_sumstats_exclGTeX.txt | tail -n +2 | uniq > /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall/gene_list.txt
+
+> /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall/todo.txt
+for i in $(cat /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall/gene_list.txt);do
+  if [ ! -f /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall/eQTLGen.eQTL/${i}.done ]; then
+    echo ${i} >> /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall/todo.txt
+  fi
+done
+
+# Create shell script to run using sbatch
+cat > /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall/sbatch.sh << 'EOF'
+#!/bin/sh
+
+#SBATCH -p shared,brc
+#SBATCH --mem 10G
+#SBATCH -n 1
+#SBATCH --nodes 1
+#SBATCH -J eQTL_to_TWAS
+
+ID=$(awk -v var="$SLURM_ARRAY_TASK_ID" 'NR == var {print $1}' /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall/todo.txt)
+
+/users/k1806347/brc_scratch/Software/Rscript.sh /users/k1806347/brc_scratch/Software/MyGit/eQTL_to_TWAS/compute_weights_V2.R \
+	--id ${ID} \
+	--extract /users/k1806347/brc_scratch/Data/ldsc/w_hm3.snplist \
+	--sumstats /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/eQTLGen_sumstats_exclGTeX.txt \
+	--gctb /users/k1806347/brc_scratch/Software/gctb_2.03beta_Linux/gctb_203.sh \
+	--gctb_ref /scratch/groups/ukbiobank/usr/ollie_pain/GenoPredPipe/GenoPred/GenoPredPipe/resources/data/gctb_ref/ukbEURu_hm3_shrunk_sparse/ukbEURu_hm3_v3_50k_chr \
+	--plink_ref_chr /users/k1806347/brc_scratch/Data/1KG/Phase3/1KGPhase3.w_hm3.chr \
+	--plink_ref_keep /users/k1806347/brc_scratch/Data/1KG/Phase3/keep_files/EUR_samples.keep \
+	--ld_blocks /users/k1806347/brc_scratch/Data/LDetect/EUR \
+  --rscript /users/k1806347/brc_scratch/Software/Rscript.sh \
+  --dbslmm /users/k1806347/brc_scratch/Software/DBSLMM/software \
+  --plink /users/k1806347/brc_scratch/Software/plink1.9.sh \
+  --PRScs_path /users/k1806347/brc_scratch/Software/PRScs.sh \
+  --PRScs_ref_path /users/k1806347/brc_scratch/Software/PRScs/ldblk_1kg_eur \
+	--ldpred2_ref_dir /scratch/groups/ukbiobank/usr/ollie_pain/GenoPredPipe/GenoPred/GenoPredPipe/resources/data/ldpred2_ref \
+--output /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall/eQTLGen.eQTL
+
+EOF
+
+sbatch --array 1-$(wc -l /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall/todo.txt | cut -d' ' -f1)%200 /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall/sbatch.sh
+
+```
+
+```{R, echo=T, eval=F}
+# Create .pos file
+library(data.table)
+
+# Read in list of RDat files
+rdat_list<-list.files(path='/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall/eQTLGen.eQTL', pattern='.RDat')
+
+# Start making pos file
+pos<-data.frame(PANEL='eQTLGen.eQTL',
+                WGT=paste0('eQTLGen.eQTL/',rdat_list),
+                ID=gsub('\\..*','',rdat_list))
+
+# Insert CHR, P0 and P1 (GRCh=37)
+library(biomaRt)
+ensembl = useEnsembl(biomart="ensembl", dataset="hsapiens_gene_ensembl", GRCh=37)
+Genes<-getBM(attributes=c('ensembl_gene_id_version','chromosome_name','start_position','end_position'), mart = ensembl)
+Genes$ensembl_gene_id_version<-gsub('\\..*','',Genes$ensembl_gene_id_version)
+names(Genes)<-c('ID','CHR','P0','P1')
+Genes<-Genes[complete.cases(Genes),]
+Genes<-Genes[!duplicated(Genes),]
+
+pos<-merge(pos, Genes, all.x=T, by='ID')
+
+# Read in each RDat file to retrieve N
+for(i in 1:length(rdat_list)){
+  load(paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall/eQTLGen.eQTL/',rdat_list[i]))
+  pos$N[i]<-N.tot
+}
+
+pos<-pos[,c('PANEL','WGT','ID','CHR','P0','P1','N')]
+
+write.table(pos, '/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall/eQTLGen.eQTL.pos', col.names=T, row.names=F, quote=F)
+
+```
+
+</details>
 
 ***
 
@@ -1569,6 +1660,33 @@ sbatch -p brc,shared --mem 10G -n 1 /users/k1806347/brc_scratch/Software/Rscript
 
 ***
 
+#### YFSall eQTL-based models
+
+<details><summary>Show code</summary>
+
+```{bash, eval=F, echo=T}
+
+sbatch -p brc,shared --mem 30G -n 5 /users/k1806347/brc_scratch/Software/Rscript.sh /users/k1806347/brc_scratch/Software/MyGit/Predicting-TWAS-features/FeaturePred.V2.0.R \
+	--PLINK_prefix_chr /mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
+	--weights /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFSall/YFS.eQTL.pos \
+	--weights_dir /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFSall \
+	--ref_ld_chr /mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
+	--plink /users/k1806347/brc_scratch/Software/plink1.9.sh \
+	--n_cores 5 \
+	--save_score F \
+	--save_ref_expr F \
+	--memory 10000 \
+	--all_mod T \
+	--pigz /users/k1806347/brc_scratch/Software/pigz \
+	--ref_maf /mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
+	--output /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/1kg_pred_exp/YFSall.eQTL
+
+```
+
+</details>
+
+***
+
 #### eQTLGen eQTL-based models
 
 <details><summary>Show code</summary>
@@ -1616,6 +1734,33 @@ sbatch -p brc,shared --mem 10G -n 1 /users/k1806347/brc_scratch/Software/Rscript
 	--pigz /users/k1806347/brc_scratch/Software/pigz \
 	--ref_maf /mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
 	--output /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/1kg_pred_exp/eQTLGen2.eQTL
+
+```
+
+</details>
+
+***
+
+#### eQTLGenall eQTL-based models
+
+<details><summary>Show code</summary>
+
+```{bash, eval=F, echo=T}
+
+sbatch -p brc,shared --mem 10G -n 1 /users/k1806347/brc_scratch/Software/Rscript.sh /users/k1806347/brc_scratch/Software/MyGit/Predicting-TWAS-features/FeaturePred.V2.0.R \
+	--PLINK_prefix_chr /mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
+	--weights /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall/eQTLGen.eQTL.pos \
+	--weights_dir /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall \
+	--ref_ld_chr /mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
+	--plink /users/k1806347/brc_scratch/Software/plink1.9.sh \
+	--n_cores 1 \
+	--save_score T \
+	--save_ref_expr T \
+	--memory 10000 \
+	--all_mod T \
+	--pigz /users/k1806347/brc_scratch/Software/pigz \
+	--ref_maf /mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
+	--output /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/1kg_pred_exp/eQTLGenall.eQTL
 
 ```
 
@@ -2216,16 +2361,7 @@ The predicted-observed correlation is looking better here, with 87% of genes ach
 
 ***
 
-## Comparison of pseudovalidation approaches
-
-Here we will try to predict the best eQTL-based model. We will test two approaches:
-
-- FUSION pseudovalidation - uses the TWAS method to test for an association between the SNP-weights and the original eQTL summary statistics. A high TWAS.Z would indicate the SNP-weights correspond to the eQTL sumstats well.
-- MegaPRS - MegaPRS, implemented within LDAK, aims to identify the best PRS model without a validation sample. It performs well to other PRS pseudovalidation methods.
-
-***
-
-### FUSION pseudovalidation
+## Evaluation of FUSION pseudovalidation
 
 <details><summary>Show code</summary>
 
@@ -2381,6 +2517,235 @@ These results are really encouraging. There is very little difference between th
 </details>
 
 ***
+
+### Streamline FUSION pseudovalidation
+
+```{bash, echo=F, eval=T}
+
+mkdir /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo2
+for chr in $(seq 1 22);do
+  sbatch -p brc,shared --exclude=nodeb11,nodeb16 --mem 10G /users/k1806347/brc_scratch/Software/Rscript.sh /scratch/users/k1806347/Software/MyGit/eQTL_to_TWAS/FUSION.assoc_test.pseudo_V2.R \
+    --sumstats /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/eQTLGen_sumstats_exclGTeX.txt \
+    --weights /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/eQTLGen.eQTL.pos \
+    --weights_dir /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen \
+    --ref_ld_chr /mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
+    --out /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo2/pseudo_res_chr${chr} \
+    --chr ${chr} \
+    --all_mod T
+done
+
+```
+
+```{r, eval=F, echo=T}
+library(data.table)
+
+# Read in pseudoval results
+pseudo_res_2<-NULL
+for(i in 1:22){
+  pseudo_res_2<-rbind(pseudo_res_2, fread(paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo2/pseudo_res_chr',i)))
+}
+
+names(pseudo_res_2)[names(pseudo_res_2) == 'MODEL']<-'Model'
+pseudo_res_2<-pseudo_res_2[,c('ID','Model','TWAS.Z'), with=F]
+
+pos<-fread('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/eQTLGen.eQTL.pos')
+
+pseudo_res<-NULL
+for(i in 1:nrow(pos)){
+  for(mod in c('top1','sbayesr','sbayesr_robust','dbslmm','prscs','susie')){
+    res_i_mod<-fread(paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo/pseudo_res/', pos$ID[i],'.',mod))
+    
+    pseudo_res<-rbind(pseudo_res, data.frame(ID=pos$ID[i],
+                                             Model=mod,
+                                             TWAS.Z=res_i_mod$TWAS.Z))
+  }
+}
+
+pseudo_comp<-merge(pseudo_res, pseudo_res_2, by=c('ID','Model'))
+# New ad old pseudoval scripts correlate perfectly.
+
+# Read in the correlation between predicted and observed expression in GTEx v8.
+cor_res_melt_obs<-fread('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor.txt')
+
+cor_res_melt_obs<-cor_res_melt_obs[,c('L1','Var2','value'),with=F]
+names(cor_res_melt_obs)<-c('ID','Model','R')
+cor_res_melt_obs$Model<-gsub('eQTL.','',cor_res_melt_obs$Model)
+
+obs_pseudo<-merge(pseudo_res, cor_res_melt_obs, by=c('ID','Model'))
+
+# Determine the best model based on TWAS.Z and observed cor, and rank methods by TWAS.Z and observed cor for each gene.
+genes<-unique(obs_pseudo$ID)
+obs_pseudo_rank<-NULL
+rank_diff<-NULL
+n_top<-NULL
+for(i in 1:length(genes)){
+  obs_pseudo_i<-obs_pseudo[obs_pseudo$ID == genes[i],]
+  obs_pseudo_i$pseudo_rank<-rank(-obs_pseudo_i$TWAS.Z)
+  obs_pseudo_i$obs_rank<-rank(-obs_pseudo_i$R)
+  obs_pseudo_rank<-rbind(obs_pseudo_rank, obs_pseudo_i)
+  
+  rank_diff<-rbind(rank_diff, data.frame(ID=genes[i],
+                                         pseudo_top_mod=obs_pseudo_i$Model[obs_pseudo_i$pseudo_rank == min(obs_pseudo_i$pseudo_rank)][1],
+                                         pseudo_R = obs_pseudo_i$R[obs_pseudo_i$pseudo_rank == min(obs_pseudo_i$pseudo_rank)][1],
+                                         obs_top_mod=obs_pseudo_i$Model[obs_pseudo_i$obs_rank == min(obs_pseudo_i$obs_rank)][1],
+                                         top_R = obs_pseudo_i$R[obs_pseudo_i$obs_rank == min(obs_pseudo_i$obs_rank)][1]))
+  
+}
+
+# Calculate correlation between model rank for each gene
+cor(obs_pseudo_rank$pseudo_rank, obs_pseudo_rank$obs_rank) # 0.6105157
+
+# Calculate the mean difference in R between the best model and the model selected by TWAS.Z
+rank_diff$diff<-rank_diff$pseudo_R-rank_diff$top_R
+mean(rank_diff$diff) # -0.006272514
+
+# Calculate the percentage of genes where pseuodoval did not select the correct model
+nrow(rank_diff[rank_diff$diff != 0,])/nrow(rank_diff) # 0.4155844
+
+# Crosstab the selected observed and pseudoval-selected best model
+saveRDS(table(rank_diff$pseudo_top_mod, rank_diff$obs_top_mod),'/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo2/best_pseudo_comp.rds')
+table(rank_diff$pseudo_top_mod, rank_diff$obs_top_mod)
+table(rank_diff$pseudo_top_mod)
+table(rank_diff$obs_top_mod)
+
+rank_diff<-rank_diff[order(rank_diff$diff),]
+
+library(ggplot2)
+library(cowplot)
+
+png('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo2/best_pseudo_comp.png', res=300, units='px', width=1000, height=1000)
+ggplot(rank_diff, aes(x=top_R, y=pseudo_R)) +
+  geom_abline(intercept = 0, slope = 1, colour='red') +
+  geom_point() +
+  coord_fixed() +
+  theme_half_open() +
+  xlim(c(0,NA)) +
+  ylim(c(0,NA)) +
+  background_grid() +
+  labs(x="R (Best)", y="R (Pseudovalidated)")
+dev.off()
+
+```
+
+</details>
+
+<details><summary>Comparison of model that performed best in GTEx to model that was selected by pseudovalidation</summary>
+
+![](/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo2/best_pseudo_comp.png){width=50%}
+
+```{r, eval=T, echo=F}
+
+tmp<-readRDS('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo2/best_pseudo_comp.rds')
+dimnames(tmp)<-list(paste0(dimnames(tmp)[[1]],'_obs'), paste0(dimnames(tmp)[[2]],'_pseudo'))
+
+tmp
+
+```
+
+</details>
+
+***
+
+### Evaluate pseudovalidation using all FUSION YFS models
+
+```{bash, echo=F, eval=T}
+
+mkdir /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo_fusion_yfs
+
+for chr in $(seq 22 22);do
+  sbatch -p brc,shared --exclude=nodeb11,nodeb16,nodeb09,nodeb18 --mem 10G /users/k1806347/brc_scratch/Software/Rscript.sh /scratch/users/k1806347/Software/MyGit/eQTL_to_TWAS/FUSION.assoc_test.pseudo_V2.R \
+    --sumstats /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/YFS_eQTL_from_fusion.txt \
+	--weights /mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/SNP-weights/YFS.BLOOD.RNAARR/YFS.BLOOD.RNAARR.pos \
+	--weights_dir /mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/SNP-weights/YFS.BLOOD.RNAARR \
+    --ref_ld_chr /mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
+    --out /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo_fusion_yfs/pseudo_res_chr${chr} \
+    --chr ${chr} \
+    --all_mod T
+done
+
+```
+
+```{r, eval=F, echo=T}
+library(data.table)
+
+# Read in pseudoval results
+pseudo_res_2<-NULL
+for(i in 22:22){
+  pseudo_res_2<-rbind(pseudo_res_2, fread(paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo_fusion_yfs/pseudo_res_chr',i)))
+}
+
+# Determine the best model based on TWAS.Z and observed cor, and rank methods by TWAS.Z and observed cor for each gene.
+genes<-unique(pseudo_res_2$ID)
+obs_pseudo_rank<-NULL
+rank_diff<-NULL
+n_top<-NULL
+for(i in 1:length(genes)){
+  obs_pseudo_i<-pseudo_res_2[pseudo_res_2$ID == genes[i],]
+  obs_pseudo_i$pseudo_rank<-rank(-obs_pseudo_i$TWAS.Z)
+  obs_pseudo_i$obs_rank<-rank(-obs_pseudo_i$MODELCV.R2)
+  obs_pseudo_rank<-rbind(obs_pseudo_rank, obs_pseudo_i)
+  
+  rank_diff<-rbind(rank_diff, data.frame(ID=genes[i],
+                                         pseudo_top_mod=obs_pseudo_i$MODEL[obs_pseudo_i$pseudo_rank == min(obs_pseudo_i$pseudo_rank)][1],
+                                         pseudo_R = sqrt(obs_pseudo_i$MODELCV.R2[obs_pseudo_i$pseudo_rank == min(obs_pseudo_i$pseudo_rank)][1]),
+                                         obs_top_mod=obs_pseudo_i$MODEL[obs_pseudo_i$obs_rank == min(obs_pseudo_i$obs_rank)][1],
+                                         top_R = sqrt(obs_pseudo_i$MODELCV.R2[obs_pseudo_i$obs_rank == min(obs_pseudo_i$obs_rank)][1])))
+  
+}
+
+# Calculate correlation between model rank for each gene
+cor(obs_pseudo_rank$pseudo_rank, obs_pseudo_rank$obs_rank) # 0.1213251
+
+# Calculate the mean difference in R between the best model and the model selected by TWAS.Z
+rank_diff$diff<-rank_diff$pseudo_R-rank_diff$top_R
+mean(rank_diff$diff) # -0.02347989
+
+# Calculate the percentage of genes where pseuodoval did not select the correct model
+nrow(rank_diff[rank_diff$diff != 0,])/nrow(rank_diff) # 0.8030303
+
+# Crosstab the selected observed and pseudoval-selected best model
+saveRDS(table(rank_diff$pseudo_top_mod, rank_diff$obs_top_mod),'/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo_fusion_yfs/best_pseudo_comp.rds')
+table(rank_diff$pseudo_top_mod, rank_diff$obs_top_mod)
+table(rank_diff$pseudo_top_mod)
+table(rank_diff$obs_top_mod)
+
+rank_diff<-rank_diff[order(rank_diff$diff),]
+
+library(ggplot2)
+library(cowplot)
+
+png('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo_fusion_yfs/best_pseudo_comp.png', res=300, units='px', width=1000, height=1000)
+ggplot(rank_diff, aes(x=top_R, y=pseudo_R)) +
+  geom_abline(intercept = 0, slope = 1, colour='red') +
+  geom_point() +
+  coord_fixed() +
+  theme_half_open() +
+  xlim(c(0,NA)) +
+  ylim(c(0,NA)) +
+  background_grid() +
+  labs(x="R (Best)", y="R (Pseudovalidated)")
+dev.off()
+
+```
+
+</details>
+
+<details><summary>Comparison of model that performed best in YFS to model that was selected by pseudovalidation</summary>
+
+![](/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo2/best_pseudo_comp.png){width=50%}
+
+```{r, eval=T, echo=F}
+
+tmp<-readRDS('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo_fusion_yfs/best_pseudo_comp.rds')
+dimnames(tmp)<-list(paste0(dimnames(tmp)[[1]],'_obs'), paste0(dimnames(tmp)[[2]],'_pseudo'))
+
+tmp
+
+```
+
+The variance explained by the best model identified by pseudovalidation is very similar to the best model identified by cross validation, however the pseudoval model is often not the model identified by cross validation.
+
+</details>
 
 ***
 

@@ -81,15 +81,17 @@ cat('Options are:\n')
 print(opt)
 cat('Analysis started at',as.character(start.time),'\n')
 
-# Read in sumstats
-ss<-fread(opt$sumstats)
+if(is.na(opt$id)){
+  # Read in sumstats
+  ss<-fread(opt$sumstats)
+  
+  cat('Sumstats contain',nrow(ss),' variant-gene associations.\n')
+  cat('Sumstats contain',length(unique(ss$SNP)),' unique variants.\n')
+  cat('Sumstats contain',length(unique(ss$GENE)),' unique genes\n')
 
-cat('Sumstats contain',nrow(ss),' variant-gene associations.\n')
-cat('Sumstats contain',length(unique(ss$SNP)),' unique variants.\n')
-cat('Sumstats contain',length(unique(ss$GENE)),' unique genes\n')
-
-# Extract SNPs for opt$id
-if(!is.na(opt$id)){
+} else {
+  # Extract SNPs for opt$id
+  ss<-fread(cmd=paste0('grep -E "GENE|',opt$id,'" ', opt$sumstats))
   ss<-ss[ss$GENE == opt$id,]
   
   cat('Computing weights for ',opt$id,'.\n')
@@ -116,6 +118,9 @@ genes<-unique(ss$GENE)
 for(gene_i in genes){
   # Subset sumstats to gene (if not already)
   ss_gene_i<-ss[ss$GENE == gene_i,]
+  
+  # Remove genes with missing values
+  ss_gene_i<-ss_gene_i[complete.cases(ss_gene_i),]
   
   # Identify chromosome number
   chr_i<-ss_gene_i$CHR[1]
@@ -452,7 +457,7 @@ for(gene_i in genes){
           # Harmonise with the reference
           map<-readRDS(paste0(opt$ldpred2_ref_dir,'/map.rds'))
           map<-map[,c('chr','pos','a0','a1','af_UKBB','ld')]
-          info_snp <- snp_match(ss_gene_i_ldpred2, map)
+          info_snp <- snp_match(ss_gene_i_ldpred2, map, match.min.prop = 0)
           
           # Perform additional suggested QC for LDPred2
           # Remove SDss<0.5???SDval or SDss>0.1+SDval or SDss<0.1 or SDval<0.05
