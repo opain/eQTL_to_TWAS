@@ -22,6 +22,12 @@ option_list = list(
               help="Maximum fraction of SNPs allowed to be missing per gene (will be imputed using LD). [default: %default]"),			  
   make_option("--min_r2pred", action="store", default=0.7 , type='double',
               help="Minimum average LD-based imputation accuracy allowed for expression weight SNP Z-scores. [default: %default]"),			  
+  make_option("--coloc_P", action="store", default=NA, type='double',
+              help="P-value below which to compute COLOC statistic [Giambartolomei et al PLoS Genet 2013]\nRequires coloc library installed and --GWASN flag. [default NA/off]"),
+  make_option("--GWASN", action="store", default=NA, type='integer',
+              help="Total GWAS/sumstats sample size for inference of standard GWAS effect size."),
+  make_option("--PANELN", action="store", default=NA, type='character',
+              help="File listing sample size for each panel for inference of standard QTL effect size, cross-referenced against 'PANEL' column in weights file"),
   make_option("--chr", action="store", default=NA, type='character',
               help="Chromosome to analyze, currently only single chromosome analyses are performed [required]")
 )
@@ -66,13 +72,33 @@ sumstat = fread(opt$sumstats)
 # Load in list of weights
 wgtlist = fread(opt$weights)
 
+if ( !is.na(opt$coloc_P) ) {
+  if ( is.na(opt$GWASN) || opt$GWASN < 1 ) {
+    cat("ERROR : --GWASN flag required to be positive integer for COLOC analysis\n")
+    q()
+  }
+  if ( sum(names(wgtlist) == "N") == 0 ) {
+    if ( sum(names(wgtlist) == "PANEL") == 0 || is.na(opt$PANELN) ) {
+      cat("ERROR : 'N' field needed in weights file or 'PANEL' column and --PANELN flag required for COLOC analysis\n")
+      q()
+    } else { 
+      paneln = read.table(opt$PANELN,as.is=T,head=T,sep='\t')
+      m = match( wgtlist$PANEL , paneln$PANEL )
+      wgtlist$N = paneln$N[ m ]
+    }
+  }
+  suppressMessages(library('coloc'))
+}
+
 # Subset SNP-weights in opt$extract_weight
 if(!is.na(opt$extract_weight)){
   sumstat<-sumstat[sumstat$GENE == opt$extract_weight,]
   wgtlist<-wgtlist[wgtlist$ID == opt$extract_weight,]
   opt$chr = wgtlist$CHR[1]
 } else {
-  setkey(sumstat, GENE)
+  if(any(names(sumstat) == 'GENE')){
+    setkey(sumstat, GENE)
+  }
 }
 
 # Subset SNP-weights in opt$chr
@@ -93,12 +119,16 @@ genos = read_plink(paste(opt$ref_ld_chr,opt$chr,sep=''),impute="avg")
 
 ## For each wgt file:
 FAIL.ctr<-0
-out.tbl.all<-NULL
+out.tbl.all.all<-NULL
 for ( w in 1:nrow(wgtlist)){
   if(!is.na(opt$extract_weight)){
     sumstat_w<-sumstat
   } else {
-    sumstat_w<-sumstat[.(wgtlist$ID[w])]
+    if(any(names(sumstat) == 'GENE')){
+      sumstat_w<-sumstat[.(wgtlist$ID[w])]
+    } else {
+      sumstat_w<-sumstat
+    }
   }
   
   genos_w<-genos
@@ -169,10 +199,17 @@ for ( w in 1:nrow(wgtlist)){
 		next
 	}
 
+	out.tbl.all<-NULL
 	for(mod.best in models){
 	  cur.FAIL = FALSE
 	  
-	  out.tbl = data.frame( "PANEL" = rep(NA,1) , "FILE" = character(1) , "ID" = character(1) , "CHR" = numeric(1) , "P0" = character(1) , "P1" = character(1) ,"HSQ" = numeric(1) , "NSNP" = numeric(1) , "NWGT" = numeric(1) , "MODEL" = character(1), "MODELCV.R2" = character(1) , "TWAS.Z" = numeric(1) , stringsAsFactors=FALSE )
+	  # Store top1 for coloc
+	  
+	  if(is.na(opt$coloc_P)){
+	    out.tbl = data.frame( "PANEL" = rep(NA,1) , "FILE" = character(1) , "ID" = character(1) , "CHR" = numeric(1) , "P0" = character(1) , "P1" = character(1) ,"HSQ" = numeric(1) , "NSNP" = numeric(1) , "NWGT" = numeric(1) , "MODEL" = character(1), "MODELCV.R2" = character(1) , "TWAS.Z" = numeric(1) , "TWAS.P" = numeric(1) , stringsAsFactors=FALSE )
+	  } else {
+	    out.tbl = data.frame( "PANEL" = rep(NA,1) , "FILE" = character(1) , "ID" = character(1) , "CHR" = numeric(1) , "P0" = character(1) , "P1" = character(1) ,"HSQ" = numeric(1) , "NSNP" = numeric(1) , "NWGT" = numeric(1) , "MODEL" = character(1), "MODELCV.R2" = character(1) , "TWAS.Z" = numeric(1) , "TWAS.P" = numeric(1) , "COLOC.PP0" = numeric(1) , "COLOC.PP1" = numeric(1) , "COLOC.PP2" = numeric(1) , "COLOC.PP3" = numeric(1), "COLOC.PP4" = numeric(1) , stringsAsFactors=FALSE )
+	  }
 	  
 	 	if ( sum(wgt.matrix[, mod.best] != 0) == 0 ) {
   		cat( "WARNING : " , unlist(wgtlist[w,]) , names(cv.performance)[ mod.best ] , "had", length(cur.Z) , "overlapping SNPs, but none with non-zero expression weights, try more SNPS or a different model\n")
@@ -247,26 +284,53 @@ for ( w in 1:nrow(wgtlist)){
   	if ( !cur.FAIL ) {
   		out.tbl$NWGT[1] = sum( wgt.matrix[,mod.best] != 0 )
   		out.tbl$TWAS.Z[1] = cur.twas
+  		out.tbl$TWAS.P[1] = 2*(pnorm( abs(out.tbl$TWAS.Z[1]) , lower.tail=F))
   	} else {
-  		out.tbl$TWAS.Z[1] = NA
+  	  out.tbl$TWAS.Z[1] = NA
+  	  out.tbl$TWAS.P[1] = NA
   	}
   
   	if ( cur.FAIL ) FAIL.ctr = FAIL.ctr + 1
   	out.tbl.all<-rbind(out.tbl.all, out.tbl)
 	}
+	
+	# perform COLOC test
+	if ( !is.na(opt$coloc_P) && any(!is.na(out.tbl.all$TWAS.Z[out.tbl.all$FILE == wgt.file])) && any(out.tbl.all$TWAS.P[out.tbl.all$FILE == wgt.file] < opt$coloc_P, na.rm = T) && !is.na(wgtlist$N[w]) ) {
+	  b1 = wgt.matrix[,'top1'] / sqrt(wgtlist$N[w])
+	  b2 = cur.Z / sqrt(opt$GWASN)
+	  
+	  vb1 = rep(1/wgtlist$N[w],length(b1))
+	  vb2 = rep(1/opt$GWASN,length(b2))
+	  
+	  err = suppressMessages(capture.output(clc <- coloc.abf(dataset1=list(beta=b1,varbeta=vb1,type="quant",N=wgtlist$N[w],sdY=1),dataset2=list(beta=b2,varbeta=vb2,type="quant",N=opt$GWASN,sdY=1))))
+	  
+	  out.tbl.all$COLOC.PP0[out.tbl.all$FILE == wgt.file]<-round(clc$summary[2],3)
+	  out.tbl.all$COLOC.PP1[out.tbl.all$FILE == wgt.file]<-round(clc$summary[3],3)
+	  out.tbl.all$COLOC.PP2[out.tbl.all$FILE == wgt.file]<-round(clc$summary[4],3)
+	  out.tbl.all$COLOC.PP3[out.tbl.all$FILE == wgt.file]<-round(clc$summary[5],3)
+	  out.tbl.all$COLOC.PP4[out.tbl.all$FILE == wgt.file]<-round(clc$summary[6],3)
+	} else {
+	  out.tbl.all$COLOC.PP0[out.tbl.all$FILE == wgt.file]<-NA
+	  out.tbl.all$COLOC.PP1[out.tbl.all$FILE == wgt.file]<-NA
+	  out.tbl.all$COLOC.PP2[out.tbl.all$FILE == wgt.file]<-NA
+	  out.tbl.all$COLOC.PP3[out.tbl.all$FILE == wgt.file]<-NA
+	  out.tbl.all$COLOC.PP4[out.tbl.all$FILE == wgt.file]<-NA
+	}
+	
+	out.tbl.all.all<-rbind(out.tbl.all.all, out.tbl.all)
 }
 
 cat("Analysis completed.\n")
 cat("NOTE:",FAIL.ctr,"genes-model pairs were skipped\n")
 
 # WRITE MHC TO SEPARATE FILE
-mhc = out.tbl.all$CHR == 6 & out.tbl.all$P0 > 26e6 & out.tbl.all$P1 < 34e6
+mhc = out.tbl.all.all$CHR == 6 & out.tbl.all.all$P0 > 26e6 & out.tbl.all.all$P1 < 34e6
 
-out.tbl.all$P0 = apply( as.matrix(out.tbl.all$P0) , 1 , toString )
-out.tbl.all$P1 = apply( as.matrix(out.tbl.all$P1) , 1 , toString )
+out.tbl.all.all$P0 = apply( as.matrix(out.tbl.all.all$P0) , 1 , toString )
+out.tbl.all.all$P1 = apply( as.matrix(out.tbl.all.all$P1) , 1 , toString )
 
 if ( sum( mhc ) > 0 ) {
 	cat("Results in the MHC are written to",paste(opt$out,".MHC",sep=''),", evaluate with caution due to complex LD structure\n")
-	write.table( format( out.tbl.all[mhc,] , digits=3 ) , quote=F , row.names=F , sep='\t' , file=paste(opt$out,".MHC",sep='') )
+	write.table( format( out.tbl.all.all[mhc,] , digits=3 ) , quote=F , row.names=F , sep='\t' , file=paste(opt$out,".MHC",sep='') )
 }
-write.table( format( out.tbl.all[!mhc,] , digits=3 ) , quote=F , row.names=F , sep='\t' , file=opt$out )
+write.table( format( out.tbl.all.all[!mhc,] , digits=3 ) , quote=F , row.names=F , sep='\t' , file=opt$out )
