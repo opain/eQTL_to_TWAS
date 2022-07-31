@@ -167,6 +167,10 @@ for ( w in 1:nrow(wgtlist)){
 	m = match( snps[,2] , genos_w$bim[,2] )
 	m.keep = !is.na(m)
 	snps = snps[m.keep,]
+	if(is.matrix(snps) == F){
+	  snps<-t(as.matrix(snps))
+	}
+	
 	wgt.matrix = wgt.matrix[m.keep,,drop=F]
 	cur.genos_w = scale(genos_w$bed[,m[m.keep]])
 	cur.bim = genos_w$bim[m[m.keep],]

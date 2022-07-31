@@ -175,6 +175,12 @@ for(gene_i in genes){
     # Create hsq.pv object
     hsq.pv<-par_res_file_i$p
     
+    if(is.na(par_res_file_i$hsq) | par_res_file_i$hsq <= 0){
+      hsq_val<-0.1
+    } else {
+      hsq_val<-par_res_file_i$hsq
+    }
+    
     # Create N.tot object
     N.tot<-max(ss_gene_i$N)
     GWAS_N<-mean(ss_gene_i$N)
@@ -303,11 +309,6 @@ for(gene_i in genes){
         fwrite(GWAS, paste0(opt$output,'/', gene_i,'/DBSLMM/',gene_i,'.DBSLMM.txt'), sep='\t', col.names=F)
         
         # Run dbslmm
-        if(is.na(par_res_file_i$hsq)){
-          hsq_val<-0.1
-        } else {
-          hsq_val<-par_res_file_i$hsq
-        }
         system(paste0('chmod 777 ',opt$dbslmm,'/dbslmm'))
         system(paste0(opt$rscript,' ',opt$dbslmm,'/DBSLMM.R --plink ',opt$plink,' --block ',opt$ld_blocks,'/fourier_ls-chr',chr_i,'.bed --dbslmm ',opt$dbslmm,'/dbslmm --h2 ',hsq_val,' --ref ',opt$output,'/', gene_i,'/ref/ref_chr',chr_i,' --summary ',opt$output,'/', gene_i,'/DBSLMM/',gene_i,'.DBSLMM.txt --n ',round(GWAS_N,0),' --nsnp ',nsnp,' --outPath ',opt$output,'/', gene_i,'/DBSLMM/ --thread 1'))
         
@@ -347,19 +348,24 @@ for(gene_i in genes){
         
         # Read in the results
         prscs_score<-fread(paste0(opt$output,'/', gene_i,'/PRScs/',gene_i,'_pst_eff_a1_b0.5_phiauto_chr',chr_i,'.txt'))
-        prscs_score<-prscs_score[,c('V2','V4','V6'), with=F]
-        names(prscs_score)<-c('SNP','A1','BETA')
         
-        # Flip effects so allele match eQTL sumstats
-        prscs_score<-merge(ref_tmp, prscs_score, by='SNP', all=T)
-        prscs_score$BETA[which(prscs_score$A1.x != prscs_score$A1.y)]<--prscs_score$BETA[which(prscs_score$A1.x != prscs_score$A1.y)]
-        prscs_score<-prscs_score[,c('SNP','A1.x','A2','BETA'), with=F]
-        names(prscs_score)<-c('SNP','A1','A2','BETA')
+        skip_to_next<-F
+        tryCatch(prscs_score<-prscs_score[,c('V2','V4','V6'), with=F], error = function(e){skip_to_next <<- TRUE})
         
-        # Sort score file according ss_gene_i
-        prscs_score<-prscs_score[match(ss_gene_i$SNP, prscs_score$SNP),]
-        
-        wgt.matrix[,colnames(wgt.matrix) == 'prscs']<-prscs_score$BETA
+        if(skip_to_next == F){
+          names(prscs_score)<-c('SNP','A1','BETA')
+          
+          # Flip effects so allele match eQTL sumstats
+          prscs_score<-merge(ref_tmp, prscs_score, by='SNP', all=T)
+          prscs_score$BETA[which(prscs_score$A1.x != prscs_score$A1.y)]<--prscs_score$BETA[which(prscs_score$A1.x != prscs_score$A1.y)]
+          prscs_score<-prscs_score[,c('SNP','A1.x','A2','BETA'), with=F]
+          names(prscs_score)<-c('SNP','A1','A2','BETA')
+          
+          # Sort score file according ss_gene_i
+          prscs_score<-prscs_score[match(ss_gene_i$SNP, prscs_score$SNP),]
+          
+          wgt.matrix[,colnames(wgt.matrix) == 'prscs']<-prscs_score$BETA
+        }
       }
         
       ######
@@ -425,27 +431,30 @@ for(gene_i in genes){
         
         # Perform pseudovalidation to idenitfy the best p-value threshold
         setwd(system.file("data", package="lassosum"))
-        v <- pseudovalidate(out)
+        skip_to_next<-F
+        tryCatch(v <- pseudovalidate(out), error = function(e){skip_to_next <<- TRUE})
         setwd(orig_wd)
 
-        # Subset the validated lassosum model
-        out2 <- subset(out, s=v$best.s, lambda=v$best.lambda)
-        
-        # Write out a score file
-        lassosum_score<-data.table(SNP=ss_gene_i$SNP[out$sumstats$order],
-                                   A1=out2$sumstats$A1,
-                                   BETA=out2$beta[[1]][,1])
-        
-        # Flip effects so allele match eQTL sumstats
-        lassosum_score<-merge(ref_tmp, lassosum_score, by='SNP', all=T)
-        lassosum_score$BETA[which(lassosum_score$A1.x != lassosum_score$A1.y)]<--lassosum_score$BETA[which(lassosum_score$A1.x != lassosum_score$A1.y)]
-        lassosum_score<-lassosum_score[,c('SNP','A1.x','A2','BETA'), with=F]
-        names(lassosum_score)<-c('SNP','A1','A2','BETA')
-        
-        # Sort score file according ss_gene_i
-        lassosum_score<-lassosum_score[match(ss_gene_i$SNP, lassosum_score$SNP),]
-        wgt.matrix[,colnames(wgt.matrix) == 'lassosum']<-lassosum_score$BETA
-        
+        if(skip_to_next == F){
+          
+          # Subset the validated lassosum model
+          out2 <- subset(out, s=v$best.s, lambda=v$best.lambda)
+          
+          # Write out a score file
+          lassosum_score<-data.table(SNP=ss_gene_i$SNP[out$sumstats$order],
+                                     A1=out2$sumstats$A1,
+                                     BETA=out2$beta[[1]][,1])
+          
+          # Flip effects so allele match eQTL sumstats
+          lassosum_score<-merge(ref_tmp, lassosum_score, by='SNP', all=T)
+          lassosum_score$BETA[which(lassosum_score$A1.x != lassosum_score$A1.y)]<--lassosum_score$BETA[which(lassosum_score$A1.x != lassosum_score$A1.y)]
+          lassosum_score<-lassosum_score[,c('SNP','A1.x','A2','BETA'), with=F]
+          names(lassosum_score)<-c('SNP','A1','A2','BETA')
+          
+          # Sort score file according ss_gene_i
+          lassosum_score<-lassosum_score[match(ss_gene_i$SNP, lassosum_score$SNP),]
+          wgt.matrix[,colnames(wgt.matrix) == 'lassosum']<-lassosum_score$BETA
+        }
       }
 
       #####
@@ -474,61 +483,71 @@ for(gene_i in genes){
         # Harmonise with the reference
         map<-readRDS(paste0(opt$ldpred2_ref_dir,'/map.rds'))
         map<-map[,c('chr','pos','a0','a1','af_UKBB','ld')]
-        info_snp <- snp_match(ss_gene_i_ldpred2, map, match.min.prop = 0)
-        
-        # Perform additional suggested QC for LDPred2
-        # Remove SDss<0.5???SDval or SDss>0.1+SDval or SDss<0.1 or SDval<0.05
-        sd_val <- with(info_snp, sqrt(2 * af_UKBB * (1 - af_UKBB)))
-        
-        sd_y_est = median(sd_val * info_snp$beta_se * sqrt(info_snp$n_eff))
-        sd_ss = with(info_snp, sd_y_est / sqrt(n_eff * beta_se^2))
 
-        is_bad <-sd_ss < (0.5 * sd_val) | sd_ss > (sd_val + 0.1) | sd_ss < 0.1 | sd_val < 0.05
-        ss_gene_i_ldpred2<-info_snp[!is_bad, ]
-      
-        # Create sparse LD matrix
-        ## indices in 'sumstats'
-        ind.chr <- which(ss_gene_i_ldpred2$chr == chr_i)
-        ## indices in 'map'
-        ind.chr2 <- ss_gene_i_ldpred2$`_NUM_ID_`[ind.chr]
-        ## indices in 'corr_chr'
-        ind.chr3 <- match(ind.chr2, which(map$chr == chr_i))
+        skip_to_next<-F
+        tryCatch(info_snp <- snp_match(ss_gene_i_ldpred2, map, match.min.prop = 0), error = function(e){skip_to_next <<- TRUE})
+        
+        # Scale BETAs by PIP
+        if(skip_to_next == F){
           
-        corr0 <- readRDS(paste0(opt$ldpred2_ref_dir,'/LD_chr', chr_i, ".rds"))[ind.chr3, ind.chr3]
+          # Perform additional suggested QC for LDPred2
+          # Remove SDss<0.5???SDval or SDss>0.1+SDval or SDss<0.1 or SDval<0.05
+          sd_val <- with(info_snp, sqrt(2 * af_UKBB * (1 - af_UKBB)))
           
-        if(file.exists(paste0(opt$output,'/', gene_i,'/ref/LD_GW_sparse.sbk'))){
-          system(paste0('rm ',opt$output,'/', gene_i,'/ref/LD_GW_sparse.sbk'))
+          sd_y_est = median(sd_val * info_snp$beta_se * sqrt(info_snp$n_eff))
+          sd_ss = with(info_snp, sd_y_est / sqrt(n_eff * beta_se^2))
+  
+          is_bad <-sd_ss < (0.5 * sd_val) | sd_ss > (sd_val + 0.1) | sd_ss < 0.1 | sd_val < 0.05
+          ss_gene_i_ldpred2<-info_snp[!is_bad, ]
+        
+          # Create sparse LD matrix
+          ## indices in 'sumstats'
+          ind.chr <- which(ss_gene_i_ldpred2$chr == chr_i)
+          ## indices in 'map'
+          ind.chr2 <- ss_gene_i_ldpred2$`_NUM_ID_`[ind.chr]
+          ## indices in 'corr_chr'
+          ind.chr3 <- match(ind.chr2, which(map$chr == chr_i))
+            
+          corr0 <- readRDS(paste0(opt$ldpred2_ref_dir,'/LD_chr', chr_i, ".rds"))[ind.chr3, ind.chr3]
+            
+          if(file.exists(paste0(opt$output,'/', gene_i,'/ref/LD_GW_sparse.sbk'))){
+            system(paste0('rm ',opt$output,'/', gene_i,'/ref/LD_GW_sparse.sbk'))
+          }
+          
+          skip_to_next<-F
+          tryCatch(corr <- as_SFBM(corr0, paste0(opt$output,'/', gene_i,'/ref/LD_GW_sparse'), compact = TRUE), error = function(e){skip_to_next <<- TRUE})
+          
+          if(skip_to_next == F){
+            
+            # Run LDPred2-auto
+            multi_auto <- snp_ldpred2_auto(corr, ss_gene_i_ldpred2, h2_init = hsq_val,
+                                           vec_p_init = seq_log(1e-4, 0.9, 30),
+                                           ncores = NCORES)
+            
+            beta_auto <- sapply(multi_auto, function(auto) auto$beta_est)
+            
+            # Flip beta_auto effects to match the plink reference
+            names(ref$map)<-c('chr','rsid','dist','pos','a0','a1')
+            tmp<-data.frame(ss_gene_i_ldpred2[,c('chr','pos','a0','a1')], beta=-1)
+            info_snp_2 <- snp_match(tmp, ref$map)
+            for(i in 1:ncol(beta_auto)){
+              beta_auto[,i]<-beta_auto[,i]*info_snp_2$beta
+            }
+            
+            pred_auto <- big_prodMat(G, beta_auto, ind.col = info_snp_2[["_NUM_ID_"]])
+            
+            sc <- apply(pred_auto, 2, sd)
+            keep <- abs(sc - median(sc)) < 3 * mad(sc)
+            final_beta_auto <- rowMeans(beta_auto[, keep])
+            
+            # compute predictions for test set
+            ldpred2_score <- data.table(SNP=ss_gene_i_ldpred2$rsid, A1=ss_gene_i_ldpred2$a1, A2=ss_gene_i_ldpred2$a0, BETA = final_beta_auto)
+    
+            # Sort score file according ss_gene_i
+            ldpred2_score<-ldpred2_score[match(ss_gene_i$SNP, ldpred2_score$SNP),]
+            wgt.matrix[,colnames(wgt.matrix) == 'ldpred2']<-ldpred2_score$BETA
+          }
         }
-        corr <- as_SFBM(corr0, paste0(opt$output,'/', gene_i,'/ref/LD_GW_sparse'), compact = TRUE)
-        
-        # Run LDPred2-auto
-        multi_auto <- snp_ldpred2_auto(corr, ss_gene_i_ldpred2, h2_init = hsq_val,
-                                       vec_p_init = seq_log(1e-4, 0.9, 30),
-                                       ncores = NCORES)
-        
-        beta_auto <- sapply(multi_auto, function(auto) auto$beta_est)
-        
-        # Flip beta_auto effects to match the plink reference
-        names(ref$map)<-c('chr','rsid','dist','pos','a0','a1')
-        tmp<-data.frame(ss_gene_i_ldpred2[,c('chr','pos','a0','a1')], beta=-1)
-        info_snp_2 <- snp_match(tmp, ref$map)
-        for(i in 1:ncol(beta_auto)){
-          beta_auto[,i]<-beta_auto[,i]*info_snp_2$beta
-        }
-        
-        pred_auto <- big_prodMat(G, beta_auto, ind.col = info_snp_2[["_NUM_ID_"]])
-        
-        sc <- apply(pred_auto, 2, sd)
-        keep <- abs(sc - median(sc)) < 3 * mad(sc)
-        final_beta_auto <- rowMeans(beta_auto[, keep])
-        
-        # compute predictions for test set
-        ldpred2_score <- data.table(SNP=ss_gene_i_ldpred2$rsid, A1=ss_gene_i_ldpred2$a1, A2=ss_gene_i_ldpred2$a0, BETA = final_beta_auto)
-
-        # Sort score file according ss_gene_i
-        ldpred2_score<-ldpred2_score[match(ss_gene_i$SNP, ldpred2_score$SNP),]
-        wgt.matrix[,colnames(wgt.matrix) == 'ldpred2']<-ldpred2_score$BETA
-        
       }
       
 # Note. attempted to implement SDPR and quickPRS

@@ -21,13 +21,13 @@ In this document we will use the TWAS models derived from eQTLGen and MetaBrain 
 
 ```{bash, eval=F, echo=T}
 # Download the full cis-eQTL data
-mkdir /users/k1806347/brc_scratch/Data/eQTLGen/full
-cd /users/k1806347/brc_scratch/Data/eQTLGen/full
+mkdir /users/k1806347/oliverpainfel/Data/eQTLGen/full
+cd /users/k1806347/oliverpainfel/Data/eQTLGen/full
 
 wget https://molgenis26.gcc.rug.nl/downloads/eqtlgen/cis-eqtl/2019-12-11-cis-eQTLsFDR-ProbeLevel-CohortInfoRemoved-BonferroniAdded.txt.gz
 
 # Extract relevent columns
-zcat /users/k1806347/brc_scratch/Data/eQTLGen/full/2019-12-11-cis-eQTLsFDR-ProbeLevel-CohortInfoRemoved-BonferroniAdded.txt.gz | cut -f 1-8,13 | gzip > /users/k1806347/brc_scratch/Data/eQTLGen/full/2019-12-11-cis-eQTLsFDR-ProbeLevel-CohortInfoRemoved-BonferroniAdded.small.txt.gz
+zcat /users/k1806347/oliverpainfel/Data/eQTLGen/full/2019-12-11-cis-eQTLsFDR-ProbeLevel-CohortInfoRemoved-BonferroniAdded.txt.gz | cut -f 1-8,13 | gzip > /users/k1806347/oliverpainfel/Data/eQTLGen/full/2019-12-11-cis-eQTLsFDR-ProbeLevel-CohortInfoRemoved-BonferroniAdded.small.txt.gz
 
 
 ```
@@ -36,7 +36,7 @@ zcat /users/k1806347/brc_scratch/Data/eQTLGen/full/2019-12-11-cis-eQTLsFDR-Probe
 library(data.table)
 
 # Read in relevent columns from the sumstats
-sumstats<-fread('/users/k1806347/brc_scratch/Data/eQTLGen/full/2019-12-11-cis-eQTLsFDR-ProbeLevel-CohortInfoRemoved-BonferroniAdded.small.txt.gz')
+sumstats<-fread('/users/k1806347/oliverpainfel/Data/eQTLGen/full/2019-12-11-cis-eQTLsFDR-ProbeLevel-CohortInfoRemoved-BonferroniAdded.small.txt.gz')
 
 # Extract data for each gene
 genes<-unique(sumstats$Gene)
@@ -44,14 +44,14 @@ genes<-unique(sumstats$Gene)
 # Read in EUR MAF
 frq<-NULL
 for(i in 1:22){
-  frq<-rbind(frq, fread(paste0('/mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR.',i,'.frq')))
+  frq<-rbind(frq, fread(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR.',i,'.frq')))
 }
 names(frq)[names(frq) == 'MAF']<-'FREQ'
 
 setkey(sumstats, Gene)
 
 # Process eQTL sumstats for each gene
-dir.create('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen')
+dir.create('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen')
 for(i in 1:length(genes)){
   print(i)
   
@@ -81,9 +81,9 @@ for(i in 1:length(genes)){
   tmp<-tmp[,c('GENE','CHR','SNP','BP','A1','A2','BETA','SE','Z','P','FREQ','N'),with=F]
   
   if(i == 1){
-    write.table(tmp, '/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/eQTLGen_sumstats_full.txt', col.names=T, row.names=F, quote=F)
+    write.table(tmp, '/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/eQTLGen_sumstats_full.txt', col.names=T, row.names=F, quote=F)
   } else {
-    write.table(tmp, '/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/eQTLGen_sumstats_full.txt', col.names=F, row.names=F, quote=F, append=T)
+    write.table(tmp, '/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/eQTLGen_sumstats_full.txt', col.names=F, row.names=F, quote=F, append=T)
   }
 }
 
@@ -99,48 +99,48 @@ for(i in 1:length(genes)){
 
 ```{bash, eval=F, echo=T}
 
-mkdir /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full
-cut -f 1 -d' ' /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/eQTLGen_sumstats_full.txt | tail -n +2 | uniq > /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/gene_list.txt
+mkdir /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full
+cut -f 1 -d' ' /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/eQTLGen_sumstats_full.txt | tail -n +2 | uniq > /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/gene_list.txt
 
-> /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/todo.txt
-for i in $(cat /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/gene_list.txt);do
-  if [ ! -f /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/eQTLGen.eQTL/${i}.done ]; then
-    echo ${i} >> /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/todo.txt
+> /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/todo.txt
+for i in $(cat /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/gene_list.txt);do
+  if [ ! -f /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/eQTLGen.eQTL/${i}.done ]; then
+    echo ${i} >> /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/todo.txt
   fi
 done
 
 # Create shell script to run using sbatch
-cat > /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/sbatch.sh << 'EOF'
+cat > /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/sbatch.sh << 'EOF'
 #!/bin/sh
 
-#SBATCH -p shared,brc
+#SBATCH -p cpu
 #SBATCH --mem 10G
 #SBATCH -n 1
 #SBATCH --nodes 1
 #SBATCH -J eQTL_to_TWAS
 
-ID=$(awk -v var="$SLURM_ARRAY_TASK_ID" 'NR == var {print $1}' /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/todo.txt)
+ID=$(awk -v var="$SLURM_ARRAY_TASK_ID" 'NR == var {print $1}' /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/todo.txt)
 
-/users/k1806347/brc_scratch/Software/Rscript.sh /users/k1806347/brc_scratch/Software/MyGit/eQTL_to_TWAS/compute_weights_V2.R \
+/users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/compute_weights_V2.R \
 	--id ${ID} \
-	--extract /users/k1806347/brc_scratch/Data/ldsc/w_hm3.snplist \
-	--sumstats /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/eQTLGen_sumstats_full.txt \
-	--gctb /users/k1806347/brc_scratch/Software/gctb_2.03beta_Linux/gctb_203.sh \
-	--gctb_ref /scratch/groups/ukbiobank/usr/ollie_pain/GenoPredPipe/GenoPred/GenoPredPipe/resources/data/gctb_ref/ukbEURu_hm3_shrunk_sparse/ukbEURu_hm3_v3_50k_chr \
-	--plink_ref_chr /users/k1806347/brc_scratch/Data/1KG/Phase3/1KGPhase3.w_hm3.chr \
-	--plink_ref_keep /users/k1806347/brc_scratch/Data/1KG/Phase3/keep_files/EUR_samples.keep \
-	--ld_blocks /users/k1806347/brc_scratch/Data/LDetect/EUR \
-  --rscript /users/k1806347/brc_scratch/Software/Rscript.sh \
-  --dbslmm /users/k1806347/brc_scratch/Software/DBSLMM/software \
-  --plink /users/k1806347/brc_scratch/Software/plink1.9.sh \
-  --PRScs_path /users/k1806347/brc_scratch/Software/PRScs.sh \
-  --PRScs_ref_path /users/k1806347/brc_scratch/Software/PRScs/ldblk_1kg_eur \
-	--ldpred2_ref_dir /scratch/groups/ukbiobank/usr/ollie_pain/GenoPredPipe/GenoPred/GenoPredPipe/resources/data/ldpred2_ref \
-  --output /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/eQTLGen.eQTL
+	--extract /users/k1806347/oliverpainfel/Data/ldsc/w_hm3.snplist \
+	--sumstats /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/eQTLGen_sumstats_full.txt \
+	--gctb /users/k1806347/oliverpainfel/Software/gctb_2.03beta_Linux/gctb_203.sh \
+	--gctb_ref /scratch/prj/ukbiobank/usr/ollie_pain/GenoPredPipe/GenoPred/GenoPredPipe/resources/data/gctb_ref/ukbEURu_hm3_shrunk_sparse/ukbEURu_hm3_v3_50k_chr \
+	--plink_ref_chr /users/k1806347/oliverpainfel/Data/1KG/Phase3/1KGPhase3.w_hm3.chr \
+	--plink_ref_keep /users/k1806347/oliverpainfel/Data/1KG/Phase3/keep_files/EUR_samples.keep \
+	--ld_blocks /users/k1806347/oliverpainfel/Data/LDetect/EUR \
+  --rscript /users/k1806347/oliverpainfel/Software/Rscript.sh \
+  --dbslmm /users/k1806347/oliverpainfel/Software/DBSLMM/software \
+  --plink /users/k1806347/oliverpainfel/Software/plink1.9.sh \
+  --PRScs_path /users/k1806347/oliverpainfel/Software/PRScs.sh \
+  --PRScs_ref_path /users/k1806347/oliverpainfel/Software/PRScs/ldblk_1kg_eur \
+	--ldpred2_ref_dir /scratch/prj/ukbiobank/usr/ollie_pain/GenoPredPipe/GenoPred/GenoPredPipe/resources/data/ldpred2_ref \
+  --output /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/eQTLGen.eQTL
 
 EOF
 
-sbatch --array 1-$(wc -l /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/todo.txt | cut -d' ' -f1)%50 /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/sbatch.sh
+sbatch --array 1-$(wc -l /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/todo.txt | cut -d' ' -f1)%400 /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/sbatch.sh
 
 ```
 
@@ -149,7 +149,7 @@ sbatch --array 1-$(wc -l /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to
 library(data.table)
 
 # Read in list of RDat files
-rdat_list<-list.files(path='/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/eQTLGen.eQTL', pattern='.RDat')
+rdat_list<-list.files(path='/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/eQTLGen.eQTL', pattern='.RDat')
 
 # Start making pos file
 pos<-data.frame(PANEL='eQTLGen.eQTL',
@@ -169,33 +169,49 @@ pos<-merge(pos, Genes, all.x=T, by='ID')
 
 # Read in each RDat file to retrieve N
 for(i in 1:length(rdat_list)){
-  load(paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/eQTLGen.eQTL/',rdat_list[i]))
+  load(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/eQTLGen.eQTL/',rdat_list[i]))
   pos$N[i]<-N.tot
 }
 
 pos<-pos[,c('PANEL','WGT','ID','CHR','P0','P1','N')]
 
-write.table(pos, '/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/eQTLGen.eQTL.pos', col.names=T, row.names=F, quote=F)
+write.table(pos, '/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/eQTLGen.eQTL.pos', col.names=T, row.names=F, quote=F)
 
 ```
 
 ```{bash, eval=F, echo=T}
 
 # Perform pseudovalidation of TWAS weights
-mkdir /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo_full
+mkdir /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo_full
 for chr in $(seq 1 22);do
-  sbatch -p brc,shared --mem 10G /users/k1806347/brc_scratch/Software/Rscript.sh /scratch/users/k1806347/Software/MyGit/eQTL_to_TWAS/FUSION.assoc_test.pseudo_V2.R \
-    --sumstats /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/eQTLGen_sumstats_exclGTeX.txt \
-    --weights /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/eQTLGen.eQTL.pos \
-    --weights_dir /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full \
-    --ref_ld_chr /mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
-    --out /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo_full/pseudo_res_chr${chr} \
+  sbatch -p cpu --mem 10G /users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/FUSION.assoc_test.pseudo_V2.R \
+    --sumstats /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/eQTLGen_sumstats_exclGTeX.txt \
+    --weights /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/eQTLGen.eQTL.pos \
+    --weights_dir /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full \
+    --ref_ld_chr /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
+    --out /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo_full/pseudo_res_chr${chr} \
     --chr ${chr} \
     --all_mod T
 done
 
 ```
 
+```{r, eval=F, echo=T}
+# Try running FastBAT to select gene to be included in TWAS
+for chr in $(seq 1 22);do
+
+sbatch -p cpu --mem 10G -n 1 --nodes 1 /users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/eQTL_fastBAT.R \
+	--chr ${chr} \
+	--extract /users/k1806347/oliverpainfel/Data/ldsc/w_hm3.snplist \
+	--sumstats /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/eQTLGen_sumstats_full.txt \
+	--plink_ref_chr /users/k1806347/oliverpainfel/Data/1KG/Phase3/1KGPhase3.w_hm3.chr \
+	--plink_ref_keep /users/k1806347/oliverpainfel/Data/1KG/Phase3/keep_files/EUR_samples.keep \
+	--gcta /users/k1806347/oliverpainfel/Software/gcta.sh \
+  --output /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/eQTLGen.eQTL.fastbat
+
+done
+
+```
 </details>
 
 ***
@@ -210,10 +226,10 @@ PMID: 35396580
 EUR only
 
 ```{r, eval=F, echo=T}
-dir.create('/users/k1806347/brc_scratch/Data/GWAS_sumstats/GenoFuncPipe_paper/SCZ', recursive = T)
-system('wget --no-check-certificate -O /users/k1806347/brc_scratch/Data/GWAS_sumstats/GenoFuncPipe_paper/SCZ/SCZ.original.gz https://figshare.com/ndownloader/files/34517828')
+dir.create('/users/k1806347/oliverpainfel/Data/GWAS_sumstats/GenoFuncPipe_paper/SCZ', recursive = T)
+system('wget --no-check-certificate -O /users/k1806347/oliverpainfel/Data/GWAS_sumstats/GenoFuncPipe_paper/SCZ/SCZ.original.gz https://figshare.com/ndownloader/files/34517828')
 
-ss<-fread('/users/k1806347/brc_scratch/Data/GWAS_sumstats/GenoFuncPipe_paper/SCZ/SCZ.original.gz')
+ss<-fread('/users/k1806347/oliverpainfel/Data/GWAS_sumstats/GenoFuncPipe_paper/SCZ/SCZ.original.gz')
 
 # Update column names. Use NEFF as N
 # I am not sure how PGS is computing NEFF but appears wrong
@@ -226,25 +242,25 @@ ss$FREQ<-((ss$FCAS*ss$NCAS) + (ss$FCON*ss$NCON))/(ss$NCAS + ss$NCON)
 # Keep only relevent columns
 ss<-ss[,c('SNP','A1','A2','INFO','BETA','SE','P','N','FREQ'), with=F]
 
-fwrite(ss, '/users/k1806347/brc_scratch/Data/GWAS_sumstats/GenoFuncPipe_paper/SCZ/SCZ.reformat.gz', sep=' ', na='NA', quote=F)
+fwrite(ss, '/users/k1806347/oliverpainfel/Data/GWAS_sumstats/GenoFuncPipe_paper/SCZ/SCZ.reformat.gz', sep=' ', na='NA', quote=F)
 
 ```
 
 ```{bash, eval=F, echo=T}
 
-mkdir /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ
+mkdir /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ
 
-/users/k1806347/brc_scratch/Software/Rscript.sh /users/k1806347/brc_scratch/Software/MyGit/GenoFunc/GenoFuncPipe/scripts/sumstat_cleaner.R \
-  --sumstats /users/k1806347/brc_scratch/Data/GWAS_sumstats/GenoFuncPipe_paper/SCZ/SCZ.reformat.gz \
-  --ref_chr /users/k1806347/brc_scratch/Software/MyGit/GenoFunc/GenoFuncPipe/resources/data/1kg/1KG.Phase3.EUR.MAF_001.chr \
-  --output /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned
+/users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/GenoFunc/GenoFuncPipe/scripts/sumstat_cleaner.R \
+  --sumstats /users/k1806347/oliverpainfel/Data/GWAS_sumstats/GenoFuncPipe_paper/SCZ/SCZ.reformat.gz \
+  --ref_chr /users/k1806347/oliverpainfel/Software/MyGit/GenoFunc/GenoFuncPipe/resources/data/1kg/1KG.Phase3.EUR.MAF_001.chr \
+  --output /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned
 
-focus munge /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.gz \
-  --output /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.munged
+focus munge /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.gz \
+  --output /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.munged
 
-/users/k1806347/brc_scratch/Software/Rscript.sh /users/k1806347/brc_scratch/Software/MyGit/GenoFunc/GenoFuncPipe/scripts/median_n.R \
-  --munged /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.munged.sumstats.gz \
-  --out /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.munged.median_N.txt
+/users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/GenoFunc/GenoFuncPipe/scripts/median_n.R \
+  --munged /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.munged.sumstats.gz \
+  --out /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.munged.median_N.txt
 
 ```
 
@@ -258,18 +274,18 @@ focus munge /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SC
 
 ```{bash, eval=F, echo=T}
 
-cat /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.munged.median_N.txt
+cat /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.munged.median_N.txt
 
-mkdir /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas
+mkdir /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas
 
 for chr in $(seq 1 22); do
 
-  sbatch -p brc,shared --mem 20G -n 1 /users/k1806347/brc_scratch/Software/Rscript.sh /scratch/users/k1806347/Software/MyGit/eQTL_to_TWAS/FUSION.assoc_test.pseudo_V2.R \
-    --sumstats /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.munged.sumstats.gz \
-    --weights /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/eQTLGen.eQTL.pos \
-    --weights_dir /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full \
-    --ref_ld_chr /mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
-    --out /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTLGen.chr${chr} \
+  sbatch -p cpu --mem 20G -n 1 /users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/FUSION.assoc_test.pseudo_V2.R \
+    --sumstats /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.munged.sumstats.gz \
+    --weights /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/eQTLGen.eQTL.pos \
+    --weights_dir /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full \
+    --ref_ld_chr /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
+    --out /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTLGen.chr${chr} \
     --chr ${chr} \
     --coloc_P 1e-3 \
     --GWASN 126282
@@ -277,17 +293,17 @@ for chr in $(seq 1 22); do
 done
 
 # Combine per chromosome results
-head -n 1 /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTLGen.chr1 > /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTLGen.GW      
-tail -n +2 -q /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTLGen.chr* >> /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTLGen.GW
+head -n 1 /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTLGen.chr1 > /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTLGen.GW      
+tail -n +2 -q /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTLGen.chr* >> /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTLGen.GW
 
 # Perform FUSION omnibus test
 for chr in $(seq 1 22); do
 
-  sbatch -p brc,shared --mem=20G /users/k1806347/brc_scratch/Software/Rscript.sh /users/k1806347/brc_scratch/Software/MyGit/GenoFunc/GenoFuncPipe/resources/software/fusion/FUSION.post_process.R \
-        --input /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTLGen.GW \
-        --sumstats /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.munged.sumstats.gz \
-        --ref_ld_chr /mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
-        --out /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTLGen.omnibus.chr${chr} \
+  sbatch -p cpu --mem=20G /users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/GenoFunc/GenoFuncPipe/resources/software/fusion/FUSION.post_process.R \
+        --input /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTLGen.GW \
+        --sumstats /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.munged.sumstats.gz \
+        --ref_ld_chr /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
+        --out /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTLGen.omnibus.chr${chr} \
         --omnibus \
         --chr ${chr}
         
@@ -301,18 +317,18 @@ done
 
 ```{bash, eval=F, echo=T}
 
-cat /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.munged.median_N.txt
+cat /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.munged.median_N.txt
 
-mkdir /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas
+mkdir /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas
 
 for chr in $(seq 1 22); do
 
-  sbatch -p brc,shared --mem 20G -n 1 /users/k1806347/brc_scratch/Software/Rscript.sh /scratch/users/k1806347/Software/MyGit/eQTL_to_TWAS/FUSION.assoc_test.pseudo_V2.R \
-    --sumstats /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.munged.sumstats.gz \
-  	--weights /mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/SNP-weights/YFS.BLOOD.RNAARR/YFS.BLOOD.RNAARR.pos \
-  	--weights_dir /mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/SNP-weights/YFS.BLOOD.RNAARR \
-    --ref_ld_chr /mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
-    --out /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.FUSION_YFS.chr${chr} \
+  sbatch -p cpu --mem 20G -n 1 /users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/FUSION.assoc_test.pseudo_V2.R \
+    --sumstats /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.munged.sumstats.gz \
+  	--weights /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/FUSION/SNP-weights/YFS.BLOOD.RNAARR/YFS.BLOOD.RNAARR.pos \
+  	--weights_dir /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/FUSION/SNP-weights/YFS.BLOOD.RNAARR \
+    --ref_ld_chr /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
+    --out /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.FUSION_YFS.chr${chr} \
     --chr ${chr} \
     --coloc_P 1e-3 \
     --GWASN 126282
@@ -320,17 +336,17 @@ for chr in $(seq 1 22); do
 done
 
 # Combine per chromosome results
-head -n 1 /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.FUSION_YFS.chr1 > /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.FUSION_YFS.GW      
-tail -n +2 -q /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.FUSION_YFS.chr* >> /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.FUSION_YFS.GW
+head -n 1 /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.FUSION_YFS.chr1 > /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.FUSION_YFS.GW      
+tail -n +2 -q /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.FUSION_YFS.chr* >> /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.FUSION_YFS.GW
 
 # Perform FUSION omnibus test
 for chr in $(seq 1 22); do
 
-  sbatch -p brc,shared --mem=20G /users/k1806347/brc_scratch/Software/Rscript.sh /users/k1806347/brc_scratch/Software/MyGit/GenoFunc/GenoFuncPipe/resources/software/fusion/FUSION.post_process.R \
-        --input /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.FUSION_YFS.GW \
-        --sumstats /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.munged.sumstats.gz \
-        --ref_ld_chr /mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
-        --out /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.FUSION_YFS.omnibus.chr${chr} \
+  sbatch -p cpu --mem=20G /users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/GenoFunc/GenoFuncPipe/resources/software/fusion/FUSION.post_process.R \
+        --input /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.FUSION_YFS.GW \
+        --sumstats /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.munged.sumstats.gz \
+        --ref_ld_chr /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
+        --out /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.FUSION_YFS.omnibus.chr${chr} \
         --omnibus \
         --chr ${chr}
         
@@ -344,41 +360,40 @@ done
 
 ```{bash, eval=F, echo=T}
 
-cat /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.munged.median_N.txt
+cat /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.munged.median_N.txt
 
-mkdir /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas
+mkdir /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas
 
 for chr in $(seq 1 22); do
 
-  sbatch -p brc,shared --mem 20G -n 1 /users/k1806347/brc_scratch/Software/Rscript.sh /scratch/users/k1806347/Software/MyGit/eQTL_to_TWAS/FUSION.assoc_test.pseudo_V2.R \
-    --sumstats /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.munged.sumstats.gz \
-  	--weights /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFSall_080722/YFS.eQTL.pos \
-  	--weights_dir /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFSall_080722 \
-    --ref_ld_chr /mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
-    --out /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTL_YFS.chr${chr} \
+  sbatch -p cpu --mem 20G -n 1 /users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/FUSION.assoc_test.pseudo_V2.R \
+    --sumstats /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.munged.sumstats.gz \
+  	--weights /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFSall_300722/YFS.eQTL.pos \
+  	--weights_dir /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFSall_300722 \
+    --ref_ld_chr /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
+    --out /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTL_YFS.chr${chr} \
     --chr ${chr} \
     --coloc_P 1e-3 \
     --GWASN 126282
   
 done
-    
+
 # Combine per chromosome results
-head -n 1 /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTL_YFS.chr1 > /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTL_YFS.GW      
-tail -n +2 -q /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTL_YFS.chr* >> /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTL_YFS.GW
+head -n 1 /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTL_YFS.chr1 > /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTL_YFS.GW      
+tail -n +2 -q /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTL_YFS.chr* >> /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTL_YFS.GW
 
 # Perform FUSION omnibus test
 for chr in $(seq 1 22); do
 
-  sbatch -p brc,shared --mem=20G /users/k1806347/brc_scratch/Software/Rscript.sh /users/k1806347/brc_scratch/Software/MyGit/GenoFunc/GenoFuncPipe/resources/software/fusion/FUSION.post_process.R \
-        --input /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTL_YFS.GW \
-        --sumstats /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.munged.sumstats.gz \
-        --ref_ld_chr /mnt/lustre/groups/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
-        --out /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTL_YFS.omnibus.chr${chr} \
+  sbatch -p cpu --mem=20G /users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/GenoFunc/GenoFuncPipe/resources/software/fusion/FUSION.post_process.R \
+        --input /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTL_YFS.GW \
+        --sumstats /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.munged.sumstats.gz \
+        --ref_ld_chr /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
+        --out /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTL_YFS.omnibus.chr${chr} \
         --omnibus \
         --chr ${chr}
         
 done
-
 
 ```
 
@@ -408,7 +423,7 @@ gunzip resources/data/eqtlgen/*"
 
 library(data.table)
 
-ss<-fread(paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.gz'))
+ss<-fread(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.gz'))
 
 if(all(names(ss) != 'BETA')){
   ss$BETA<-log(ss$OR)
@@ -421,7 +436,7 @@ if(any(names(ss) != 'FREQ')){
 ss<-ss[,c('SNP','A1','A2','FREQ','BETA','SE','P','N'),with=F]
 names(ss)<-c('SNP','A1','A2','freq','b','se','p','N')
 
-fwrite(ss, paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.cojo'), sep=' ', na='NA', quote=F)
+fwrite(ss, paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.cojo'), sep=' ', na='NA', quote=F)
 
 ```
 
@@ -431,15 +446,15 @@ fwrite(ss, paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/
 
 ```{bash, eval=F, echo=T}
 
-mkdir /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/smr
+mkdir /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/smr
 
 for chr in $(seq 1 22); do
 
-  sbatch -p brc,shared --mem 20G -n 1 --wrap="/users/k1806347/brc_scratch/Software/MyGit/GenoFunc/GenoFuncPipe/resources/software/smr/smr_Linux \
-      --bfile /users/k1806347/brc_scratch/Software/MyGit/GenoFunc/GenoFuncPipe/resources/data/1kg/1KG.Phase3.EUR.MAF_001.chr${chr} \
-      --gwas-summary /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.cojo \
-      --beqtl-summary /users/k1806347/brc_scratch/Software/MyGit/GenoFunc/GenoFuncPipe/resources/data/eqtlgen/cis-eQTLs-full_eQTLGen_AF_incl_nr_formatted_20191212.new.txt_besd-dense \
-      --out /scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/smr/SCZ_smr_eqtlgen_chr${chr}"
+  sbatch -p cpu --mem 20G -n 1 --wrap="/users/k1806347/oliverpainfel/Software/MyGit/GenoFunc/GenoFuncPipe/resources/software/smr/smr_Linux \
+      --bfile /users/k1806347/oliverpainfel/Software/MyGit/GenoFunc/GenoFuncPipe/resources/data/1kg/1KG.Phase3.EUR.MAF_001.chr${chr} \
+      --gwas-summary /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.cojo \
+      --beqtl-summary /users/k1806347/oliverpainfel/Software/MyGit/GenoFunc/GenoFuncPipe/resources/data/eqtlgen/cis-eQTLs-full_eQTLGen_AF_incl_nr_formatted_20191212.new.txt_besd-dense \
+      --out /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/smr/SCZ_smr_eqtlgen_chr${chr}"
 
 done
 
@@ -459,11 +474,11 @@ Genes<-getBM(attributes=c('ensembl_gene_id','external_gene_name'), mart = ensemb
 Genes<-Genes[!duplicated(Genes$ensembl_gene_id),]
 
 # Read in TWAS results
-twas_files<-list.files(path=paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/'), pattern=paste0('SCZ.TWAS.eQTLGen.chr'))
+twas_files<-list.files(path=paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/'), pattern=paste0('SCZ.TWAS.eQTLGen.chr'))
 
 twas<-NULL
 for(i in twas_files){
-  twas<-rbind(twas, fread(paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/',i)))
+  twas<-rbind(twas, fread(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/',i)))
 }
 
 twas<-merge(twas,Genes, by.x='ID', by.y='ensembl_gene_id', all.x=T)
@@ -474,12 +489,12 @@ twas<-twas[,c('FILE','PANEL','MODEL','NSNP','NWGT','MODELCV.R2','ensembl_gene_id
 twas<-twas[!is.na(twas$TWAS.Z),]
 
 # Read in SMR results
-smr_eqtlgen_files<-list.files(path=paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/smr/'), pattern=paste0('SCZ_smr_eqtlgen_chr'))
+smr_eqtlgen_files<-list.files(path=paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/smr/'), pattern=paste0('SCZ_smr_eqtlgen_chr'))
 smr_eqtlgen_files<-smr_eqtlgen_files[grepl('.smr$', smr_eqtlgen_files)]
 
 smr_eqtlgen<-NULL
 for(i in smr_eqtlgen_files){
-  smr_eqtlgen<-rbind(smr_eqtlgen, fread(paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/smr/',i)))
+  smr_eqtlgen<-rbind(smr_eqtlgen, fread(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/smr/',i)))
 }
 
 smr_eqtlgen<-smr_eqtlgen[!duplicated(smr_eqtlgen$probeID),]
@@ -493,18 +508,18 @@ smr_eqtlgen$p_SMR.BONF<-p.adjust(smr_eqtlgen$p_SMR, method = 'bonferroni')
 sum(smr_eqtlgen$p_SMR.BONF < 0.05) #217
 
 # Number of unique genes tested
-length(unique(twas$ensembl_gene_id)) # 15851
+length(unique(twas$ensembl_gene_id)) # 19030
 length(unique(smr_eqtlgen$ensembl_gene_id)) # 15330
-sum(unique(twas$ensembl_gene_id) %in% smr_eqtlgen$ensembl_gene_id) # 14464
+sum(unique(twas$ensembl_gene_id) %in% smr_eqtlgen$ensembl_gene_id) # 15242
 
 # Restrict TWAS model with largest absolute Z score
-twas_topsig<-twas[order(twas$TWAS.Z),]
+twas_topsig<-twas[order(twas$TWAS.P),]
 twas_topsig<-twas_topsig[!duplicated(twas_topsig$ensembl_gene_id),]
 twas_topsig$TWAS.P.BONF<-p.adjust(twas_topsig$TWAS.P, method = 'bonferroni')
-sum(twas_topsig$TWAS.P.BONF < 0.05) # 306
+sum(twas_topsig$TWAS.P.BONF < 0.05) # 801
 
-sum(smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05] %in% twas_topsig$ensembl_gene_id) # 158
-sum(smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05] %in% twas_topsig$ensembl_gene_id[twas_topsig$TWAS.P.BONF < 0.05]) # 91
+sum(smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05] %in% twas_topsig$ensembl_gene_id) # 215
+sum(smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05] %in% twas_topsig$ensembl_gene_id[twas_topsig$TWAS.P.BONF < 0.05]) # 212
 
 smr_eqtlgen$z_SMR<-smr_eqtlgen$b_SMR/smr_eqtlgen$se_SMR
 
@@ -514,40 +529,101 @@ cor(both$z_SMR, both$TWAS.Z) # 0.733
 plot(both$z_SMR, both$TWAS.Z)
 
 # Restrict to feature with best pseudovalidation Z
+pseudo_files<-list.files(path=paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo_full/'), pattern=paste0('pseudo_res_chr'))
+
 pseudo_res<-NULL
-for(i in 1:22){
-  pseudo_res<-rbind(pseudo_res, fread(paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo_full/pseudo_res_chr',i)))
+for(i in pseudo_files){
+  pseudo_res<-rbind(pseudo_res, fread(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo_full/',i)))
 }
 
+pseudo_res<-pseudo_res[!is.na(pseudo_res$TWAS.Z),]
 pseudo_res<-pseudo_res[order(-pseudo_res$TWAS.Z),]
 pseudo_res<-pseudo_res[!duplicated(pseudo_res$ID),]
 names(pseudo_res)[names(pseudo_res) == 'ID']<-'ensembl_gene_id'
 
 twas_pseudo<-merge(twas, pseudo_res[,c('ensembl_gene_id','MODEL'),with=F], by=c('ensembl_gene_id','MODEL'))
 twas_pseudo$TWAS.P.BONF<-p.adjust(twas_pseudo$TWAS.P, method = 'bonferroni')
-sum(twas_pseudo$TWAS.P.BONF < 0.05) # 338
+sum(twas_pseudo$TWAS.P.BONF < 0.05) # 452
 
-sum(smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05] %in% twas_pseudo$ensembl_gene_id) # 157
-sum(smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05] %in% twas_pseudo$ensembl_gene_id[twas_pseudo$TWAS.P.BONF < 0.05]) # 118
+sum(smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05] %in% twas_pseudo$ensembl_gene_id) # 215
+sum(smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05] %in% twas_pseudo$ensembl_gene_id[twas_pseudo$TWAS.P.BONF < 0.05]) # 165
 
 both_2<-merge(smr_eqtlgen[,c('ensembl_gene_id','z_SMR'),with=F], twas_pseudo[,c('ensembl_gene_id','TWAS.Z'),with=F], by='ensembl_gene_id')
 
-cor(both_2$z_SMR, both_2$TWAS.Z) # 0.757
+cor(both_2$z_SMR, both_2$TWAS.Z) # 0.7477322
+plot(both_2$z_SMR, both_2$TWAS.Z)
+
+# Read in HSQ p-values
+eqtl_pos<-fread('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/eQTLGen.eQTL.pos')
+eqtl_h2<-NULL
+for(i in 1:nrow(eqtl_pos)){
+  load(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/',eqtl_pos$WGT[i]))
+  eqtl_h2<-rbind(eqtl_h2, data.frame(row=i,
+                                     ID=eqtl_pos$ID[i],
+                                     h2=hsq[1],
+                                     se=hsq[2],
+                                     p=hsq.pv))
+}
+
+# Restrict eQTL assoc to genes with hsq.p < 0.01
+twas_eqtl_hsq<-eqtl_h2[which(eqtl_h2$p < 0.01),]
+length(unique(twas_eqtl_hsq$ID)) # 15952
+
+twas_hsq_pseudo<-merge(twas_pseudo, twas_eqtl_hsq, by.x="ensembl_gene_id", by.y='ID')
+
+nrow(twas_hsq_pseudo) # 15861
+twas_hsq_pseudo$TWAS.P.BONF<-p.adjust(twas_hsq_pseudo$TWAS.P, method = 'bonferroni')
+sum(twas_hsq_pseudo$TWAS.P.BONF < 0.05) # 341
+
+sum(smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05] %in% twas_hsq_pseudo$ensembl_gene_id) # 157
+sum(smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05] %in% twas_hsq_pseudo$ensembl_gene_id[twas_hsq_pseudo$TWAS.P.BONF < 0.05]) # 119
+
+both_2<-merge(smr_eqtlgen[,c('ensembl_gene_id','z_SMR'),with=F], twas_hsq_pseudo[,c('ensembl_gene_id','TWAS.Z'),with=F], by='ensembl_gene_id')
+
+cor(both_2$z_SMR, both_2$TWAS.Z) # 0.749565
+plot(both_2$z_SMR, both_2$TWAS.Z)
+
+# Restrict to genes based on fastBAT
+fastbat_files<-list.files(path='/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/eQTLGen.eQTL.fastbat/',pattern='.fastbat')
+fastbat_res<-NULL
+for(i in fastbat_files){
+  fastbat_res<-rbind(fastbat_res, fread(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/eQTLGen.eQTL.fastbat/',i)))
+}
+
+fwrite(fastbat_res, '/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/eQTLGen.eQTL.fastbat/fastbat_all_res.txt', sep=' ', quote=F, na='NA')
+
+nrow(fastbat_res) # 19030
+
+fastbat_res_sig<-fastbat_res[fastbat_res$Pvalue < 0.01 | fastbat_res$TopSNP.Pvalue < 5e-8,]
+nrow(fastbat_res_sig) # 15983
+
+twas_fastbat_pseudo<-merge(twas_pseudo, fastbat_res_sig, by.x="ensembl_gene_id", by.y='Set')
+
+nrow(twas_fastbat_pseudo) # 15876
+twas_fastbat_pseudo$TWAS.P.BONF<-p.adjust(twas_fastbat_pseudo$TWAS.P, method = 'bonferroni')
+sum(twas_fastbat_pseudo$TWAS.P.BONF < 0.05) # 446
+
+sum(smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05] %in% twas_fastbat_pseudo$ensembl_gene_id) # 215
+sum(smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05] %in% twas_fastbat_pseudo$ensembl_gene_id[twas_fastbat_pseudo$TWAS.P.BONF < 0.05]) # 165
+
+both_2<-merge(smr_eqtlgen[,c('ensembl_gene_id','z_SMR'),with=F], twas_fastbat_pseudo[,c('ensembl_gene_id','TWAS.Z'),with=F], by='ensembl_gene_id')
+
+cor(both_2$z_SMR, both_2$TWAS.Z) # 0.7512183
 plot(both_2$z_SMR, both_2$TWAS.Z)
 
 # Restrict TWAS top1 model
 twas_top1<-twas[twas$MODEL == 'top1',]
 twas_top1$TWAS.P.BONF<-p.adjust(twas_top1$TWAS.P, method = 'bonferroni')
-sum(twas_top1$TWAS.P.BONF < 0.05) # 306
+sum(twas_top1$TWAS.P.BONF < 0.05) # 305
 
-sum(smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05] %in% twas_top1$ensembl_gene_id) # 156
-sum(smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05] %in% twas_top1$ensembl_gene_id[twas_top1$TWAS.P.BONF < 0.05]) # 151
+sum(smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05] %in% twas_top1$ensembl_gene_id) # 213
+sum(smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05] %in% twas_top1$ensembl_gene_id[twas_top1$TWAS.P.BONF < 0.05]) # 202
 
 smr_eqtlgen$z_SMR<-smr_eqtlgen$b_SMR/smr_eqtlgen$se_SMR
 
 both<-merge(smr_eqtlgen[,c('ensembl_gene_id','z_SMR'),with=F], twas_top1[,c('ensembl_gene_id','TWAS.Z'),with=F], by='ensembl_gene_id')
 
-cor(both$z_SMR, both$TWAS.Z) # 0.937
+cor(both$z_SMR, both$TWAS.Z) # 0.9284616
 plot(both$z_SMR, both$TWAS.Z)
 
 # Observations:
@@ -595,21 +671,47 @@ for(i in unique(twas$ensembl_gene_id)){
                                      max_P=max(twas$TWAS.P[twas$ensembl_gene_id == i])))
 }
 
+nrow(twas_gene) # 19030
 twas_gene$ACATO.P.BONF<-p.adjust(twas_gene$ACATO.P, method='bonferroni')
-sum(twas_gene$ACATO.P.BONF < 0.05) # 105
-sum(twas_gene$ensembl_gene_id[twas_gene$ACATO.P.BONF < 0.05] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05]) # 63
+sum(twas_gene$ACATO.P.BONF < 0.05) # 629
+sum(twas_gene$ensembl_gene_id[twas_gene$ACATO.P.BONF < 0.05] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05]) # 206
+
+twas_gene_hsq<-twas_gene[twas_gene$ensembl_gene_id %in% twas_eqtl_hsq$ID,]
+nrow(twas_gene_hsq) # 15861
+twas_gene_hsq$ACATO.P.BONF<-p.adjust(twas_gene_hsq$ACATO.P, method='bonferroni')
+sum(twas_gene_hsq$ACATO.P.BONF < 0.05) # 440
+sum(twas_gene_hsq$ensembl_gene_id[twas_gene_hsq$ACATO.P.BONF < 0.05] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05]) # 150
+
+twas_gene_fastbat<-twas_gene[twas_gene$ensembl_gene_id %in% fastbat_res_sig$Set,]
+nrow(twas_gene_fastbat) # 15876
+twas_gene_fastbat$ACATO.P.BONF<-p.adjust(twas_gene_fastbat$ACATO.P, method='bonferroni')
+sum(twas_gene_fastbat$ACATO.P.BONF < 0.05) # 587
+sum(twas_gene_fastbat$ensembl_gene_id[twas_gene_fastbat$ACATO.P.BONF < 0.05] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05]) # 208
 
 # Read in omnibus tests using eQTL TWAS
 omnibus<-NULL
 for(i in 1:22){
-  omnibus<-rbind(omnibus, read.table(paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTLGen.omnibus.chr',i,'.omnibus.pv'), header=T, stringsAsFactors = F))
+  omnibus<-rbind(omnibus, read.table(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTLGen.omnibus.chr',i,'.omnibus.pv'), header=T, stringsAsFactors = F))
 
 }
 
 omnibus$OMNIBUS.P.BONF<-p.adjust(omnibus$OMNIBUS.P, method='bonferroni')
 
-sum(omnibus$OMNIBUS.P.BONF < 0.05) # 493
-sum(omnibus$GENE[omnibus$OMNIBUS.P.BONF < 0.05] %in% twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05]) # 62
+nrow(omnibus) # 19021
+sum(omnibus$OMNIBUS.P.BONF < 0.05) # 2156
+sum(omnibus$GENE[omnibus$OMNIBUS.P.BONF < 0.05] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05]) # 200
+
+omnibus_hsq<-omnibus[omnibus$GENE %in% twas_eqtl_hsq$ID,]
+omnibus_hsq$OMNIBUS.P.BONF<-p.adjust(omnibus_hsq$OMNIBUS.P, method='bonferroni')
+nrow(omnibus_hsq) # 15856
+sum(omnibus_hsq$OMNIBUS.P.BONF < 0.05) # 1450
+sum(omnibus_hsq$GENE[omnibus_hsq$OMNIBUS.P.BONF < 0.05] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05]) # 143
+
+omnibus_fastbat<-omnibus[omnibus$GENE %in% fastbat_res_sig$Set,]
+omnibus_fastbat$OMNIBUS.P.BONF<-p.adjust(omnibus_fastbat$OMNIBUS.P, method='bonferroni')
+nrow(omnibus_fastbat) # 15868
+sum(omnibus_fastbat$OMNIBUS.P.BONF < 0.05) # 1592
+sum(omnibus_fastbat$GENE[omnibus_fastbat$OMNIBUS.P.BONF < 0.05] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05]) # 201
 
 ```
 
@@ -621,22 +723,22 @@ sum(omnibus$GENE[omnibus$OMNIBUS.P.BONF < 0.05] %in% twas_fusion_r2$ID[twas_fusi
 library(data.table)
 
 # Read in FUSION TWAS results
-twas_fusion_files<-list.files(path=paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/'), pattern=paste0('SCZ.TWAS.FUSION_YFS.chr'))
+twas_fusion_files<-list.files(path=paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/'), pattern=paste0('SCZ.TWAS.FUSION_YFS.chr'))
 
 twas_fusion<-NULL
 for(i in twas_fusion_files){
-  twas_fusion<-rbind(twas_fusion, fread(paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/',i)))
+  twas_fusion<-rbind(twas_fusion, fread(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/',i)))
 }
 
 twas_fusion<-twas_fusion[!is.na(twas_fusion$TWAS.Z),]
 twas_fusion$TWAS.P.BONF<-p.adjust(twas_fusion$TWAS.P, method = 'bonferroni')
 
 # Read in eQTL TWAS results
-twas_eqtl_files<-list.files(path=paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/'), pattern=paste0('SCZ.TWAS.eQTL_YFS.chr'))
+twas_eqtl_files<-list.files(path=paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/'), pattern=paste0('SCZ.TWAS.eQTL_YFS.chr'))
 
 twas_eqtl<-NULL
 for(i in twas_eqtl_files){
-  twas_eqtl<-rbind(twas_eqtl, fread(paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/',i)))
+  twas_eqtl<-rbind(twas_eqtl, fread(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/',i)))
 }
 
 twas_eqtl<-twas_eqtl[!is.na(twas_eqtl$TWAS.Z),]
@@ -644,9 +746,24 @@ twas_eqtl$TWAS.P.BONF<-p.adjust(twas_eqtl$TWAS.P, method = 'bonferroni')
 
 # Number of unique genes tested
 length(unique(twas_fusion$ID)) # 4685
-length(unique(twas_eqtl$ID)) # 4017
-sum(unique(twas_fusion$ID) %in% twas_eqtl$ID) # 4017
+length(unique(twas_eqtl$ID)) # 4685
+sum(unique(twas_fusion$ID) %in% twas_eqtl$ID) # 4685
 
+# Read in HSQ p-values
+eqtl_pos<-fread('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFSall_300722/YFS.eQTL.pos')
+eqtl_h2<-NULL
+for(i in 1:nrow(eqtl_pos)){
+  load(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFSall_300722/',eqtl_pos$WGT[i]))
+  eqtl_h2<-rbind(eqtl_h2, data.frame(ID=eqtl_pos$ID[i],
+                                     h2=hsq[1],
+                                     se=hsq[2],
+                                     p=hsq.pv))
+}
+
+length(unique(eqtl_h2$ID[which(eqtl_h2$p < 0.01)]))
+sum(unique(eqtl_h2$ID[which(eqtl_h2$p < 0.01)]) %in% twas_fusion$ID)
+
+# Number of genes
 # Restrict FUSION TWAS to best model by CV
 twas_fusion_r2<-twas_fusion[rev(order(twas_fusion$MODELCV.R2)),]
 twas_fusion_r2<-twas_fusion_r2[!duplicated(twas_fusion_r2$ID),]
@@ -654,52 +771,89 @@ twas_fusion_r2$TWAS.P.BONF<-p.adjust(twas_fusion_r2$TWAS.P, method = 'bonferroni
 sum(twas_fusion_r2$TWAS.P.BONF < 0.05) # 93
 
 # Restrict eQTL TWAS model with largest absolute Z score
-twas_eqtl_topsig<-twas_eqtl[order(twas_eqtl$TWAS.Z),]
+twas_eqtl_topsig<-twas_eqtl[order(twas_eqtl$TWAS.P),]
 twas_eqtl_topsig<-twas_eqtl_topsig[!duplicated(twas_eqtl_topsig$ID),]
 twas_eqtl_topsig$TWAS.P.BONF<-p.adjust(twas_eqtl_topsig$TWAS.P, method = 'bonferroni')
-sum(twas_eqtl_topsig$TWAS.P.BONF < 0.05) # 93
+sum(twas_eqtl_topsig$TWAS.P.BONF < 0.05) # 207
 
-sum(twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05] %in% twas_eqtl_topsig$ID) # 65
-sum(twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05] %in% twas_eqtl_topsig$ID[twas_eqtl_topsig$TWAS.P.BONF < 0.05]) # 36
+sum(twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05] %in% twas_eqtl_topsig$ID) # 93
+sum(twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05] %in% twas_eqtl_topsig$ID[twas_eqtl_topsig$TWAS.P.BONF < 0.05]) # 92
 
 both<-merge(twas_fusion_r2[,c('ID','TWAS.Z'),with=F], twas_eqtl_topsig[,c('ID','TWAS.Z'),with=F], by='ID')
 
-cor(both$TWAS.Z.x, both$TWAS.Z.y)
+cor(both$TWAS.Z.x, both$TWAS.Z.y) # 0.8661472
 plot(both$TWAS.Z.x, both$TWAS.Z.y)
 
 # Restrict to feature with best pseudovalidation Z
+pseudo_res_files<-list.files(path=paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo_eqtl_yfs/'), pattern=paste0('pseudo_res_chr'))
+
 pseudo_res<-NULL
-for(i in 1:22){
-  pseudo_res<-rbind(pseudo_res, fread(paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo_eqtl_yfs/pseudo_res_chr',i)))
+for(i in pseudo_res_files){
+  pseudo_res<-rbind(pseudo_res, fread(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo_eqtl_yfs/',i)))
 }
 
+pseudo_res<-pseudo_res[!is.na(pseudo_res$TWAS.Z),]
 pseudo_res<-pseudo_res[order(-pseudo_res$TWAS.Z),]
 pseudo_res<-pseudo_res[!duplicated(pseudo_res$ID),]
 
 twas_eqtl_pseudo<-merge(twas_eqtl, pseudo_res[,c('ID','MODEL'),with=F], by=c('ID','MODEL'))
 twas_eqtl_pseudo$TWAS.P.BONF<-p.adjust(twas_eqtl_pseudo$TWAS.P, method = 'bonferroni')
-sum(twas_eqtl_pseudo$TWAS.P.BONF < 0.05) # 48
+sum(twas_eqtl_pseudo$TWAS.P.BONF < 0.05) # 75
 
-sum(twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05] %in% twas_eqtl_pseudo$ID) # 65
-sum(twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05] %in% twas_eqtl_pseudo$ID[twas_eqtl_pseudo$TWAS.P.BONF < 0.05]) # 38
+sum(twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05] %in% twas_eqtl_pseudo$ID) # 93
+sum(twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05] %in% twas_eqtl_pseudo$ID[twas_eqtl_pseudo$TWAS.P.BONF < 0.05]) # 58
 
-both_2<-merge(twas_fusion_r2[,c('ID','TWAS.Z','HSQ'),with=F], twas_eqtl_pseudo[,c('ID','TWAS.Z','HSQ'),with=F], by='ID')
+both_2<-merge(twas_fusion_r2[,c('ID','TWAS.Z'),with=F], twas_eqtl_pseudo[,c('ID','TWAS.Z'),with=F], by='ID')
 
-cor(both_2$TWAS.Z.x, both_2$TWAS.Z.y)
+cor(both_2$TWAS.Z.x, both_2$TWAS.Z.y) # 0.851
 plot(both_2$TWAS.Z.x, both_2$TWAS.Z.y)
-cor(both_2$HSQ.x, both_2$HSQ.y)
-plot(both_2$HSQ.x, both_2$HSQ.y)
+
+# Restrict eQTL assoc to genes with hsq.p < 0.01
+twas_eqtl_hsq<-eqtl_h2[which(eqtl_h2$p < 0.01),]
+length(unique(twas_eqtl_hsq$ID)) # 4043
+
+twas_eqtl_hsq_pseudo<-merge(twas_eqtl_hsq, twas_eqtl_pseudo, by=c('ID'))
+twas_eqtl_hsq_pseudo$TWAS.P.BONF<-p.adjust(twas_eqtl_hsq_pseudo$TWAS.P, method = 'bonferroni')
+nrow(twas_eqtl_hsq_pseudo)
+sum(twas_eqtl_hsq_pseudo$TWAS.P.BONF < 0.05) # 49
+
+sum(twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05] %in% twas_eqtl_hsq_pseudo$ID) # 66
+sum(twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05] %in% twas_eqtl_hsq_pseudo$ID[twas_eqtl_hsq_pseudo$TWAS.P.BONF < 0.05]) # 39
+
+both_2<-merge(twas_fusion_r2[,c('ID','TWAS.Z'),with=F], twas_eqtl_hsq_pseudo[,c('ID','TWAS.Z')], by='ID')
+
+cor(both_2$TWAS.Z.x, both_2$TWAS.Z.y) # 0.841
+plot(both_2$TWAS.Z.x, both_2$TWAS.Z.y)
+
+# Restrict to genes based on fastBAT
+fastbat_files<-list.files(path='/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/YFS.fastbat/',pattern='.fastbat')
+fastbat_res<-NULL
+for(i in fastbat_files){
+  fastbat_res<-rbind(fastbat_res, fread(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/YFS.fastbat/',i)))
+}
+
+fwrite(fastbat_res, '/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/YFS.fastbat/fastbat_all_res.txt', sep=' ', quote=F, na='NA')
+
+nrow(fastbat_res) # 4700
+
+fastbat_res_sig<-fastbat_res[fastbat_res$Pvalue < 0.01 | fastbat_res$TopSNP.Pvalue < 5e-8,]
+nrow(fastbat_res_sig) # 4538
+
+twas_eqtl_fastbat_pseudo<-merge(twas_eqtl_pseudo, fastbat_res_sig, by.y='Set',by.x=c('ID'))
+twas_eqtl_fastbat_pseudo$TWAS.P.BONF<-p.adjust(twas_eqtl_fastbat_pseudo$TWAS.P, method = 'bonferroni')
+nrow(twas_eqtl_fastbat_pseudo) # 4523
+sum(twas_eqtl_fastbat_pseudo$TWAS.P.BONF < 0.05) # 74
+
+sum(twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05] %in% twas_eqtl_fastbat_pseudo$ID) # 93
+sum(twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05] %in% twas_eqtl_fastbat_pseudo$ID[twas_eqtl_fastbat_pseudo$TWAS.P.BONF < 0.05]) # 58
+
+both_2<-merge(twas_fusion_r2[,c('ID','TWAS.Z'),with=F], twas_eqtl_fastbat_pseudo[,c('ID','TWAS.Z')], by='ID')
+
+cor(both_2$TWAS.Z.x, both_2$TWAS.Z.y) # 0.8540759
+plot(both_2$TWAS.Z.x, both_2$TWAS.Z.y)
 
 # Observations:
-# - A lare proportion of significant FUSION genes aren't present in the eQTL TWAS. Perhaps the hertiability criteria is too strict given less accuracy when using summary statistics? Compare heritability of genes stratified by presence in eQTL twas.
-
-mean(twas_fusion_r2$HSQ[twas_fusion_r2$TWAS.P.BONF < 0.05 & twas_fusion_r2$ID %in% twas_eqtl_pseudo$ID])
-mean(twas_fusion_r2$HSQ[twas_fusion_r2$TWAS.P.BONF < 0.05 & !(twas_fusion_r2$ID %in% twas_eqtl_pseudo$ID)])
-mean(twas_fusion_r2$HSQ[ twas_fusion_r2$ID %in% twas_eqtl_pseudo$ID])
-mean(twas_fusion_r2$HSQ[!(twas_fusion_r2$ID %in% twas_eqtl_pseudo$ID)])
-# Heritability is higher in the sig/all genes that are not present in eQTL TWAS
-
-# - There are quite a few FUSION associations being missed by the eQTL models, despite a fairly high correlation between TWAS Z scores. So it seems the signals are the same but the power is lower when using eQTL based models. This could be partly due to the suboptimal selection of models by pseudovalidation.
+# - A lare proportion of significant FUSION genes aren't present in the eQTL TWAS when restricting to gene with significant SNP-h2. This is largely due to SBayesR not converging for those genes. This indicates restricting by SNP-h2 might not be a good criterion when using summary statistics. There are fewer statistically significant genes when restricting to sig. h2 genes as well, indicating selecting genes by this metric doesn't reduce multiple testing burden much but does lose power. However, all FUSION models have a GREML hsq.p< 0.01, so we are being protected by that. It will be important to test the benefits of the SNP-h2 estimation when using eQTLGen sumstats. Perhaps an alternative criterion could be used, like a genome-wide significant eQTL (like SMR). Many of the FUSION TWAS associations are not signficant when using eQTLs, possibly due to less predictive models when using eQTL sumstats. Pseudovalidation seems to be working fairly well as retaining models based on most signficant TWAS.P doesn't actually reduces the number of signficant genes overlapping FUSION and eQTL TWAS.
 
 ######
 # Test aggreagation approaches
@@ -741,8 +895,18 @@ for(i in unique(twas_eqtl$ID)){
 }
 
 twas_eqtl_gene$ACATO.P.BONF<-p.adjust(twas_eqtl_gene$ACATO.P, method='bonferroni')
-sum(twas_eqtl_gene$ACATO.P.BONF < 0.05) # 105
-sum(twas_eqtl_gene$ID[twas_eqtl_gene$ACATO.P.BONF < 0.05] %in% twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05]) # 63
+sum(twas_eqtl_gene$ACATO.P.BONF < 0.05) # 162
+sum(twas_eqtl_gene$ID[twas_eqtl_gene$ACATO.P.BONF < 0.05] %in% twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05]) # 87
+
+twas_eqtl_gene_hsq<-twas_eqtl_gene[twas_eqtl_gene$ID %in% twas_eqtl_hsq$ID,]
+twas_eqtl_gene_hsq$ACATO.P.BONF<-p.adjust(twas_eqtl_gene_hsq$ACATO.P, method='bonferroni')
+sum(twas_eqtl_gene_hsq$ACATO.P.BONF < 0.05) # 104
+sum(twas_eqtl_gene_hsq$ID[twas_eqtl_gene_hsq$ACATO.P.BONF < 0.05] %in% twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05]) # 64
+
+twas_eqtl_gene_fastbat<-twas_eqtl_gene[twas_eqtl_gene$ID %in% fastbat_res_sig$Set,]
+twas_eqtl_gene_fastbat$ACATO.P.BONF<-p.adjust(twas_eqtl_gene_fastbat$ACATO.P, method='bonferroni')
+sum(twas_eqtl_gene_fastbat$ACATO.P.BONF < 0.05) # 157
+sum(twas_eqtl_gene_fastbat$ID[twas_eqtl_gene_fastbat$ACATO.P.BONF < 0.05] %in% twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05]) # 87
 
 # Calc ACAT-O pvalue
 twas_fusion_gene<-NULL
@@ -760,22 +924,39 @@ twas_fusion_gene$ACATO.P.BONF<-p.adjust(twas_fusion_gene$ACATO.P, method='bonfer
 sum(twas_fusion_gene$ACATO.P.BONF < 0.05) # 105
 sum(twas_fusion_gene$ID[twas_fusion_gene$ACATO.P.BONF < 0.05] %in% twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05]) # 63
 
+twas_fusion_gene_eqtl<-twas_fusion_gene[twas_fusion_gene$ID %in% twas_eqtl_hsq$ID,]
+twas_fusion_gene_eqtl$ACATO.P.BONF<-p.adjust(twas_fusion_gene_eqtl$ACATO.P, method='bonferroni')
+sum(twas_fusion_gene_eqtl$ACATO.P.BONF < 0.05) # 105
+sum(twas_fusion_gene_eqtl$ID[twas_fusion_gene_eqtl$ACATO.P.BONF < 0.05] %in% twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05]) # 63
+
 # Read in omnibus tests using eQTL TWAS
 omnibus<-NULL
 for(i in 1:22){
-  omnibus<-rbind(omnibus, read.table(paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTL_YFS.omnibus.chr',i,'.omnibus.pv'), header=T, stringsAsFactors = F))
+  omnibus<-rbind(omnibus, read.table(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTL_YFS.omnibus.chr',i,'.omnibus.pv'), header=T, stringsAsFactors = F))
 
 }
 
 omnibus$OMNIBUS.P.BONF<-p.adjust(omnibus$OMNIBUS.P, method='bonferroni')
 
-sum(omnibus$OMNIBUS.P.BONF < 0.05) # 493
-sum(omnibus$GENE[omnibus$OMNIBUS.P.BONF < 0.05] %in% twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05]) # 62
+sum(omnibus$OMNIBUS.P.BONF < 0.05) # 605
+sum(omnibus$GENE[omnibus$OMNIBUS.P.BONF < 0.05] %in% twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05]) # 82
+
+omnibus_hsq<-omnibus[omnibus$GENE %in% twas_eqtl_hsq$ID,]
+omnibus_hsq$OMNIBUS.P.BONF<-p.adjust(omnibus_hsq$OMNIBUS.P, method='bonferroni')
+nrow(omnibus_hsq)
+sum(omnibus_hsq$OMNIBUS.P.BONF < 0.05) # 487
+sum(omnibus_hsq$GENE[omnibus_hsq$OMNIBUS.P.BONF < 0.05] %in% twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05]) # 60
+
+omnibus_fastbat<-omnibus[omnibus$GENE %in% fastbat_res_sig$Set,]
+omnibus_fastbat$OMNIBUS.P.BONF<-p.adjust(omnibus_fastbat$OMNIBUS.P, method='bonferroni')
+nrow(omnibus_fastbat) # 4521
+sum(omnibus_fastbat$OMNIBUS.P.BONF < 0.05) # 568
+sum(omnibus_fastbat$GENE[omnibus_fastbat$OMNIBUS.P.BONF < 0.05] %in% twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05]) # 82
 
 # Read in omnibus test results from FUSION TWAS
 omnibus_fusion<-NULL
 for(i in 1:22){
-  omnibus_fusion<-rbind(omnibus_fusion, read.table(paste0('/scratch/groups/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.FUSION_YFS.omnibus.chr',i,'.omnibus.pv'), header=T, stringsAsFactors = F))
+  omnibus_fusion<-rbind(omnibus_fusion, read.table(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.FUSION_YFS.omnibus.chr',i,'.omnibus.pv'), header=T, stringsAsFactors = F))
 
 }
 
@@ -787,8 +968,6 @@ sum(omnibus_fusion$GENE[omnibus_fusion$OMNIBUS.P.BONF < 0.05] %in% twas_fusion_r
 # Check overlap between omnibus tests
 sum(omnibus$GENE[omnibus$OMNIBUS.P.BONF < 0.05] %in% omnibus_fusion$GENE[omnibus_fusion$OMNIBUS.P.BONF < 0.05]) # 81
 sum(twas_fusion_gene$ID[twas_fusion_gene$ACATO.P.BONF < 0.05] %in% twas_eqtl_gene$ID[twas_eqtl_gene$ACATO.P.BONF < 0.05]) # 81
-
-
 
 # Observations:
 # - The omnibus tests identify more significant associations than pseudovalidation

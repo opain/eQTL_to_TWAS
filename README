@@ -1,0 +1,14 @@
+# eQTL to TWAS
+
+This repo contains code for deriving TWAS models from eQTL summary statistics. The same code can be used for other molecular features as well (e.g. methylation, protein, chromatin). The models are in [FUSION ](http://gusevlab.org/projects/fusion/) format.
+
+Required R packages include optparse and data.table. Additional R packages are required when deriving weights using certain models. To use bigsnpr and dplyr is required for the ldpred2 model, susieR is required for the susie model, and lassosum and fdrtools is required for the lassosum model.
+
+```R
+install.packages(c('optparse','data.table','bigsnpr','susieR','lassosum','fdrtool'))
+```
+
+
+
+
+
