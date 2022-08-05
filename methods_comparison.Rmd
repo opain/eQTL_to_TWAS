@@ -2721,10 +2721,10 @@ obs<-obs[,!duplicated(names(obs)),with=F]
 obs_covs<-merge(obs, covs, by='ID')
 
 # Read in predicted expression
-eqtl<-fread('/mnt/lustre/users/k1806347/Data/GTeX/v8/Zac/05072022/FeaturePredictions_YFS.eQTL.txt.gz')
+eqtl<-fread('/users/k1806347/oliverpainfel/Data/GTeX/v8/Zac/030822/FeaturePredictions_YFS.eQTL.txt.gz')
 names(eqtl)<-gsub('.RDat','',gsub('YFS.','', names(eqtl)))
 
-fusion<-fread('/mnt/lustre/users/k1806347/Data/GTeX/v8/Zac/FUSION.YFS/FeaturePredictions_YFS.BLOOD.RNAARR.txt.gz')
+fusion<-fread('/users/k1806347/oliverpainfel/Data/GTeX/v8/Zac/FUSION.YFS/FeaturePredictions_YFS.BLOOD.RNAARR.txt.gz')
 names(fusion)<-gsub('YFS.BLOOD.RNAARR.YFS.','fusion.', names(fusion))
 
 # Identify genes available in fusion and eqtl based models
@@ -2764,7 +2764,7 @@ for(i in both_genes){
 }
 
 # melt and combine all the results
-cor_res_melt<-melt(cor_res)
+cor_res_melt<-reshape2::melt(cor_res)
 cor_res_melt_obs<-cor_res_melt[cor_res_melt$Var1 == 'obs',]
 cor_res_melt_obs<-cor_res_melt_obs[cor_res_melt_obs$Var1 != cor_res_melt_obs$Var2,]
 cor_res_melt_obs$test<-paste0(cor_res_melt_obs$Var1,'_',cor_res_melt_obs$Var2)
@@ -2780,7 +2780,7 @@ for(i in unique(cor_res_melt_obs$test)){
 }
 
 library(ggplot2)
-png('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_boxplot.png', units='px', width=1500, height=1000, res=300)
+bitmap('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_boxplot.png', units='px', width=1500, height=1000, res=300)
 ggplot(cor_res_melt_obs, aes(x=paste0(Var1,' vs. ',Var2), y=value)) +
   geom_boxplot() +
   labs(x='Test', y='Correlation') +
@@ -2812,7 +2812,7 @@ diagfun <- function(data,mapping){
     xlim(c(min(cor_res_melt_obs$value),max(cor_res_melt_obs$value)))
 }  
 
-png('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_pairsplot.png', units='px', width=5000, height=5000, res=300)
+bitmap('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_pairsplot.png', units='px', width=5000, height=5000, res=300)
 ggpairs(cor_res_melt_obs_unmelt[,-1], lower = list(continuous = wrap(lowerfun)), diag = list(continuous = wrap(diagfun)))
 dev.off()
 
@@ -2934,7 +2934,7 @@ obs<-obs[,!duplicated(names(obs)),with=F]
 obs_covs<-merge(obs, covs, by='ID')
 
 # Read in predicted expression
-eqtl<-fread('/mnt/lustre/users/k1806347/Data/GTeX/v8/Zac/05072022/FeaturePredictions_eQTLGen.eQTL.txt.gz')
+eqtl<-fread('/users/k1806347/oliverpainfel/Data/GTeX/v8/Zac/030822/FeaturePredictions_eQTLGen.eQTL.txt.gz')
 names(eqtl)<-gsub('.RDat','',gsub('eQTLGen.','', names(eqtl)))
 
 # Identify genes available in fusion and eqtl based models
@@ -2969,7 +2969,7 @@ for(i in both_genes){
 }
 
 # melt and combine all the results
-cor_res_melt<-melt(cor_res)
+cor_res_melt<-reshape2::melt(cor_res)
 cor_res_melt_obs<-cor_res_melt[cor_res_melt$Var1 == 'obs',]
 cor_res_melt_obs<-cor_res_melt_obs[cor_res_melt_obs$Var1 != cor_res_melt_obs$Var2,]
 cor_res_melt_obs$test<-paste0(cor_res_melt_obs$Var1,'_',cor_res_melt_obs$Var2)
@@ -2986,7 +2986,7 @@ for(i in unique(cor_res_melt_obs$test)){
 }
 
 library(ggplot2)
-png('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_boxplot_eQTLGen.png', units='px', width=1500, height=1000, res=300)
+bitmap('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_boxplot_eQTLGen.png', units='px', width=1500, height=1000, res=300)
 ggplot(cor_res_melt_obs, aes(x=paste0(Var1,' vs. ',Var2), y=value)) +
   geom_boxplot() +
   labs(x='Test', y='Correlation') +
@@ -3019,7 +3019,7 @@ diagfun <- function(data,mapping){
     xlim(c(min(cor_res_melt_obs$value),max(cor_res_melt_obs$value)))
 }  
 
-png('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_pairsplot_eQTLGen.png', units='px', width=3000, height=3000, res=300)
+bitmap('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_pairsplot_eQTLGen.png', units='px', width=3000, height=3000, res=300)
 ggpairs(cor_res_melt_obs_unmelt[,-1], lower = list(continuous = wrap(lowerfun)), diag = list(continuous = wrap(diagfun)))
 dev.off()
 
@@ -3074,6 +3074,9 @@ The predicted-observed correlation is looking better here, with 87% of genes ach
 #### Comparison of FUSION YFS and eQTLGen models 
 
 ```{r, eval=F, echo=T}
+
+library(data.table)
+
 # Read in pred_obs_cor for YFS and eQTLGen
 eqtlgen<-fread('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor.txt')
 yfs<-fread('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_YFS.txt')
@@ -3082,11 +3085,11 @@ yfs<-fread('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_t
 yfs<-yfs[grepl('fusion',yfs$Var2),]
 
 # Compare number of (valid) genes from YFS and eQTLGen
-length(unique(eqtlgen$L1)) # 14058
-length(unique(yfs$L1)) # 3997
+length(unique(eqtlgen$L1)) # 16719
+length(unique(yfs$L1)) # 4633
 
-length(unique(eqtlgen$L1[eqtlgen$value > 0.1])) # 3453
-length(unique(yfs$L1[yfs$value > 0.1])) # 1081
+length(unique(eqtlgen$L1[eqtlgen$value > 0.1])) # 3800
+length(unique(yfs$L1[yfs$value > 0.1])) # 1311
 
 # Subset genes available in both fusion YFS and eQTLGen
 library(biomaRt)
@@ -3107,14 +3110,14 @@ yfs_subset<-yfs_subset[!is.na(yfs_subset$value),]
 yfs_subset<-yfs_subset[!duplicated(yfs_subset$L1),]
 
 both_best<-merge(eqtlgen_subset, yfs_subset, by='L1')
-nrow(both_best) # 3843
-median(both_best$value.x) # 0.0732
-median(both_best$value.y) # 0.062
+nrow(both_best) # 4606
+median(both_best$value.x) # 0.07559274
+median(both_best$value.y) # 0.0630884
 
 library(ggplot2)
 library(cowplot)
 
-png('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_eQTLGen_YFS_comp.png', units='px', width=1500, height=1500, res=300)
+bitmap('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_eQTLGen_YFS_comp.png', units='px', width=1500, height=1500, res=300)
 
 ggplot(both_best, aes(x=value.x, y=value.y)) +
   geom_point() +
@@ -3138,7 +3141,7 @@ eqtlgen_subset$YFS<-T
 
 eqtlgen_comp_plot<-rbind(eqtlgen_not_in_yfs, eqtlgen_subset)
 
-png('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/present_in_YFS_hist.png', units='px', width=1500, height=1000, res=300)
+bitmap('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/present_in_YFS_hist.png', units='px', width=1500, height=1000, res=300)
 
 ggplot(eqtlgen_comp_plot, aes(x=value, fill=YFS, colour=YFS)) +
   geom_histogram(position="identity", alpha=0.5) +
@@ -3394,14 +3397,14 @@ for(i in 1:length(genes)){
 }
 
 # Calculate correlation between model rank for each gene
-cor(obs_pseudo_rank$pseudo_rank, obs_pseudo_rank$obs_rank) # 0.08380318
+cor(obs_pseudo_rank$pseudo_rank, obs_pseudo_rank$obs_rank) # 0.09677969
 
 # Calculate the mean difference in R between the best model and the model selected by TWAS.Z
 rank_diff$diff<-rank_diff$pseudo_R-rank_diff$top_R
-mean(rank_diff$diff, na.rm=T) # -0.02506432
+mean(rank_diff$diff, na.rm=T) # -0.02587632
 
 # Calculate the percentage of genes where pseuodoval did not select the correct model
-nrow(rank_diff[rank_diff$diff != 0,])/nrow(rank_diff) # 0.8415651
+nrow(rank_diff[rank_diff$diff != 0,])/nrow(rank_diff) # 0.8447695
 
 # Crosstab the selected observed and pseudoval-selected best model
 saveRDS(table(rank_diff$pseudo_top_mod, rank_diff$obs_top_mod),'/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo2/best_pseudo_comp_eQTLGen.rds')
@@ -3414,7 +3417,7 @@ rank_diff<-rank_diff[order(rank_diff$diff),]
 library(ggplot2)
 library(cowplot)
 
-png('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo2/best_pseudo_comp_eQTLGen.png', res=300, units='px', width=1000, height=1000)
+bitmap('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo2/best_pseudo_comp_eQTLGen.png', res=300, units='px', width=1000, height=1000)
 ggplot(rank_diff, aes(x=top_R, y=pseudo_R)) +
   geom_abline(intercept = 0, slope = 1, colour='red') +
   geom_point() +
@@ -3424,7 +3427,7 @@ ggplot(rank_diff, aes(x=top_R, y=pseudo_R)) +
   labs(x="R (Best)", y="R (Pseudovalidated)")
 dev.off()
 
-png('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo2/best_pseudo_comp_eQTLGen_hist.png', res=300, units='px', width=1500, height=1000)
+bitmap('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo2/best_pseudo_comp_eQTLGen_hist.png', res=300, units='px', width=1500, height=1000)
 ggplot(rank_diff, aes(x=diff)) +
   geom_histogram() +
   theme_half_open() +
@@ -3504,14 +3507,14 @@ for(i in 1:length(genes)){
 }
 
 # Calculate correlation between model rank for each gene
-cor(obs_pseudo_rank$pseudo_rank, obs_pseudo_rank$obs_rank) # 0.0623
+cor(obs_pseudo_rank$pseudo_rank, obs_pseudo_rank$obs_rank) # 0.06232803
 
 # Calculate the mean difference in R between the best model and the model selected by TWAS.Z
 rank_diff$diff<-rank_diff$pseudo_R-rank_diff$top_R
-mean(rank_diff$diff, na.rm=T) # -0.024
+mean(rank_diff$diff, na.rm=T) # -0.02396207
 
 # Calculate the percentage of genes where pseuodoval did not select the correct model
-nrow(rank_diff[rank_diff$diff != 0,])/nrow(rank_diff) # 0.827
+nrow(rank_diff[rank_diff$diff != 0,])/nrow(rank_diff) # 0.8272432
 
 # Crosstab the selected observed and pseudoval-selected best model
 saveRDS(table(rank_diff$pseudo_top_mod, rank_diff$obs_top_mod),'/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo_fusion_yfs/best_pseudo_comp.rds')
@@ -3524,7 +3527,7 @@ rank_diff<-rank_diff[order(rank_diff$diff),]
 library(ggplot2)
 library(cowplot)
 
-png('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo_fusion_yfs/best_pseudo_comp.png', res=300, units='px', width=1000, height=1000)
+bitmap('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo_fusion_yfs/best_pseudo_comp.png', res=300, units='px', width=1000, height=1000)
 ggplot(rank_diff, aes(x=top_R, y=pseudo_R)) +
   geom_point() +
   geom_abline(intercept = 0, slope = 1, colour='red') +
@@ -3534,13 +3537,20 @@ ggplot(rank_diff, aes(x=top_R, y=pseudo_R)) +
   labs(x="R (Best)", y="R (Pseudovalidated)")
 dev.off()
 
-png('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo_fusion_yfs/best_pseudo_comp_hist.png', res=300, units='px', width=1500, height=1000)
+bitmap('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo_fusion_yfs/best_pseudo_comp_hist.png', res=300, units='px', width=1500, height=1000)
 ggplot(rank_diff, aes(x=diff)) +
   geom_histogram() +
   theme_half_open() +
   background_grid() +
   labs(x="Difference in R")
 dev.off()
+
+        blup bslmm enet lasso top1
+  blup   215  1184  590   803  457
+  bslmm  206   223  130    94  153
+  enet   103   155  186    65   56
+  lasso    0     1    1     2    1
+   top1    0     0    0     0    0
 
 ```
 
