@@ -97,7 +97,7 @@ sbayesr_robust_h2<-NULL
 sbayess_h2<-NULL
 ldsc_h2<-NULL
 
-# Run across each chromosome seperately
+# Run across each chromosome separately
 for(chr_i in 22){
   # Read in eQTL data
   eqtl<-fread(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v7/Whole_Blood.allpairs.chr',chr_i,'.txt'))
@@ -1003,6 +1003,8 @@ for(i in 1:nrow(pos)){
 
 ```{r, eval=F, echo=T}
 library(data.table)
+library(ggplot2)
+library(cowplot)
 
 # Make output directory
 dir.create('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8/SBayesR')
@@ -1026,6 +1028,9 @@ for(chr_i in 22){
   
   # Identify unique genes 
   genes<-unique(eqtl$GENE)
+  
+  # Read in LDscores for insight into LDSC results
+  ldscores<-fread('/users/k1806347/oliverpainfel/Data/ldsc/eur_w_ld_chr/22.l2.ldscore.gz')
   
   # Run for each gene seperately
   for(gene_i in genes){
@@ -1073,6 +1078,24 @@ for(chr_i in 22){
     # Run LDSC
     log4<-system(paste0('/users/k1806347/oliverpainfel/Software/ldsc.sh --h2 /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8/LDSC/',gene_i,'.txt --ref-ld-chr /users/k1806347/oliverpainfel/Data/ldsc/eur_w_ld_chr/ --w-ld-chr /users/k1806347/oliverpainfel/Data/ldsc/eur_w_ld_chr/ --out /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8/LDSC/',gene_i,'.h2'), intern=T)
 
+    eqtl_gene_i_ldsc_l2<-merge(ldscores, eqtl_gene_i_ldsc, by.x='SNP', by.y='SNP')
+    
+    eqtl_gene_i_ldsc_l2$chisq<-qchisq(1-(2*pnorm(q=abs(eqtl_gene_i_ldsc_l2$Z), lower.tail=FALSE)),1)
+    
+    eqtl_gene_i_ldsc_l2<-eqtl_gene_i_ldsc_l2[eqtl_gene_i_ldsc_l2$chisq < 30,]
+    
+    eqtl_gene_i_ldsc_l2$l2_bin<-as.numeric(cut( eqtl_gene_i_ldsc_l2$L2, quantile(eqtl_gene_i_ldsc_l2$L2, prob = seq(0, 1, length = 21), type = 5) ))
+    
+    tmp<-aggregate(eqtl_gene_i_ldsc_l2$chisq, list(eqtl_gene_i_ldsc_l2$l2_bin), FUN=mean)
+    names(tmp)<-c('LD_bin','chisq')
+    
+    bitmap(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8/LDSC/',gene_i,'.ldsc.png'), units='px', height=1500, width=1500, res=300)
+    ggplot(tmp, aes(x=LD_bin, y=chisq)) +
+      geom_point() +
+      theme_half_open()
+      
+    dev.off()
+    
     ########
     # Tabulate SNP-h2 results
     ########
@@ -1180,6 +1203,26 @@ sbatch -p cpu --mem 10G -n 1 --nodes 1 /users/k1806347/oliverpainfel/Software/Rs
 	--gcta /users/k1806347/oliverpainfel/Software/gcta.sh \
   --output /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8/GTEx_v8.fastbat
 
+# Run using mbat-combo
+sbatch -p cpu --mem 10G -n 1 --nodes 1 /users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/eQTL_mbat_combo.R \
+	--chr 22 \
+	--extract /users/k1806347/oliverpainfel/Data/ldsc/w_hm3.snplist \
+	--sumstats /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8/GTEx_v8_eQTL_from_fusion.txt \
+	--plink_ref_chr /users/k1806347/oliverpainfel/Data/1KG/Phase3/1KGPhase3.w_hm3.chr \
+	--plink_ref_keep /users/k1806347/oliverpainfel/Data/1KG/Phase3/keep_files/EUR_samples.keep \
+	--gcta /users/k1806347/oliverpainfel/Software/gcta_1.94.sh \
+  --output /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8/GTEx_v8.mbat.combo
+
+opt$chr<-22 
+opt$extract<-'/users/k1806347/oliverpainfel/Data/ldsc/w_hm3.snplist'
+opt$sumstats<-'/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8/GTEx_v8_eQTL_from_fusion.txt'
+opt$plink_ref_chr<-'/users/k1806347/oliverpainfel/Data/1KG/Phase3/1KGPhase3.w_hm3.chr'
+opt$plink_ref_keep<-'/users/k1806347/oliverpainfel/Data/1KG/Phase3/keep_files/EUR_samples.keep'
+opt$gcta<-'/users/k1806347/oliverpainfel/Software/gcta_1.94.sh'
+opt$output<-'/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8/GTEx_v8.mbat.combo'
+
+# FastBAT results are reported in the mbat results file, so use the mbat for comparison across methods.
+
 ```
 
 ```{r, eval=F, echo=T}
@@ -1205,15 +1248,59 @@ all_h2_full_dat<-Reduce(function(...) merge(..., by='gene', all=T), all_h2_full_
 
 library("ggplot2")
 library("GGally")   
+library('stringr')
 
+n_gene<-data.frame(Method=names(all_h2_full_dat)[-1],
+           N_genes=apply(all_h2_full_dat[,-1], 2, function(x) sum(!is.na(x))))
+           
 lowerfun <- function(data,mapping){
   ggplot(data = data, mapping = mapping)+
     geom_point() +
     geom_abline(intercept =0 , slope = 1, colour='red')
 }  
 
-bitmap('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8/h2_estimates.png', units = 'px', res=300, width=2000, height=2000)
-ggpairs(all_h2_full_dat[,-1], lower = list(continuous = wrap(lowerfun)))
+upperfun <- function (data, mapping, ..., stars = TRUE, method = "pearson", 
+    use = "complete.obs", display_grid = FALSE, digits = 3, title_args = list(...), 
+    group_args = list(...), justify_labels = "right", align_percent = 0.5, 
+    title = NULL, alignPercent = warning("deprecated. Use `align_percent`"), 
+    displayGrid = warning("deprecated. Use `display_grid`")) 
+{
+    if (!missing(alignPercent)) {
+        warning("`alignPercent` is deprecated. Please use `align_percent` if alignment still needs to be adjusted")
+        align_percent <- alignPercent
+    }
+    if (!missing(displayGrid)) {
+        warning("`displayGrid` is deprecated. Please use `display_grid`")
+        display_grid <- displayGrid
+    }
+    na.rm <- if (missing(use)) {
+        NA
+    }
+    else {
+        (use %in% c("complete.obs", "pairwise.complete.obs", 
+            "na.or.complete"))
+    }
+    ggally_statistic(data = data, mapping = mapping, na.rm = na.rm, 
+        align_percent = align_percent, display_grid = display_grid, 
+        title_args = title_args, group_args = group_args, justify_labels = justify_labels, 
+        justify_text = "left", sep = if ("colour" %in% names(mapping)) 
+            ": "
+        else "", title = title, text_fn = function(x, y) {
+            corObj <- stats::cor.test(x, y, method = method, 
+                use = use)
+            cor_est <- as.numeric(corObj$estimate)
+            cor_txt <- paste0('Corr = ',round(cor_est,3))
+            N_txt <- paste0('\n\nN = ', sum(!is.na(rowSums(cbind(x, y)))))
+            if (isTRUE(stars)) {
+                cor_txt <- str_c(cor_txt, signif_stars(corObj$p.value), N_txt)
+            }
+            cor_txt
+        })
+}
+
+png('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8/h2_estimates.png', units = 'px', res=300, width=2000, height=2000)
+ggpairs(all_h2_full_dat[,-1], lower = list(continuous = wrap(lowerfun)), upper = list(continuous = wrap(upperfun))) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 dev.off()
 
 # Note. LDSC estimates are very inaccurate and do not correlated well with other methods. SBayesR correlates best wit GREML, and SBayesR and SBayesR with robust setting are highly correlated. The SBayesS method correlates less well with other methods, but this doesn't mean it is inaccurate as we don't know the truth.
@@ -1231,18 +1318,26 @@ names(n_gene)<-c('Method','N_genes')
 all_h2_sig_list<-split(all_h2_sig[['gene']], f = all_h2_sig$method)
 
 # Include the fastbat results
-fastbat_files<-list.files(path='/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8/GTEx_v8.fastbat/',pattern='.fastbat')
-fastbat_res<-NULL
-for(i in fastbat_files){
-  fastbat_res<-rbind(fastbat_res, fread(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8/GTEx_v8.fastbat/',i)))
-}
-fastbat_res_sig<-fastbat_res[fastbat_res$Pvalue < 0.01 | fastbat_res$TopSNP.Pvalue < 5e-8,]
-n_gene<-rbind(n_gene, data.table(Method='fastbat', N_genes=nrow(fastbat_res_sig)))
+mbat_res<-fread('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8/GTEx_v8.mbat.combo.res.txt')
 
-all_h2_sig_list[['fastbat']]<-fastbat_res_sig$Set
+fastbat_res_sig<-mbat_res[mbat_res$P_fastBAT < 0.01 | mbat_res$TopSNP_Pvalue < 5e-8,]
+n_gene<-rbind(n_gene, data.table(Method='fastbat', N_genes=nrow(fastbat_res_sig)))
+all_h2_sig_list[['fastbat']]<-fastbat_res_sig$Gene
+
+mbat_res_sig<-mbat_res[mbat_res$P_mBAT  < 0.01 | mbat_res$TopSNP_Pvalue < 5e-8,]
+n_gene<-rbind(n_gene, data.table(Method='mbat', N_genes=nrow(mbat_res_sig)))
+all_h2_sig_list[['mbat']]<-mbat_combo_res_sig$Gene
+
+mbat_combo_res_sig<-mbat_res[mbat_res$P_mBATcombo < 0.01 | mbat_res$TopSNP_Pvalue < 5e-8,]
+n_gene<-rbind(n_gene, data.table(Method='mbat_combo', N_genes=nrow(mbat_combo_res_sig)))
+all_h2_sig_list[['mbat_combo']]<-mbat_combo_res_sig$Gene
+
+any_mbat_combo_res_sig<-mbat_res[mbat_res$P_mBATcombo < 0.01 | mbat_res$P_mBAT < 0.01 | mbat_res$P_fastBAT < 0.01 | mbat_res$TopSNP_Pvalue < 5e-8,]
+n_gene<-rbind(n_gene, data.table(Method='any_mbat_combo', N_genes=nrow(any_mbat_combo_res_sig)))
+all_h2_sig_list[['any_mbat_combo']]<-mbat_combo_res_sig$Gene
 
 # Plot number of genes with valid and significant estimates
-bitmap('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8/n_sig_hsq.png', units = 'px', res=300, width=1500, height=1000)
+png('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8/n_sig_hsq.png', units = 'px', res=300, width=1500, height=1000)
 upset(fromList(all_h2_sig_list), nsets=10, order.by = "freq")
 dev.off()
 # Again LDSC is least concordant with other methods.
@@ -1261,6 +1356,7 @@ write.csv(n_gene, '/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource
 
 # Note. SBayesR has the largest overlap with GREML. Given this, and that SBayesR finds the most significant genes, I think we should use SBayesR without robust parameteristation to estimate heritability.
 # Fastbat seems to work quite well as well. It finds some genes that are not significant according to GREML, but they are all boarderline. Similarly, it will work for all genes, unlike SBayesR. In this example (GTEx v8) there is an SBayesR estimates for all bar one gene. However, when using the eQTLGen statistics many genes are not converging (possibly due to meta-analysis leading to mispecification), meaning there may be an advnatate to using a simpler method such as fastbat. There is probably a quicker way of running fastbat within R.
+# I have now added mbat_combo. mbat combo seems to do slightly better. Improving overlap with GREML. For simplicity, I think we should go with mbat_combo.
 
 ```
 
@@ -3459,7 +3555,7 @@ confusionMatrix(tmp)
 
 ***
 
-### Evaluate pseudovalidation using all FUSION YFS models
+### Evaluate TWAS-based pseudovalidation using all FUSION YFS models
 
 ```{bash, echo=T, eval=F}
 
@@ -3601,19 +3697,227 @@ done
 
 ***
 
-# Run FastBAT on YFS eQTL sumstats
+# Run mbat_combo on YFS eQTL sumstats
 
 ```{bash, eval=F, echo=T}
 # Run fastbat to see whether this could work as an inclusion criteria
 
 for chr in $(seq 1 22); do
-sbatch -p cpu --mem 10G -n 1 --nodes 1 /users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/eQTL_fastBAT.R \
+sbatch -p cpu --mem 10G -n 1 --nodes 1 /users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/eQTL_mbat_combo.R \
 	--chr ${chr} \
 	--extract /users/k1806347/oliverpainfel/Data/ldsc/w_hm3.snplist \
 	--sumstats /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/YFS_eQTL_from_fusion.txt \
 	--plink_ref_chr /users/k1806347/oliverpainfel/Data/1KG/Phase3/1KGPhase3.w_hm3.chr \
 	--plink_ref_keep /users/k1806347/oliverpainfel/Data/1KG/Phase3/keep_files/EUR_samples.keep \
-	--gcta /users/k1806347/oliverpainfel/Software/gcta.sh \
-  --output /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/YFS.fastbat
+	--gcta /users/k1806347/oliverpainfel/Software/gcta_1.94.sh \
+  --output /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/YFS.mbat.combo.chr${chr}
 done
+
+```
+
+***
+
+# Evaluate LDAK-based pseudovalidation using all FUSION YFS models
+
+```{bash, echo=T, eval=F}
+
+mkdir /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo_fusion_yfs
+
+for chr in $(seq 1 22);do
+  sbatch -p cpu --mem 10G /users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/FUSION.assoc_test.pseudo_LDAK_V2.R \
+    --sumstats /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/YFS_eQTL_from_fusion.txt \
+  	--weights /scratch/prj/brc_mh/TWAS_resource/FUSION/SNP-weights/YFS.BLOOD.RNAARR/YFS.BLOOD.RNAARR.pos \
+  	--weights_dir /scratch/prj/brc_mh/TWAS_resource/FUSION/SNP-weights/YFS.BLOOD.RNAARR \
+    --ref_ld_chr /scratch/prj/brc_mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
+    --out /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo_ldak_yfs/pseudo_ldak_res_chr${chr} \
+    --chr ${chr} \
+    --ldak /users/k1806347/oliverpainfel/Software/ldak5.1.linux \
+    --ldak_map /users/k1806347/oliverpainfel/Data/LDAK/genetic_map_b37 \
+    --plink1 /users/k1806347/oliverpainfel/Software/plink1.9.sh
+
+done
+
+opt$sumstats<-'/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/YFS_eQTL_from_fusion.txt'
+opt$weights<-'/scratch/prj/brc_mh/TWAS_resource/FUSION/SNP-weights/YFS.BLOOD.RNAARR/YFS.BLOOD.RNAARR.pos'
+opt$weights_dir<-'/scratch/prj/brc_mh/TWAS_resource/FUSION/SNP-weights/YFS.BLOOD.RNAARR'
+opt$ref_ld_chr<-'/scratch/prj/brc_mh/TWAS_resource/FUSION/LDREF/1000G.EUR.'
+opt$out<-'/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo_ldak_yfs/pseudo_ldak_res_chr11'
+opt$chr<-11
+opt$ldak<-'/users/k1806347/oliverpainfel/Software/ldak5.1.linux'
+opt$ldak_map<-'/users/k1806347/oliverpainfel/Data/LDAK/genetic_map_b37'
+opt$plink1<-'/users/k1806347/oliverpainfel/Software/plink1.9.sh'
+
+
+```
+
+```{r, eval=F, echo=T}
+library(data.table)
+
+# Read in pseudoval results
+pseudo_res_2<-NULL
+for(i in 1:22){
+  pseudo_res_2<-rbind(pseudo_res_2, fread(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo_ldak_yfs/pseudo_ldak_res_chr',i,'.ldak.pseudo.txt')))
+}
+
+# Read in reported CV.R2
+yfs_pos<-fread('/scratch/prj/brc_mh/TWAS_resource/FUSION/SNP-weights/YFS.BLOOD.RNAARR/YFS.BLOOD.RNAARR.pos')
+yfs_pos<-yfs_pos[yfs_pos$CHR %in% c(14:16),]
+obs_r2<-NULL
+for(i in 1:nrow(yfs_pos)){
+  wgt<-load(paste0('/scratch/prj/brc_mh/TWAS_resource/FUSION/SNP-weights/YFS.BLOOD.RNAARR/',yfs_pos$WGT[i]))
+  obs_r2_i<-data.table(ID=yfs_pos$ID[i],
+                       MODEL= colnames(cv.performance),
+                       R2=cv.performance[1,])
+  obs_r2<-rbind(obs_r2, obs_r2_i)
+  
+}
+
+pseudo_res_2<-merge(pseudo_res_2, obs_r2, by=c('MODEL','ID'))
+
+# Determine the best model based on TWAS.Z and observed cor, and rank methods by TWAS.Z and observed cor for each gene.
+genes<-unique(pseudo_res_2$ID)
+obs_pseudo_rank<-NULL
+rank_diff<-NULL
+n_top<-NULL
+for(i in 1:length(genes)){
+  obs_pseudo_i<-pseudo_res_2[pseudo_res_2$ID == genes[i],]
+  obs_pseudo_i$pseudo_rank<-rank(-obs_pseudo_i$R)
+  obs_pseudo_i$obs_rank<-rank(-obs_pseudo_i$R2)
+  obs_pseudo_rank<-rbind(obs_pseudo_rank, obs_pseudo_i)
+  
+  rank_diff<-rbind(rank_diff, data.frame(ID=genes[i],
+                                         pseudo_top_mod=obs_pseudo_i$MODEL[obs_pseudo_i$pseudo_rank == min(obs_pseudo_i$pseudo_rank)][1],
+                                         pseudo_R = sqrt(obs_pseudo_i$R2[obs_pseudo_i$pseudo_rank == min(obs_pseudo_i$pseudo_rank)][1]),
+                                         obs_top_mod=obs_pseudo_i$MODEL[obs_pseudo_i$obs_rank == min(obs_pseudo_i$obs_rank)][1],
+                                         top_R = sqrt(obs_pseudo_i$R2[obs_pseudo_i$obs_rank == min(obs_pseudo_i$obs_rank)][1])))
+  
+}
+
+# Calculate correlation between model rank for each gene
+cor(obs_pseudo_rank$pseudo_rank, obs_pseudo_rank$obs_rank) # 0.0630276
+
+# Calculate the mean difference in R between the best model and the model selected by TWAS.Z
+rank_diff$diff<-rank_diff$pseudo_R-rank_diff$top_R
+mean(rank_diff$diff, na.rm=T) # -0.02343579
+
+# Calculate the percentage of genes where pseuodoval did not select the correct model
+nrow(rank_diff[rank_diff$diff != 0,])/nrow(rank_diff) # 0.8624535
+
+# Crosstab the selected observed and pseudoval-selected best model
+saveRDS(table(rank_diff$pseudo_top_mod, rank_diff$obs_top_mod),'/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo_ldak_yfs/best_pseudo_ldak_comp.rds')
+table(rank_diff$pseudo_top_mod, rank_diff$obs_top_mod)
+table(rank_diff$pseudo_top_mod)
+table(rank_diff$obs_top_mod)
+
+rank_diff<-rank_diff[order(rank_diff$diff),]
+
+library(ggplot2)
+library(cowplot)
+
+png('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo_ldak_yfs/best_pseudo_ldak_comp.png', res=300, units='px', width=1000, height=1000)
+ggplot(rank_diff, aes(x=top_R, y=pseudo_R)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1, colour='red') +
+  coord_fixed() +
+  theme_half_open() +
+  background_grid() +
+  labs(x="R (Best)", y="R (Pseudovalidated)")
+dev.off()
+
+png('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo_ldak_yfs/best_pseudo_ldak_comp_hist.png', res=300, units='px', width=1500, height=1000)
+ggplot(rank_diff, aes(x=diff)) +
+  geom_histogram() +
+  theme_half_open() +
+  background_grid() +
+  labs(x="Difference in R")
+dev.off()
+
+lim<-c(
+  min(c(sign(obs_pseudo_rank$R2)*sqrt(abs(obs_pseudo_rank$R2)), obs_pseudo_rank$R), na.rm=T),
+  max(c(sign(obs_pseudo_rank$R2)*sqrt(abs(obs_pseudo_rank$R2)), obs_pseudo_rank$R), na.rm=T)
+)
+
+plot_list<-list()
+for(i in unique(obs_pseudo_rank$MODEL)){
+  plot_list[[i]]<-ggplot(obs_pseudo_rank[obs_pseudo_rank$MODEL == i], aes(x=sign(R2)*sqrt(abs(R2)), y=R)) +
+      geom_point() +
+      geom_abline(intercept = 0, slope = 1, colour='red') +
+      theme_half_open() +
+      background_grid() +
+      xlim(lim) +
+      ylim(lim) +
+      coord_fixed() +
+      labs(x="R (Observed)", y="R (Pseudovalidated)", title=i)
+}
+
+png('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo_ldak_yfs/pseudo_ldak_model_comp.png', res=300, units='px', width=2000, height=2000)
+plot_grid(plotlist = plot_list)
+dev.off()
+
+# The correlation within each method is quite good, but there seems to be bias towards some models.
+# Can we account for the bias?
+summary(lm(obs_pseudo_rank$R ~ obs_pseudo_rank$MODEL)) # Big differences in average R
+summary(lm(obs_pseudo_rank$R2 ~ obs_pseudo_rank$MODEL)) # No significant differences in average R2
+# Support notion that we can adjust pseudo R by model bias
+
+obs_pseudo_rank$R_resid<-as.numeric(resid(lm(obs_pseudo_rank$R ~ obs_pseudo_rank$MODEL, na.action=na.exclude)))
+
+genes<-unique(pseudo_res_2$ID)
+obs_pseudo_resid_rank<-NULL
+rank_diff_resid<-NULL
+n_top<-NULL
+for(i in 1:length(genes)){
+  obs_pseudo_i<-obs_pseudo_rank[obs_pseudo_rank$ID == genes[i],]
+  obs_pseudo_i$pseudo_rank<-rank(-obs_pseudo_i$R_resid)
+  obs_pseudo_i$obs_rank<-rank(-obs_pseudo_i$R2)
+  obs_pseudo_resid_rank<-rbind(obs_pseudo_resid_rank, obs_pseudo_i)
+  
+  rank_diff_resid<-rbind(rank_diff_resid, data.frame(ID=genes[i],
+                                         pseudo_top_mod=obs_pseudo_i$MODEL[obs_pseudo_i$pseudo_rank == min(obs_pseudo_i$pseudo_rank,na.rm=T)][1],
+                                         pseudo_R = sqrt(obs_pseudo_i$R2[obs_pseudo_i$pseudo_rank == min(obs_pseudo_i$pseudo_rank,na.rm=T)][1]),
+                                         obs_top_mod=obs_pseudo_i$MODEL[obs_pseudo_i$obs_rank == min(obs_pseudo_i$obs_rank,na.rm=T)][1],
+                                         top_R = sqrt(obs_pseudo_i$R2[obs_pseudo_i$obs_rank == min(obs_pseudo_i$obs_rank,na.rm=T)][1])))
+  
+}
+
+# Calculate correlation between model rank for each gene
+cor(obs_pseudo_resid_rank$pseudo_rank, obs_pseudo_resid_rank$obs_rank) # 0.1163093
+
+# Calculate the mean difference in R between the best model and the model selected by TWAS.Z
+rank_diff_resid$diff<-rank_diff_resid$pseudo_R-rank_diff_resid$top_R
+mean(rank_diff_resid$diff, na.rm=T) # -0.02231715
+
+# Calculate the percentage of genes where pseuodoval did not select the correct model
+nrow(rank_diff_resid[rank_diff_resid$diff != 0,])/nrow(rank_diff_resid) # 0.7620818
+
+# Although there is some consistent bias across genes, this one size fits all correction can make it worse for some genes
+# On average there is a slight improvement though.
+
+```
+
+</details>
+
+<details><summary>Comparison of model that performed best in YFS to model that was selected by pseudovalidation</summary>
+
+![](/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo_fusion_yfs/best_pseudo_comp.png){width=50%}
+
+![](/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo_fusion_yfs/best_pseudo_comp_hist.png){width=50%}
+
+```{r, eval=T, echo=F}
+
+tmp<-readRDS('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo_fusion_yfs/best_pseudo_comp.rds')
+
+tmp<-tmp[dimnames(tmp)[[1]], dimnames(tmp)[[1]]]
+
+library(caret) 
+confusionMatrix(tmp)
+
+
+```
+
+The variance explained by the best model identified by pseudovalidation is very similar to the best model identified by cross validation, however the pseudoval model is often not the model identified by cross validation.
+
+</details>
+
+***
 

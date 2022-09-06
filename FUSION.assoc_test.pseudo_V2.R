@@ -92,7 +92,9 @@ if ( !is.na(opt$coloc_P) ) {
 
 # Subset SNP-weights in opt$extract_weight
 if(!is.na(opt$extract_weight)){
-  sumstat<-sumstat[sumstat$GENE == opt$extract_weight,]
+  if(any(names(sumstat) == 'GENE')){
+      sumstat<-sumstat[sumstat$GENE == opt$extract_weight,]
+  }
   wgtlist<-wgtlist[wgtlist$ID == opt$extract_weight,]
   opt$chr = wgtlist$CHR[1]
 } else {

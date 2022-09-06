@@ -167,11 +167,23 @@ Genes<-Genes[!duplicated(Genes),]
 
 pos<-merge(pos, Genes, all.x=T, by='ID')
 
+# Some genes are not being found in biomart
+# Since P0 and P1 are not used in the TWAS, I think we should just update chr and min/max(BP) from the snp data
+# This will mean all genes are used in the TWAS and reduce discrepancies between TWAS and SMR.
+
 # Read in each RDat file to retrieve N
 for(i in 1:length(rdat_list)){
   load(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/eQTLGen.eQTL/',rdat_list[i]))
   pos$N[i]<-N.tot
+  pos$CHR_pos[i]<-snps$V1[1]
+  pos$P0_pos[i]<-min(snps$V4)
+  pos$P1_pos[i]<-max(snps$V4)
+
 }
+
+pos$CHR<-pos$CHR_pos
+pos$P0[is.na(pos$P0)]<-pos$P0_pos[is.na(pos$P0)]
+pos$P1[is.na(pos$P1)]<-pos$P0_pos[is.na(pos$P1)]
 
 pos<-pos[,c('PANEL','WGT','ID','CHR','P0','P1','N')]
 
@@ -196,18 +208,18 @@ done
 
 ```
 
-```{r, eval=F, echo=T}
-# Try running FastBAT to select gene to be included in TWAS
+```{bash, eval=F, echo=T}
+# Try running mbat_combo to select gene to be included in TWAS
 for chr in $(seq 1 22);do
 
-sbatch -p cpu --mem 10G -n 1 --nodes 1 /users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/eQTL_fastBAT.R \
+sbatch -p cpu --mem 10G -n 1 --nodes 1 /users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/eQTL_mbat_combo.R \
 	--chr ${chr} \
 	--extract /users/k1806347/oliverpainfel/Data/ldsc/w_hm3.snplist \
 	--sumstats /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/eQTLGen_sumstats_full.txt \
 	--plink_ref_chr /users/k1806347/oliverpainfel/Data/1KG/Phase3/1KGPhase3.w_hm3.chr \
 	--plink_ref_keep /users/k1806347/oliverpainfel/Data/1KG/Phase3/keep_files/EUR_samples.keep \
-	--gcta /users/k1806347/oliverpainfel/Software/gcta.sh \
-  --output /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/eQTLGen.eQTL.fastbat
+	--gcta /users/k1806347/oliverpainfel/Software/gcta_1.94.sh \
+  --output /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/eQTLGen.eQTL.mbat.combo.chr${chr}
 
 done
 
@@ -287,7 +299,7 @@ for chr in $(seq 1 22); do
     --ref_ld_chr /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
     --out /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTLGen.chr${chr} \
     --chr ${chr} \
-    --coloc_P 1e-3 \
+    --coloc_P 1 \
     --GWASN 126282
   
 done
@@ -309,6 +321,20 @@ for chr in $(seq 1 22); do
         
 done
 
+# Perform MAd agg BHHR omnibus test
+for chr in $(seq 1 22); do
+
+  sbatch -p cpu --mem=20G /users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/FUSION.post_process.edit.R \
+        --input /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTLGen.GW \
+        --sumstats /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.munged.sumstats.gz \
+        --ref_ld_chr /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
+        --out /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTLGen.omnibus_edit.chr${chr} \
+        --bhhr \
+        --max_r2 1 \
+        --chr ${chr}
+        
+done
+
 ```
 
 ***
@@ -321,16 +347,16 @@ cat /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/d
 
 mkdir /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas
 
-for chr in $(seq 1 22); do
+for chr in $(seq 1 21); do
 
   sbatch -p cpu --mem 20G -n 1 /users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/FUSION.assoc_test.pseudo_V2.R \
     --sumstats /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.munged.sumstats.gz \
-  	--weights /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/FUSION/SNP-weights/YFS.BLOOD.RNAARR/YFS.BLOOD.RNAARR.pos \
-  	--weights_dir /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/FUSION/SNP-weights/YFS.BLOOD.RNAARR \
-    --ref_ld_chr /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
+  	--weights /scratch/prj/brc_mh/TWAS_resource/FUSION/SNP-weights/YFS.BLOOD.RNAARR/YFS.BLOOD.RNAARR.pos \
+  	--weights_dir /scratch/prj/brc_mh/TWAS_resource/FUSION/SNP-weights/YFS.BLOOD.RNAARR \
+    --ref_ld_chr /scratch/prj/brc_mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
     --out /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.FUSION_YFS.chr${chr} \
     --chr ${chr} \
-    --coloc_P 1e-3 \
+    --coloc_P 1 \
     --GWASN 126282
   
 done
@@ -351,7 +377,21 @@ for chr in $(seq 1 22); do
         --chr ${chr}
         
 done
-    
+   
+# Perform MAd agg test
+for chr in $(seq 1 22); do
+
+  sbatch -p cpu --mem=20G /users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/FUSION.post_process.edit.R \
+        --input /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.FUSION_YFS.GW \
+        --sumstats /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.munged.sumstats.gz \
+        --ref_ld_chr /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
+        --out /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.FUSION_YFS.omnibus_edit.chr${chr} \
+        --bhhr \
+        --max_r2 1 \
+        --chr ${chr}
+        
+done
+ 
 ```
 
 ***
@@ -366,14 +406,14 @@ mkdir /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS
 
 for chr in $(seq 1 22); do
 
-  sbatch -p cpu --mem 20G -n 1 /users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/FUSION.assoc_test.pseudo_V2.R \
+  sbatch -p cpu --mem 20G -n 1 --exclude erc-hpc-comp025 /users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/FUSION.assoc_test.pseudo_V2.R \
     --sumstats /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.munged.sumstats.gz \
   	--weights /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFSall_300722/YFS.eQTL.pos \
   	--weights_dir /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFSall_300722 \
     --ref_ld_chr /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
     --out /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTL_YFS.chr${chr} \
     --chr ${chr} \
-    --coloc_P 1e-3 \
+    --coloc_P 1 \
     --GWASN 126282
   
 done
@@ -391,6 +431,20 @@ for chr in $(seq 1 22); do
         --ref_ld_chr /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
         --out /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTL_YFS.omnibus.chr${chr} \
         --omnibus \
+        --chr ${chr}
+        
+done
+
+# Perform MAd agg BHHR omnibus test
+for chr in $(seq 1 22); do
+
+  sbatch -p cpu --mem=20G /users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/FUSION.post_process.edit.R \
+        --input /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTL_YFS.GW \
+        --sumstats /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.munged.sumstats.gz \
+        --ref_ld_chr /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
+        --out /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTL_YFS.omnibus_edit.chr${chr} \
+        --bhhr \
+        --max_r2 1 \
         --chr ${chr}
         
 done
@@ -506,26 +560,31 @@ smr_eqtlgen$external_gene_name[smr_eqtlgen$external_gene_name == '']<-NA
 
 smr_eqtlgen$p_SMR.BONF<-p.adjust(smr_eqtlgen$p_SMR, method = 'bonferroni')
 sum(smr_eqtlgen$p_SMR.BONF < 0.05) #217
+sum(smr_eqtlgen$p_SMR.BONF < 0.05 & smr_eqtlgen$p_HEIDI > 0.05) #67
 
 # Number of unique genes tested
-length(unique(twas$ensembl_gene_id)) # 19030
+length(unique(twas$ensembl_gene_id)) # 19156
 length(unique(smr_eqtlgen$ensembl_gene_id)) # 15330
-sum(unique(twas$ensembl_gene_id) %in% smr_eqtlgen$ensembl_gene_id) # 15242
+sum(unique(twas$ensembl_gene_id) %in% smr_eqtlgen$ensembl_gene_id) # 15328
+
+# There are two genes in the SMR results that are not in the TWAS. This is due to an insufficient number of variants being present for the gene.
 
 # Restrict TWAS model with largest absolute Z score
 twas_topsig<-twas[order(twas$TWAS.P),]
 twas_topsig<-twas_topsig[!duplicated(twas_topsig$ensembl_gene_id),]
 twas_topsig$TWAS.P.BONF<-p.adjust(twas_topsig$TWAS.P, method = 'bonferroni')
-sum(twas_topsig$TWAS.P.BONF < 0.05) # 801
+sum(twas_topsig$TWAS.P.BONF < 0.05) # 806
+sum(twas_topsig$TWAS.P.BONF < 0.05 & twas_topsig$COLOC.PP4 > 0.8) # 131
 
-sum(smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05] %in% twas_topsig$ensembl_gene_id) # 215
-sum(smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05] %in% twas_topsig$ensembl_gene_id[twas_topsig$TWAS.P.BONF < 0.05]) # 212
+sum(smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05] %in% twas_topsig$ensembl_gene_id) # 217
+sum(smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05] %in% twas_topsig$ensembl_gene_id[twas_topsig$TWAS.P.BONF < 0.05]) # 217
+sum(smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05 & smr_eqtlgen$p_HEIDI > 0.05] %in% twas_topsig$ensembl_gene_id[twas_topsig$TWAS.P.BONF < 0.05 & twas_topsig$COLOC.PP4 > 0.8]) # 214
 
 smr_eqtlgen$z_SMR<-smr_eqtlgen$b_SMR/smr_eqtlgen$se_SMR
 
 both<-merge(smr_eqtlgen[,c('ensembl_gene_id','z_SMR'),with=F], twas_topsig[,c('ensembl_gene_id','TWAS.Z'),with=F], by='ensembl_gene_id')
 
-cor(both$z_SMR, both$TWAS.Z) # 0.733
+cor(both$z_SMR, both$TWAS.Z) # 0.7721856
 plot(both$z_SMR, both$TWAS.Z)
 
 # Restrict to feature with best pseudovalidation Z
@@ -542,15 +601,18 @@ pseudo_res<-pseudo_res[!duplicated(pseudo_res$ID),]
 names(pseudo_res)[names(pseudo_res) == 'ID']<-'ensembl_gene_id'
 
 twas_pseudo<-merge(twas, pseudo_res[,c('ensembl_gene_id','MODEL'),with=F], by=c('ensembl_gene_id','MODEL'))
+length(unique(twas_pseudo$ensembl_gene_id)) # 19156
 twas_pseudo$TWAS.P.BONF<-p.adjust(twas_pseudo$TWAS.P, method = 'bonferroni')
-sum(twas_pseudo$TWAS.P.BONF < 0.05) # 452
+sum(twas_pseudo$TWAS.P.BONF < 0.05) # 455
+sum(twas_pseudo$TWAS.P.BONF < 0.05 &twas_pseudo$COLOC.PP4 > 0.8) # 90
 
-sum(smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05] %in% twas_pseudo$ensembl_gene_id) # 215
-sum(smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05] %in% twas_pseudo$ensembl_gene_id[twas_pseudo$TWAS.P.BONF < 0.05]) # 165
+sum(smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05] %in% twas_pseudo$ensembl_gene_id) # 217
+sum(smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05] %in% twas_pseudo$ensembl_gene_id[twas_pseudo$TWAS.P.BONF < 0.05]) # 166
+sum(twas_pseudo$ensembl_gene_id[twas_pseudo$TWAS.P.BONF < 0.05 & twas_pseudo$COLOC.PP4 > 0.8] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05 & smr_eqtlgen$p_HEIDI > 0.05] ) # 36
 
 both_2<-merge(smr_eqtlgen[,c('ensembl_gene_id','z_SMR'),with=F], twas_pseudo[,c('ensembl_gene_id','TWAS.Z'),with=F], by='ensembl_gene_id')
 
-cor(both_2$z_SMR, both_2$TWAS.Z) # 0.7477322
+cor(both_2$z_SMR, both_2$TWAS.Z) # 0.74755
 plot(both_2$z_SMR, both_2$TWAS.Z)
 
 # Read in HSQ p-values
@@ -565,66 +627,95 @@ for(i in 1:nrow(eqtl_pos)){
                                      p=hsq.pv))
 }
 
+fwrite(eqtl_h2, '/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/eQTLGen.hsq.txt', sep=' ', na='NA', quote=F)
+
+eqtl_h2<-fread('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/eQTLGen.hsq.txt')
+
 # Restrict eQTL assoc to genes with hsq.p < 0.01
 twas_eqtl_hsq<-eqtl_h2[which(eqtl_h2$p < 0.01),]
 length(unique(twas_eqtl_hsq$ID)) # 15952
 
 twas_hsq_pseudo<-merge(twas_pseudo, twas_eqtl_hsq, by.x="ensembl_gene_id", by.y='ID')
 
-nrow(twas_hsq_pseudo) # 15861
+nrow(twas_hsq_pseudo) # 15950 (two are missing as we document above)
 twas_hsq_pseudo$TWAS.P.BONF<-p.adjust(twas_hsq_pseudo$TWAS.P, method = 'bonferroni')
-sum(twas_hsq_pseudo$TWAS.P.BONF < 0.05) # 341
+sum(twas_hsq_pseudo$TWAS.P.BONF < 0.05) # 342
+sum(twas_hsq_pseudo$TWAS.P.BONF < 0.05 & twas_hsq_pseudo$COLOC.PP4 > 0.8) # 73
 
-sum(smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05] %in% twas_hsq_pseudo$ensembl_gene_id) # 157
-sum(smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05] %in% twas_hsq_pseudo$ensembl_gene_id[twas_hsq_pseudo$TWAS.P.BONF < 0.05]) # 119
+sum(smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05] %in% twas_hsq_pseudo$ensembl_gene_id) # 159
+sum(smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05] %in% twas_hsq_pseudo$ensembl_gene_id[twas_hsq_pseudo$TWAS.P.BONF < 0.05]) # 120
+sum(smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05 & smr_eqtlgen$p_HEIDI > 0.05] %in% twas_hsq_pseudo$ensembl_gene_id[twas_hsq_pseudo$TWAS.P.BONF < 0.05  & twas_hsq_pseudo$COLOC.PP4 > 0.8]) # 34
 
 both_2<-merge(smr_eqtlgen[,c('ensembl_gene_id','z_SMR'),with=F], twas_hsq_pseudo[,c('ensembl_gene_id','TWAS.Z'),with=F], by='ensembl_gene_id')
 
-cor(both_2$z_SMR, both_2$TWAS.Z) # 0.749565
-plot(both_2$z_SMR, both_2$TWAS.Z)
+cor(both_2$z_SMR, both_2$TWAS.Z) # 0.749739
 
-# Restrict to genes based on fastBAT
-fastbat_files<-list.files(path='/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/eQTLGen.eQTL.fastbat/',pattern='.fastbat')
-fastbat_res<-NULL
-for(i in fastbat_files){
-  fastbat_res<-rbind(fastbat_res, fread(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/eQTLGen.eQTL.fastbat/',i)))
+# Restrict to genes based on fastBAT or mbat_combo
+mbat_res<-NULL
+for(i in 1:22){
+  mbat_res<-rbind(mbat_res, fread(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/eQTLGen.eQTL.mbat.combo.chr',i,'.res.txt')))
 }
 
-fwrite(fastbat_res, '/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/eQTLGen.eQTL.fastbat/fastbat_all_res.txt', sep=' ', quote=F, na='NA')
+# Check results in relation to fastbat
+sum(!(is.na(mbat_res$P_fastBAT) & is.na(mbat_res$TopSNP_Pvalue))) # 19214
+mbat_res$P_fastBAT.FDR<-p.adjust(mbat_res$P_fastBAT, method='fdr')
+# Restrict to genes with either FDR sig gene association or gneome-wide sig eQTL
+fastbat_res_sig<-mbat_res[mbat_res$P_fastBAT.FDR < 0.05 | mbat_res$TopSNP_Pvalue < 5e-8,]
+nrow(fastbat_res_sig) # 16578
 
-nrow(fastbat_res) # 19030
+twas_fastbat_pseudo<-merge(twas_pseudo, fastbat_res_sig, by.x="ensembl_gene_id", by.y='Gene')
 
-fastbat_res_sig<-fastbat_res[fastbat_res$Pvalue < 0.01 | fastbat_res$TopSNP.Pvalue < 5e-8,]
-nrow(fastbat_res_sig) # 15983
-
-twas_fastbat_pseudo<-merge(twas_pseudo, fastbat_res_sig, by.x="ensembl_gene_id", by.y='Set')
-
-nrow(twas_fastbat_pseudo) # 15876
+nrow(twas_fastbat_pseudo) # 16561
 twas_fastbat_pseudo$TWAS.P.BONF<-p.adjust(twas_fastbat_pseudo$TWAS.P, method = 'bonferroni')
-sum(twas_fastbat_pseudo$TWAS.P.BONF < 0.05) # 446
+sum(twas_fastbat_pseudo$TWAS.P.BONF < 0.05) # 452
+sum(twas_fastbat_pseudo$TWAS.P.BONF < 0.05 & twas_fastbat_pseudo$COLOC.PP4 > 0.8) # 90
 
-sum(smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05] %in% twas_fastbat_pseudo$ensembl_gene_id) # 215
-sum(smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05] %in% twas_fastbat_pseudo$ensembl_gene_id[twas_fastbat_pseudo$TWAS.P.BONF < 0.05]) # 165
+sum(smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05] %in% twas_fastbat_pseudo$ensembl_gene_id) # 217
+sum(smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05] %in% twas_fastbat_pseudo$ensembl_gene_id[twas_fastbat_pseudo$TWAS.P.BONF < 0.05]) # 166
+sum(smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05 & smr_eqtlgen$p_HEIDI > 0.05] %in% twas_fastbat_pseudo$ensembl_gene_id[twas_fastbat_pseudo$TWAS.P.BONF < 0.05 & twas_fastbat_pseudo$COLOC.PP4 > 0.8]) # 36
 
 both_2<-merge(smr_eqtlgen[,c('ensembl_gene_id','z_SMR'),with=F], twas_fastbat_pseudo[,c('ensembl_gene_id','TWAS.Z'),with=F], by='ensembl_gene_id')
 
-cor(both_2$z_SMR, both_2$TWAS.Z) # 0.7512183
+cor(both_2$z_SMR, both_2$TWAS.Z) # 0.7500388
+plot(both_2$z_SMR, both_2$TWAS.Z)
+
+# Check results in relation to mbat_combo
+sum(!is.na(mbat_res$P_mBATcombo)) # 19198
+mbat_res$P_mBATcombo.FDR<-p.adjust(mbat_res$P_mBATcombo, method='fdr')
+mbat_combo_res_sig<-mbat_res[mbat_res$P_mBATcombo.FDR < 0.05 | mbat_res$TopSNP_Pvalue < 5e-8,]
+nrow(mbat_combo_res_sig) # 16709
+
+twas_mbat_combo_pseudo<-merge(twas_pseudo, mbat_combo_res_sig, by.x="ensembl_gene_id", by.y='Gene')
+
+nrow(twas_mbat_combo_pseudo) # 16692
+twas_mbat_combo_pseudo$TWAS.P.BONF<-p.adjust(twas_mbat_combo_pseudo$TWAS.P, method = 'bonferroni')
+sum(twas_mbat_combo_pseudo$TWAS.P.BONF < 0.05) # 449
+sum(twas_mbat_combo_pseudo$TWAS.P.BONF < 0.05 & twas_mbat_combo_pseudo$COLOC.PP4 > 0.8) # 90
+
+sum(smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05] %in% twas_mbat_combo_pseudo$ensembl_gene_id) # 217
+sum(smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05] %in% twas_mbat_combo_pseudo$ensembl_gene_id[twas_mbat_combo_pseudo$TWAS.P.BONF < 0.05]) # 166
+sum(smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05 & smr_eqtlgen$p_HEIDI > 0.05] %in% twas_mbat_combo_pseudo$ensembl_gene_id[twas_mbat_combo_pseudo$TWAS.P.BONF < 0.05 & twas_mbat_combo_pseudo$COLOC.PP4 > 0.8]) # 36
+
+both_2<-merge(smr_eqtlgen[,c('ensembl_gene_id','z_SMR'),with=F], twas_mbat_combo_pseudo[,c('ensembl_gene_id','TWAS.Z'),with=F], by='ensembl_gene_id')
+
+cor(both_2$z_SMR, both_2$TWAS.Z) # 0.7497839
 plot(both_2$z_SMR, both_2$TWAS.Z)
 
 # Restrict TWAS top1 model
 twas_top1<-twas[twas$MODEL == 'top1',]
 twas_top1$TWAS.P.BONF<-p.adjust(twas_top1$TWAS.P, method = 'bonferroni')
-sum(twas_top1$TWAS.P.BONF < 0.05) # 305
+sum(twas_top1$TWAS.P.BONF < 0.05) # 309
+sum(twas_top1$TWAS.P.BONF < 0.05 & twas_top1$COLOC.PP4 > 0.8) # 105
 
-sum(smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05] %in% twas_top1$ensembl_gene_id) # 213
-sum(smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05] %in% twas_top1$ensembl_gene_id[twas_top1$TWAS.P.BONF < 0.05]) # 202
+sum(smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05] %in% twas_top1$ensembl_gene_id) # 215
+sum(smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05] %in% twas_top1$ensembl_gene_id[twas_top1$TWAS.P.BONF < 0.05]) # 204
+sum(smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05 & smr_eqtlgen$p_HEIDI > 0.05] %in% twas_top1$ensembl_gene_id[twas_top1$TWAS.P.BONF < 0.05 & twas_top1$COLOC.PP4 > 0.8]) # 44
 
 smr_eqtlgen$z_SMR<-smr_eqtlgen$b_SMR/smr_eqtlgen$se_SMR
 
 both<-merge(smr_eqtlgen[,c('ensembl_gene_id','z_SMR'),with=F], twas_top1[,c('ensembl_gene_id','TWAS.Z'),with=F], by='ensembl_gene_id')
 
-cor(both$z_SMR, both$TWAS.Z) # 0.9284616
-plot(both$z_SMR, both$TWAS.Z)
+cor(both$z_SMR, both$TWAS.Z) # 0.9285636
 
 # Observations:
 # - A lare proportion of significant SMR genes aren't present in the eQTL TWAS. 
@@ -659,34 +750,92 @@ ACATO <- function(p){
     pval
 }
 
-# Calc ACAT-O pvalue
-twas_gene<-NULL
-for(i in unique(twas$ensembl_gene_id)){
-  twas_gene<-rbind(twas_gene, 
-                          data.frame(ensembl_gene_id=i,
-                                     ACATO.P=ACATO(twas$TWAS.P[twas$ensembl_gene_id == i]),
-                                     min_Z=min(twas$TWAS.Z[twas$ensembl_gene_id == i]),
-                                     max_Z=max(twas$TWAS.Z[twas$ensembl_gene_id == i]),
-                                     min_P=min(twas$TWAS.P[twas$ensembl_gene_id == i]),
-                                     max_P=max(twas$TWAS.P[twas$ensembl_gene_id == i])))
-}
+twas$P_onesided<-twas$TWAS.P/2
+twas$P_onesided[twas$TWAS.Z < 0]<- 1-twas$P_onesided[twas$TWAS.Z < 0]
 
-nrow(twas_gene) # 19030
+# Calc ACAT-O pvalue
+twas_gene<-data.table(ensembl_gene_id=sort(unique(twas$ensembl_gene_id)),
+                                     ACATO.P=aggregate(twas$TWAS.P, list(twas$ensembl_gene_id), FUN=ACATO)$x,
+                                     ACATO.P_one=aggregate(twas$P_onesided, list(twas$ensembl_gene_id), FUN=ACATO)$x,
+                                     mean_Z=aggregate(twas$TWAS.Z, list(twas$ensembl_gene_id), FUN=mean)$x)
+
+# Convert one-sided ACAT P into two sided
+twas_gene$ACATO.P_two<-twas_gene$ACATO.P_one
+twas_gene$ACATO.P_two[twas_gene$ACATO.P_one > 0.5]<- 1-twas_gene$ACATO.P_one[twas_gene$ACATO.P_one > 0.5]
+twas_gene$ACATO.P_two<-2*twas_gene$ACATO.P_two
+
+# The P value is the same when all genes have the same direction of effect, indicating using one-sided p-values doesn't influence ACAT.O. By using one sided p-values we are taking account for the direction of each association, and we can calculate a signed Z scores corresponding to that P value.
+
+twas_gene$ACATO.Z<--qnorm(twas_gene$ACATO.P/2)
+twas_gene$ACATO.Z_one<--qnorm(twas_gene$ACATO.P_one)
+# This seems legit. Using one sided p-values in ACATO seems better. Check how this changes results
+
+nrow(twas_gene) # 19156
 twas_gene$ACATO.P.BONF<-p.adjust(twas_gene$ACATO.P, method='bonferroni')
-sum(twas_gene$ACATO.P.BONF < 0.05) # 629
-sum(twas_gene$ensembl_gene_id[twas_gene$ACATO.P.BONF < 0.05] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05]) # 206
+sum(twas_gene$ACATO.P.BONF < 0.05) # 634
+
+twas_gene<-merge(twas_gene,twas_pseudo[,c('ensembl_gene_id','COLOC.PP4'), with=F],by='ensembl_gene_id')
+
+sum(twas_gene$ACATO.P.BONF < 0.05 & twas_gene$COLOC.PP4 > 0.8) # 115
+sum(twas_gene$ensembl_gene_id[twas_gene$ACATO.P.BONF < 0.05] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05]) # 208
+sum(twas_gene$ensembl_gene_id[twas_gene$ACATO.P.BONF < 0.05 & twas_gene$COLOC.PP4 > 0.8] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05 & smr_eqtlgen$p_HEIDI > 0.05]) # 43
 
 twas_gene_hsq<-twas_gene[twas_gene$ensembl_gene_id %in% twas_eqtl_hsq$ID,]
-nrow(twas_gene_hsq) # 15861
+nrow(twas_gene_hsq) # 15950
 twas_gene_hsq$ACATO.P.BONF<-p.adjust(twas_gene_hsq$ACATO.P, method='bonferroni')
-sum(twas_gene_hsq$ACATO.P.BONF < 0.05) # 440
-sum(twas_gene_hsq$ensembl_gene_id[twas_gene_hsq$ACATO.P.BONF < 0.05] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05]) # 150
+sum(twas_gene_hsq$ACATO.P.BONF < 0.05) # 443
+sum(twas_gene_hsq$ACATO.P.BONF < 0.05 & twas_gene_hsq$COLOC.PP4 > 0.8) # 98
+sum(twas_gene_hsq$ensembl_gene_id[twas_gene_hsq$ACATO.P.BONF < 0.05] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05]) # 152
+sum(twas_gene_hsq$ensembl_gene_id[twas_gene_hsq$ACATO.P.BONF < 0.05 & twas_gene_hsq$COLOC.PP4 > 0.8] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05 & smr_eqtlgen$p_HEIDI > 0.05]) # 42
 
-twas_gene_fastbat<-twas_gene[twas_gene$ensembl_gene_id %in% fastbat_res_sig$Set,]
-nrow(twas_gene_fastbat) # 15876
+twas_gene_fastbat<-twas_gene[twas_gene$ensembl_gene_id %in% fastbat_res_sig$Gene,]
+nrow(twas_gene_fastbat) # 16561
 twas_gene_fastbat$ACATO.P.BONF<-p.adjust(twas_gene_fastbat$ACATO.P, method='bonferroni')
-sum(twas_gene_fastbat$ACATO.P.BONF < 0.05) # 587
-sum(twas_gene_fastbat$ensembl_gene_id[twas_gene_fastbat$ACATO.P.BONF < 0.05] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05]) # 208
+sum(twas_gene_fastbat$ACATO.P.BONF < 0.05) # 603
+sum(twas_gene_fastbat$ACATO.P.BONF < 0.05 & twas_gene_fastbat$COLOC.PP4 > 0.8) # 116
+sum(twas_gene_fastbat$ensembl_gene_id[twas_gene_fastbat$ACATO.P.BONF < 0.05] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05]) # 210
+sum(twas_gene_fastbat$ensembl_gene_id[twas_gene_fastbat$ACATO.P.BONF < 0.05 & twas_gene_fastbat$COLOC.PP4 > 0.8] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05 & smr_eqtlgen$p_HEIDI > 0.05]) # 44
+
+twas_gene_mbat_combo<-twas_gene[twas_gene$ensembl_gene_id %in% mbat_combo_res_sig$Gene,]
+nrow(twas_gene_mbat_combo) # 16692
+twas_gene_mbat_combo$ACATO.P.BONF<-p.adjust(twas_gene_mbat_combo$ACATO.P, method='bonferroni')
+sum(twas_gene_mbat_combo$ACATO.P.BONF < 0.05) # 601
+sum(twas_gene_mbat_combo$ACATO.P.BONF < 0.05 & twas_gene_mbat_combo$COLOC.PP4 > 0.8) # 116
+sum(twas_gene_mbat_combo$ensembl_gene_id[twas_gene_mbat_combo$ACATO.P.BONF < 0.05] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05]) # 209
+sum(twas_gene_mbat_combo$ensembl_gene_id[twas_gene_mbat_combo$ACATO.P.BONF < 0.05 & twas_gene_mbat_combo$COLOC.PP4 > 0.8] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05 & smr_eqtlgen$p_HEIDI > 0.05]) # 44
+
+# Using one-sided ACAT
+nrow(twas_gene) # 19156
+twas_gene$ACATO.P_two.BONF<-p.adjust(twas_gene$ACATO.P_two, method='bonferroni')
+sum(twas_gene$ACATO.P_two.BONF < 0.05) # 634
+
+sum(twas_gene$ACATO.P_two.BONF < 0.05 & twas_gene$COLOC.PP4 > 0.8) # 115
+sum(twas_gene$ensembl_gene_id[twas_gene$ACATO.P_two.BONF < 0.05] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05]) # 208
+sum(twas_gene$ensembl_gene_id[twas_gene$ACATO.P_two.BONF < 0.05 & twas_gene$COLOC.PP4 > 0.8] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05 & smr_eqtlgen$p_HEIDI > 0.05]) # 43
+
+twas_gene_hsq<-twas_gene[twas_gene$ensembl_gene_id %in% twas_eqtl_hsq$ID,]
+nrow(twas_gene_hsq) # 15950
+twas_gene_hsq$ACATO.P_two.BONF<-p.adjust(twas_gene_hsq$ACATO.P_two, method='bonferroni')
+sum(twas_gene_hsq$ACATO.P_two.BONF < 0.05) # 443
+sum(twas_gene_hsq$ACATO.P_two.BONF < 0.05 & twas_gene_hsq$COLOC.PP4 > 0.8) # 98
+sum(twas_gene_hsq$ensembl_gene_id[twas_gene_hsq$ACATO.P_two.BONF < 0.05] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05]) # 152
+sum(twas_gene_hsq$ensembl_gene_id[twas_gene_hsq$ACATO.P_two.BONF < 0.05 & twas_gene_hsq$COLOC.PP4 > 0.8] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05 & smr_eqtlgen$p_HEIDI > 0.05]) # 42
+
+twas_gene_fastbat<-twas_gene[twas_gene$ensembl_gene_id %in% fastbat_res_sig$Gene,]
+nrow(twas_gene_fastbat) # 16561
+twas_gene_fastbat$ACATO.P_two.BONF<-p.adjust(twas_gene_fastbat$ACATO.P_two, method='bonferroni')
+sum(twas_gene_fastbat$ACATO.P_two.BONF < 0.05) # 602
+sum(twas_gene_fastbat$ACATO.P_two.BONF < 0.05 & twas_gene_fastbat$COLOC.PP4 > 0.8) # 116
+sum(twas_gene_fastbat$ensembl_gene_id[twas_gene_fastbat$ACATO.P_two.BONF < 0.05] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05]) # 209
+sum(twas_gene_fastbat$ensembl_gene_id[twas_gene_fastbat$ACATO.P_two.BONF < 0.05 & twas_gene_fastbat$COLOC.PP4 > 0.8] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05 & smr_eqtlgen$p_HEIDI > 0.05]) # 44
+
+twas_gene_mbat_combo<-twas_gene[twas_gene$ensembl_gene_id %in% mbat_combo_res_sig$Gene,]
+nrow(twas_gene_mbat_combo) # 16692
+twas_gene_mbat_combo$ACATO.P_two.BONF<-p.adjust(twas_gene_mbat_combo$ACATO.P_two, method='bonferroni')
+sum(twas_gene_mbat_combo$ACATO.P_two.BONF < 0.05) # 601
+sum(twas_gene_mbat_combo$ACATO.P_two.BONF < 0.05 & twas_gene_mbat_combo$COLOC.PP4 > 0.8) # 116
+sum(twas_gene_mbat_combo$ensembl_gene_id[twas_gene_mbat_combo$ACATO.P_two.BONF < 0.05] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05]) # 209
+sum(twas_gene_mbat_combo$ensembl_gene_id[twas_gene_mbat_combo$ACATO.P_two.BONF < 0.05 & twas_gene_mbat_combo$COLOC.PP4 > 0.8] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05 & smr_eqtlgen$p_HEIDI > 0.05]) # 44
 
 # Read in omnibus tests using eQTL TWAS
 omnibus<-NULL
@@ -697,21 +846,393 @@ for(i in 1:22){
 
 omnibus$OMNIBUS.P.BONF<-p.adjust(omnibus$OMNIBUS.P, method='bonferroni')
 
-nrow(omnibus) # 19021
-sum(omnibus$OMNIBUS.P.BONF < 0.05) # 2156
-sum(omnibus$GENE[omnibus$OMNIBUS.P.BONF < 0.05] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05]) # 200
+omnibus<-merge(omnibus,twas_pseudo[,c('ensembl_gene_id','COLOC.PP4'), with=F],by.x='GENE', by.y='ensembl_gene_id')
+
+nrow(omnibus) # 19147
+sum(omnibus$OMNIBUS.P.BONF < 0.05) # 2179
+sum(omnibus$OMNIBUS.P.BONF < 0.05 & omnibus$COLOC.PP4 > 0.8) # 121
+
+sum(omnibus$GENE[omnibus$OMNIBUS.P.BONF < 0.05] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05]) # 202
+sum(omnibus$GENE[omnibus$OMNIBUS.P.BONF < 0.05 & omnibus$COLOC.PP4 > 0.8] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05 & smr_eqtlgen$p_HEIDI > 0.05]) # 39
 
 omnibus_hsq<-omnibus[omnibus$GENE %in% twas_eqtl_hsq$ID,]
 omnibus_hsq$OMNIBUS.P.BONF<-p.adjust(omnibus_hsq$OMNIBUS.P, method='bonferroni')
-nrow(omnibus_hsq) # 15856
-sum(omnibus_hsq$OMNIBUS.P.BONF < 0.05) # 1450
-sum(omnibus_hsq$GENE[omnibus_hsq$OMNIBUS.P.BONF < 0.05] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05]) # 143
+nrow(omnibus_hsq) # 15945
+sum(omnibus_hsq$OMNIBUS.P.BONF < 0.05) # 1460
+sum(omnibus_hsq$OMNIBUS.P.BONF < 0.05 & omnibus_hsq$COLOC.PP4 > 0.8) # 101
+sum(omnibus_hsq$GENE[omnibus_hsq$OMNIBUS.P.BONF < 0.05] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05]) # 145
+sum(omnibus_hsq$GENE[omnibus_hsq$OMNIBUS.P.BONF < 0.05 & omnibus_hsq$COLOC.PP4 > 0.8] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05 & smr_eqtlgen$p_HEIDI > 0.05]) # 37
 
-omnibus_fastbat<-omnibus[omnibus$GENE %in% fastbat_res_sig$Set,]
+omnibus_fastbat<-omnibus[omnibus$GENE %in% fastbat_res_sig$Gene,]
 omnibus_fastbat$OMNIBUS.P.BONF<-p.adjust(omnibus_fastbat$OMNIBUS.P, method='bonferroni')
-nrow(omnibus_fastbat) # 15868
-sum(omnibus_fastbat$OMNIBUS.P.BONF < 0.05) # 1592
-sum(omnibus_fastbat$GENE[omnibus_fastbat$OMNIBUS.P.BONF < 0.05] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05]) # 201
+nrow(omnibus_fastbat) # 16553
+sum(omnibus_fastbat$OMNIBUS.P.BONF < 0.05) # 1733
+sum(omnibus_fastbat$OMNIBUS.P.BONF < 0.05 & omnibus_fastbat$COLOC.PP4 > 0.8) # 122
+sum(omnibus_fastbat$GENE[omnibus_fastbat$OMNIBUS.P.BONF < 0.05] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05]) # 203
+sum(omnibus_fastbat$GENE[omnibus_fastbat$OMNIBUS.P.BONF < 0.05 & omnibus_fastbat$COLOC.PP4 > 0.8] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05 & smr_eqtlgen$p_HEIDI > 0.05]) # 39
+# Note. Results are identical to when using the two-sided pvalues. Using the one sided has approach has the benefit of having a corresponding signed Z score.
+
+omnibus_mbat_combo<-omnibus[omnibus$GENE %in% mbat_combo_res_sig$Gene,]
+omnibus_mbat_combo$OMNIBUS.P.BONF<-p.adjust(omnibus_mbat_combo$OMNIBUS.P, method='bonferroni')
+nrow(omnibus_mbat_combo) # 16684
+sum(omnibus_mbat_combo$OMNIBUS.P.BONF < 0.05) # 1754
+sum(omnibus_mbat_combo$OMNIBUS.P.BONF < 0.05 & omnibus_mbat_combo$COLOC.PP4 > 0.8) # 122
+sum(omnibus_mbat_combo$GENE[omnibus_mbat_combo$OMNIBUS.P.BONF < 0.05] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05]) # 203
+sum(omnibus_mbat_combo$GENE[omnibus_mbat_combo$OMNIBUS.P.BONF < 0.05 & omnibus_mbat_combo$COLOC.PP4 > 0.8] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05 & smr_eqtlgen$p_HEIDI > 0.05]) # 39
+
+# Read in MAd agg BHHR omnibus tests using eQTL TWAS
+mad_omnibus<-NULL
+for(i in 1:22){
+  mad_omnibus<-rbind(mad_omnibus, read.table(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTLGen.omnibus_edit.chr',i,'.omnibus.pv'), header=T, stringsAsFactors = F))
+
+}
+
+mad_omnibus$BHHR.P.BONF<-p.adjust(mad_omnibus$BHHR.P, method='bonferroni')
+
+mad_omnibus<-merge(mad_omnibus,twas_pseudo[,c('ensembl_gene_id','COLOC.PP4'), with=F],by.x='GENE', by.y='ensembl_gene_id')
+
+nrow(mad_omnibus) # 19156     
+sum(mad_omnibus$BHHR.P.BONF < 0.05) # 575
+sum(mad_omnibus$BHHR.P.BONF < 0.05 & mad_omnibus$COLOC.PP4 > 0.8) # 122
+sum(mad_omnibus$GENE[mad_omnibus$BHHR.P.BONF < 0.05] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05]) # 195
+sum(mad_omnibus$GENE[mad_omnibus$BHHR.P.BONF < 0.05 & mad_omnibus$COLOC.PP4 > 0.8] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05 & smr_eqtlgen$p_HEIDI > 0.05]) # 40
+
+mad_omnibus_hsq<-mad_omnibus[mad_omnibus$GENE %in% twas_eqtl_hsq$ID,]
+mad_omnibus_hsq$BHHR.P.BONF<-p.adjust(mad_omnibus_hsq$BHHR.P, method='bonferroni')
+nrow(mad_omnibus_hsq) # 15950
+sum(mad_omnibus_hsq$BHHR.P.BONF < 0.05) # 408
+sum(mad_omnibus_hsq$BHHR.P.BONF < 0.05 & mad_omnibus_hsq$COLOC.PP4 > 0.8) # 103
+sum(mad_omnibus_hsq$GENE[mad_omnibus_hsq$BHHR.P.BONF < 0.05] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05 ]) # 141
+sum(mad_omnibus_hsq$GENE[mad_omnibus_hsq$BHHR.P.BONF < 0.05 & mad_omnibus_hsq$COLOC.PP4 > 0.8] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05 & smr_eqtlgen$p_HEIDI > 0.05]) # 39
+
+mad_omnibus_fastbat<-mad_omnibus[mad_omnibus$GENE %in% fastbat_res_sig$Gene,]
+mad_omnibus_fastbat$BHHR.P.BONF<-p.adjust(mad_omnibus_fastbat$BHHR.P, method='bonferroni')
+nrow(mad_omnibus_fastbat) # 16561
+sum(mad_omnibus_fastbat$BHHR.P.BONF < 0.05) # 550
+sum(mad_omnibus_fastbat$BHHR.P.BONF < 0.05 & mad_omnibus_fastbat$COLOC.PP4 > 0.8) # 124
+sum(mad_omnibus_fastbat$GENE[mad_omnibus_fastbat$BHHR.P.BONF < 0.05] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05]) # 196
+sum(mad_omnibus_fastbat$GENE[mad_omnibus_fastbat$BHHR.P.BONF < 0.05 & mad_omnibus_fastbat$COLOC.PP4 > 0.8] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05& smr_eqtlgen$p_HEIDI > 0.05]) # 41
+
+mad_omnibus_mbat_combo<-mad_omnibus[mad_omnibus$GENE %in% mbat_combo_res_sig$Gene,]
+mad_omnibus_mbat_combo$BHHR.P.BONF<-p.adjust(mad_omnibus_mbat_combo$BHHR.P, method='bonferroni')
+nrow(mad_omnibus_mbat_combo) # 16692
+sum(mad_omnibus_mbat_combo$BHHR.P.BONF < 0.05) # 547
+sum(mad_omnibus_mbat_combo$BHHR.P.BONF < 0.05 & mad_omnibus_mbat_combo$COLOC.PP4 > 0.8) # 124
+sum(mad_omnibus_mbat_combo$GENE[mad_omnibus_mbat_combo$BHHR.P.BONF < 0.05] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05]) # 196
+sum(mad_omnibus_mbat_combo$GENE[mad_omnibus_mbat_combo$BHHR.P.BONF < 0.05 & mad_omnibus_mbat_combo$COLOC.PP4 > 0.8] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05& smr_eqtlgen$p_HEIDI > 0.05]) # 41
+
+# Interesting that there are slightly fewer sig genes for BHHR compared to ACAT.O. I reckon there is some bias in ACAT.O by not considering direction of effect. We should run some simulations to estimate false positive rate.
+
+# We can do simulations by using the script for estimating transcriptome-wide significant thresholds, which regresses predicted expression levels against a random phenotype. Then we can apply these different inclusion criteria and aggregation methods.
+
+```
+
+```{r, eval=F, echo=T}
+############
+# Deep dive into the discrepancies between TWAS and SMR
+############
+# Some genes are present in the TWAS but not in SMR due to inclusion criteria for the gene (none in TWAS/GW sig eQTL for SMR). When hsq or fastbat inclusion criteria are used for TWAS the number of genes included is more similar. There are quite a few genes showing as significant using the top1 model that are not significant in the SMR analysis. Look into why that is - Are they genes that simply weren't included in the SMR analysis?
+# SMR used the full cis-eQTL results, whereas TWAS uses only HapMap3 SNPs, providing some explanation for the difference between TWAS top1 models and SMR results.
+# Find some genes that are highly discrepant in terms of significance between TWAS (pseudoval) and SMR, and look into why there is a difference. Is it because of a different model choice, or different inclusion of SNPs?
+# Try to get indication of whether inclusion criteria filter out spurious results (FastBAT causes a substantal reduction in the number of genes tested, but not a large reduction in significant genes identified).
+
+
+library(data.table)
+library(biomaRt)
+
+ensembl = useEnsembl(biomart="ensembl", dataset="hsapiens_gene_ensembl", GRCh=37)
+Genes<-getBM(attributes=c('ensembl_gene_id','external_gene_name'), mart = ensembl)
+Genes<-Genes[!duplicated(Genes$ensembl_gene_id),]
+
+# Read in TWAS results
+twas_files<-list.files(path=paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas_OLD_03092022//'), pattern=paste0('SCZ.TWAS.eQTLGen.chr'))
+
+twas<-NULL
+for(i in twas_files){
+  twas<-rbind(twas, fread(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas_OLD_03092022/',i)))
+}
+
+twas<-merge(twas,Genes, by.x='ID', by.y='ensembl_gene_id', all.x=T)
+names(twas)[names(twas) == 'ID']<-'ensembl_gene_id'
+
+twas<-twas[,c('FILE','PANEL','MODEL','NSNP','NWGT','MODELCV.R2','ensembl_gene_id','external_gene_name','CHR','P0','P1','TWAS.Z','TWAS.P','COLOC.PP3','COLOC.PP4'), with=F]
+
+# Read in SMR results
+smr_eqtlgen_files<-list.files(path=paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/smr/'), pattern=paste0('SCZ_smr_eqtlgen_chr'))
+smr_eqtlgen_files<-smr_eqtlgen_files[grepl('.smr$', smr_eqtlgen_files)]
+
+smr_eqtlgen<-NULL
+for(i in smr_eqtlgen_files){
+  smr_eqtlgen<-rbind(smr_eqtlgen, fread(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/smr/',i)))
+}
+
+smr_eqtlgen<-smr_eqtlgen[!duplicated(smr_eqtlgen$probeID),]
+smr_eqtlgen$ensembl_gene_id<-gsub('\\..*','',smr_eqtlgen$probeID)
+
+smr_eqtlgen<-merge(smr_eqtlgen,Genes, by='ensembl_gene_id', all.x=T)
+
+smr_eqtlgen$external_gene_name[smr_eqtlgen$external_gene_name == '']<-NA
+
+########
+# Look for genes that were significant in SMR but not in TWAS
+########
+
+smr_sig_id<-smr_eqtlgen$ensembl_gene_id[p.adjust(smr_eqtlgen$p_SMR, method='bonferroni') < 0.05]
+
+twas_sig_in_smr<-twas[twas$ensembl_gene_id %in% smr_sig_id,]
+# Select model with smallest TWAS.P
+twas_topz<-twas[order(twas$TWAS.P),]
+twas_topz<-twas_topz[!duplicated(twas_topz$ensembl_gene_id),]
+twas_sig_in_smr_topz_nosig_in_twas<-twas_topz[p.adjust(twas_topz$TWAS.P, method='bonferroni') > 0.05 & twas_topz$ensembl_gene_id %in% smr_sig_id,]
+
+twas[twas$ensembl_gene_id %in% twas_sig_in_smr_topz_nosig_in_twas$ensembl_gene_id,]
+smr_eqtlgen[smr_eqtlgen$ensembl_gene_id %in% twas_sig_in_smr_topz_nosig_in_twas$ensembl_gene_id,]
+
+# There are three genes that were significant in SMR that were not in TWAS (even when selecting the most significant model for each gene). For two these genes, the top1 model result is NA, presumably due to missing data in the GWAS, whereas SMR selects variants in common between the eQTL and GWAS sumstats. This means the best eQTL for those genes is not being considered by any model in the TWAS, hence why it fails to identify the association. For the third gene, the top1 model is present, however it shows no sign of statistical significance, presumably because the top eQTL found by SMR is not a hapmap3 variant. Lets check.
+
+load('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/eQTLGen.eQTL/ENSG00000095951.RDat')
+smr_eqtlgen$topSNP[smr_eqtlgen$ensembl_gene_id == 'ENSG00000095951'] %in% snps$V2 # FALSE
+
+# This confirms the top SNP used by SMR is not present in the SNP-weights, due to not being in the hapmap3 SNP list. This would only matter if that lead eQTL was not in high LD with other variants that are in the hapmap3 SNPlist. Lets check.
+
+# Read in the full eQTL results for that gene
+eqtl_header<-fread('zcat /users/k1806347/oliverpainfel/Data/eQTLGen/full/2019-12-11-cis-eQTLsFDR-ProbeLevel-CohortInfoRemoved-BonferroniAdded.small.txt.gz | head -n 2')
+ENSG00000095951_eqtl<-fread('zcat /users/k1806347/oliverpainfel/Data/eQTLGen/full/2019-12-11-cis-eQTLsFDR-ProbeLevel-CohortInfoRemoved-BonferroniAdded.small.txt.gz | grep ENSG00000095951')
+
+names(ENSG00000095951_eqtl)<-names(eqtl_header)
+
+# Identify which are in the FUSION LD reference
+hm3_frq<-fread('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR.6.frq')
+
+ENSG00000095951_eqtl$in_fusion_ref<-ENSG00000095951_eqtl$SNP %in% hm3_frq$SNP
+
+# Plot the eQTL results
+library(ggplot2)
+library(cowplot)
+
+bitmap('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/ENSG00000095951_eqtl_plot.png', units='px', res=300, width=1500, height=1000)
+ggplot(ENSG00000095951_eqtl, aes(x=SNPPos, y=-log10(Pvalue), colour=in_fusion_ref)) +
+  geom_point() +
+  theme_half_open() +
+  labs() +
+  theme(axis.text.x = element_text(angle = 45, hjust=1))
+
+dev.off()
+
+# Interesting, the hapmap3 SNPs do capture the signal quite well. This indicates the difference is coming from the SCZ sumstats. HEIDI finds effect size heterogeneity for the association, indicating the overlap between SCZ and the eQTLs varies across SNPs, perhaps explaining the difference in result. We haven't gone into colocalisation or heidi at all yet in this paper. We might want to mention the effect it has on the results.
+
+# Compare SCZ results for the SNP used by SMR and the SNP used by FUSION.
+ss<-fread(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.gz'))
+
+ss[ss$SNP == smr_eqtlgen$topSNP[smr_eqtlgen$ensembl_gene_id == 'ENSG00000095951'],] # P = 1.367e-07
+ss[ss$SNP == names(sort(-abs(wgt.matrix[,'top1'])))[1],] # P = 0.493
+
+# This supports the notion that this discrepancy between TWAS and SMR is driven by the selection of different eQTLs and the lack of colocalisation between the SCZ and eQTL associations.
+
+# Select top1 model
+twas_top1<-twas[twas$MODEL == 'top1',]
+twas_sig_in_smr_top1_nosig_in_twas<-twas_top1[(p.adjust(twas_top1$TWAS.P, method='bonferroni') > 0.05 | is.na(twas_top1$TWAS.P)) & twas_top1$ensembl_gene_id %in% smr_sig_id,]
+
+twas_top1[twas_top1$ensembl_gene_id %in% twas_sig_in_smr_top1_nosig_in_twas$ensembl_gene_id,]
+smr_eqtlgen[smr_eqtlgen$ensembl_gene_id %in% twas_sig_in_smr_top1_nosig_in_twas$ensembl_gene_id,]
+
+# I think this comparison is a bit more interesting. It shows quite clearly that the discrepancies are due to either effect size heterogeneity and different SNPs being selected, or arbitrary differences due to a hard significance threshold and different numbers of tests.
+
+twas_top1_with_smr<-merge(twas_sig_in_smr_top1_nosig_in_twas, smr_eqtlgen, by='ensembl_gene_id')
+twas_top1_with_smr$eff_het<-twas_top1_with_smr$p_HEIDI < 0.05
+twas_top1_with_smr$z_SMR<-twas_top1_with_smr$b_SMR/twas_top1_with_smr$se_SMR
+
+bitmap('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/sig_in_smr_not_in_twas_plot.png', units='px', res=300, width=1500, height=1000)
+ggplot(twas_top1_with_smr, aes(x=z_SMR, y=TWAS.Z, colour=eff_het)) +
+  geom_abline(intercept =0 , slope = 1, colour='red') +
+  geom_point() +
+  theme_half_open() +
+  coord_fixed() +
+  labs() +
+  xlim(-10,10) +
+  ylim(-10,10) +
+  theme(axis.text.x = element_text(angle = 45, hjust=1))
+
+dev.off()
+
+twas_top1_all_with_smr<-merge(twas_top1, smr_eqtlgen, by='ensembl_gene_id')
+twas_top1_all_with_smr$eff_het<-twas_top1_all_with_smr$p_HEIDI < 0.05
+twas_top1_all_with_smr$z_SMR<-twas_top1_all_with_smr$b_SMR/twas_top1_all_with_smr$se_SMR
+
+bitmap('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/smr_vs_twas_effhet_plot.png', units='px', res=300, width=1500, height=1000)
+ggplot(twas_top1_all_with_smr, aes(x=z_SMR, y=TWAS.Z, colour=eff_het)) +
+  geom_abline(intercept =0 , slope = 1, colour='red') +
+  geom_point() +
+  theme_half_open() +
+  coord_fixed() +
+  labs() +
+  xlim(-10,10) +
+  ylim(-10,10) +
+  theme(axis.text.x = element_text(angle = 45, hjust=1))
+
+dev.off()
+
+top1_smr_cor<-NULL
+for(i in seq(0.05,0.95,0.05)){
+  top1_smr_cor<-rbind(top1_smr_cor, data.frame(p=i,
+                                               n=sum(twas_top1_all_with_smr$p_HEIDI > i, na.rm=T),
+                                               r=cor(twas_top1_all_with_smr$z_SMR[twas_top1_all_with_smr$p_HEIDI > i], twas_top1_all_with_smr$TWAS.Z[twas_top1_all_with_smr$p_HEIDI > i], use='p')
+))
+}
+
+# Clearly shows that SMR and TWAS (top1) correlation increases as effect size heterogeneity decreases
+
+```
+
+```{r, eval=F, echo=T}
+
+###################
+# Look at some examples of TWAS finding things that SMR didn't
+###################
+
+# Use the significant genes when using pseudo as examples
+pseudo_files<-list.files(path=paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo_full_OLD_03092022/'), pattern=paste0('pseudo_res_chr'))
+
+pseudo_res<-NULL
+for(i in pseudo_files){
+  pseudo_res<-rbind(pseudo_res, fread(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo_full_OLD_03092022/',i)))
+}
+
+pseudo_res<-pseudo_res[!is.na(pseudo_res$TWAS.Z),]
+pseudo_res<-pseudo_res[order(-pseudo_res$TWAS.Z),]
+pseudo_res<-pseudo_res[!duplicated(pseudo_res$ID),]
+names(pseudo_res)[names(pseudo_res) == 'ID']<-'ensembl_gene_id'
+
+twas_pseudo<-merge(twas, pseudo_res[,c('ensembl_gene_id','MODEL'),with=F], by=c('ensembl_gene_id','MODEL'))
+
+twas_pseudo$TWAS.P.BONF<-p.adjust(twas_pseudo$TWAS.P, method='bonferroni')
+smr_eqtlgen$p_SMR.BONF<-p.adjust(smr_eqtlgen$p_SMR, method='bonferroni')
+
+twas_and_smr<-merge(twas_pseudo, smr_eqtlgen, by='ensembl_gene_id')
+
+sig_in_twas_not_in_smr<-twas_and_smr[twas_and_smr$TWAS.P.BONF < 0.05 & twas_and_smr$p_SMR.BONF > 0.05,]
+sig_in_twas_not_in_smr<-sig_in_twas_not_in_smr[order(sig_in_twas_not_in_smr$TWAS.P),]
+
+sig_in_twas_not_in_smr[,c('ensembl_gene_id','TWAS.P','COLOC.PP3','COLOC.PP4','p_SMR','p_HEIDI'), with=F]
+
+# Compare concordance between TWAS and SMR according to coloc evidence
+sig_in_twas_not_in_smr$z_SMR<-sig_in_twas_not_in_smr$b_SMR/sig_in_twas_not_in_smr$se_SMR
+sig_in_twas_not_in_smr$coloc<-sig_in_twas_not_in_smr$COLOC.PP4/(sig_in_twas_not_in_smr$COLOC.PP3+sig_in_twas_not_in_smr$COLOC.PP4)
+
+bitmap('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/twas_vs_smr_coloc_plot.png', units='px', res=300, width=1500, height=1000)
+ggplot(sig_in_twas_not_in_smr, aes(x=z_SMR, y=TWAS.Z, colour=coloc)) +
+  geom_abline(intercept =0 , slope = 1, colour='red') +
+  geom_point() +
+  theme_half_open() +
+  coord_fixed() +
+  labs() +
+  xlim(-12,12) +
+  ylim(-12,12) +
+  theme(axis.text.x = element_text(angle = 45, hjust=1))
+
+dev.off()
+
+# Similar to before the correlation between TWAS and SMR Z scores is stronger when there is evidence of colocalisation.
+
+sig_in_twas_not_in_smr[,c('ensembl_gene_id','TWAS.P','COLOC.PP3','COLOC.PP4','p_SMR','p_HEIDI'), with=F]
+
+# Many of the top associations that are not present in SMR do not colocalise. I think we should start showing the number of significant genes that colocalise as well.
+# Lets take two examples 1) ENSG00000100058 - good evidence of colocalisation. 2) ENSG00000121940 - no evidence of colocalisation
+# Look up the heritability, fasBAT and accuracy of models in GTEx v8
+
+load('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/eQTLGen.eQTL/ENSG00000100058.RDat')
+# hsq = 0.016551 (SE = 0.004022)
+
+fread('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/eQTLGen.eQTL.fastbat/ENSG00000100058.fastbat')
+# fastbat p = 4.19978e-08, top SNP P-value = 6.06291e-64
+
+cor_res_melt_obs<-fread('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor.txt')
+cor_res_melt_obs[cor_res_melt_obs$L1 == 'ENSG00000100058',]
+
+#   Var1          Var2       value              L1              test
+#1:  obs     eQTL.top1  0.01816530 ENSG00000100058     obs_eQTL.top1
+#2:  obs    eQTL.prscs  0.03287013 ENSG00000100058    obs_eQTL.prscs
+#3:  obs  eQTL.sbayesr -0.01533275 ENSG00000100058  obs_eQTL.sbayesr
+#4:  obs    eQTL.susie  0.01460900 ENSG00000100058    obs_eQTL.susie
+#5:  obs   eQTL.dbslmm  0.02412844 ENSG00000100058   obs_eQTL.dbslmm
+#6:  obs eQTL.lassosum  0.02066842 ENSG00000100058 obs_eQTL.lassosum
+#7:  obs  eQTL.ldpred2  0.07147341 ENSG00000100058  obs_eQTL.ldpred2
+
+twas[twas$ensembl_gene_id == 'ENSG00000100058',]
+smr_eqtlgen[smr_eqtlgen$ensembl_gene_id == 'ENSG00000100058',]
+
+# These results are interesting. They suggest the heritability of the gene is low, but there are very strong eQTL signals present. The prediction of observed expression in GTEx is quite low, similar to the hsq. Interestingly, the variance explained by the lassosum model is lower than ldpred2, but the ldpred2 explains more variance out of sample. There is consistent evidence across models though. HEIDI is also boarderline. There is a paper showing suggestive associations between CRYBB2P1 and bipolar disorder.
+
+load('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/eQTLGen.eQTL/ENSG00000121940.RDat')
+# hsq = 0.021529 (SE = 0.010246)
+
+fread('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/eQTLGen.eQTL.fastbat/ENSG00000121940.fastbat')
+# fastbat p = 2.22437e-14, top SNP P-value = 6.88164e-20
+
+cor_res_melt_obs<-fread('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor.txt')
+cor_res_melt_obs[cor_res_melt_obs$L1 == 'ENSG00000121940',]
+
+#   Var1          Var2       value              L1              test
+#1:  obs           eQTL.top1 -0.05709345 ENSG00000121940           obs_eQTL.top1
+#2:  obs          eQTL.prscs -0.06494380 ENSG00000121940          obs_eQTL.prscs
+#3:  obs        eQTL.sbayesr -0.01518600 ENSG00000121940        obs_eQTL.sbayesr
+#4:  obs eQTL.sbayesr_robust -0.05210087 ENSG00000121940 obs_eQTL.sbayesr_robust
+#5:  obs          eQTL.susie -0.05815346 ENSG00000121940          obs_eQTL.susie
+#6:  obs         eQTL.dbslmm -0.07035730 ENSG00000121940         obs_eQTL.dbslmm
+#7:  obs       eQTL.lassosum -0.05498937 ENSG00000121940       obs_eQTL.lassosum
+#8:  obs        eQTL.ldpred2 -0.04670910 ENSG00000121940        obs_eQTL.ldpred2
+
+twas[twas$ensembl_gene_id == 'ENSG00000121940',]
+smr_eqtlgen[smr_eqtlgen$ensembl_gene_id == 'ENSG00000121940',]
+
+# They suggest the heritability of the gene is low, but there are very strong eQTL signals present. The prediction of observed expression in GTEx is negative! Ther is only one TWAS model showing a strong association (sbayesr)
+
+load('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/eQTLGen.eQTL/ENSG00000151665.RDat')
+# hsq = 0.039325 (SE = 0.002222)
+
+fread('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/eQTLGen.eQTL.fastbat/ENSG00000151665.fastbat')
+# fastbat p = 5.94722e-35, top SNP P-value = 1.23074e-59
+
+cor_res_melt_obs<-fread('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor.txt')
+cor_res_melt_obs[cor_res_melt_obs$L1 == 'ENSG00000151665',]
+
+#   Var1          Var2       value              L1              test
+#1:  obs           eQTL.top1  0.01746231 ENSG00000151665           obs_eQTL.top1
+#2:  obs          eQTL.prscs  0.02633871 ENSG00000151665          obs_eQTL.prscs
+#3:  obs        eQTL.sbayesr  0.01551873 ENSG00000151665        obs_eQTL.sbayesr
+#4:  obs eQTL.sbayesr_robust  0.04136081 ENSG00000151665 obs_eQTL.sbayesr_robust
+#5:  obs          eQTL.susie -0.03181388 ENSG00000151665          obs_eQTL.susie
+#6:  obs         eQTL.dbslmm  0.05007830 ENSG00000151665         obs_eQTL.dbslmm
+#7:  obs       eQTL.lassosum  0.04865843 ENSG00000151665       obs_eQTL.lassosum
+#8:  obs        eQTL.ldpred2  0.09057078 ENSG00000151665        obs_eQTL.ldpred2
+
+twas[twas$ensembl_gene_id == 'ENSG00000151665',]
+smr_eqtlgen[smr_eqtlgen$ensembl_gene_id == 'ENSG00000151665',]
+
+# They suggest the heritability of the gene is low, but there are very strong eQTL signals present. The prediction of observed expression in GTEx is positive but the association is again only coming from one model, and it isn't the model that performed best. It seems like pseudovalidation might actually be biasing the results.
+
+# It would be interesting to see what the aggregation methods found for these genes with only one highly significant model
+mad_omnibus<-NULL
+for(i in 1:22){
+  mad_omnibus<-rbind(mad_omnibus, read.table(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas_OLD_03092022/SCZ.TWAS.eQTLGen.omnibus_edit.chr',i,'.omnibus.pv'), header=T, stringsAsFactors = F))
+
+}
+
+mad_omnibus$BHHR.P.BONF<-p.adjust(mad_omnibus$BHHR.P, method='bonferroni')
+mad_omnibus[mad_omnibus$GENE == 'ENSG00000100058',]
+mad_omnibus[mad_omnibus$GENE == 'ENSG00000121940',]
+mad_omnibus[mad_omnibus$GENE == 'ENSG00000151665',]
+
+# The BHHR aggreagate test finds ENSG00000100058 to be highly significant, but ENSG00000121940 and ENSG00000151665 to be non-significant after bonferroni. This suggest the aggregate test might also help reduce false positives. Lets see what the simulations say.
+
+```
+
+```{r, eval=F, echo=T}
+##########
+# Compare significant and colocalised results found by ACAT.O but not in SMR
+##########
+
+
 
 ```
 
@@ -760,8 +1281,13 @@ for(i in 1:nrow(eqtl_pos)){
                                      p=hsq.pv))
 }
 
-length(unique(eqtl_h2$ID[which(eqtl_h2$p < 0.01)]))
-sum(unique(eqtl_h2$ID[which(eqtl_h2$p < 0.01)]) %in% twas_fusion$ID)
+
+fwrite(eqtl_h2, '/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFSall_300722/eQTLGen.hsq.txt', sep=' ', na='NA', quote=F)
+
+eqtl_h2<-fread('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFSall_300722/eQTLGen.hsq.txt')
+
+length(unique(eqtl_h2$ID[which(eqtl_h2$p < 0.01)])) # 4043
+sum(unique(eqtl_h2$ID[which(eqtl_h2$p < 0.01)]) %in% twas_fusion$ID) # 4028
 
 # Number of genes
 # Restrict FUSION TWAS to best model by CV
@@ -769,15 +1295,18 @@ twas_fusion_r2<-twas_fusion[rev(order(twas_fusion$MODELCV.R2)),]
 twas_fusion_r2<-twas_fusion_r2[!duplicated(twas_fusion_r2$ID),]
 twas_fusion_r2$TWAS.P.BONF<-p.adjust(twas_fusion_r2$TWAS.P, method = 'bonferroni')
 sum(twas_fusion_r2$TWAS.P.BONF < 0.05) # 93
+sum(twas_fusion_r2$TWAS.P.BONF < 0.05 & twas_fusion_r2$COLOC.PP4 > 0.8) # 21
 
 # Restrict eQTL TWAS model with largest absolute Z score
 twas_eqtl_topsig<-twas_eqtl[order(twas_eqtl$TWAS.P),]
 twas_eqtl_topsig<-twas_eqtl_topsig[!duplicated(twas_eqtl_topsig$ID),]
 twas_eqtl_topsig$TWAS.P.BONF<-p.adjust(twas_eqtl_topsig$TWAS.P, method = 'bonferroni')
 sum(twas_eqtl_topsig$TWAS.P.BONF < 0.05) # 207
+sum(twas_eqtl_topsig$TWAS.P.BONF < 0.05 & twas_eqtl_topsig$COLOC.PP4 > 0.8) # 35
 
 sum(twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05] %in% twas_eqtl_topsig$ID) # 93
 sum(twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05] %in% twas_eqtl_topsig$ID[twas_eqtl_topsig$TWAS.P.BONF < 0.05]) # 92
+sum(twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05 & twas_fusion_r2$COLOC.PP4 > 0.8] %in% twas_eqtl_topsig$ID[twas_eqtl_topsig$TWAS.P.BONF < 0.05 & twas_eqtl_topsig$COLOC.PP4 > 0.8]) # 20
 
 both<-merge(twas_fusion_r2[,c('ID','TWAS.Z'),with=F], twas_eqtl_topsig[,c('ID','TWAS.Z'),with=F], by='ID')
 
@@ -799,9 +1328,11 @@ pseudo_res<-pseudo_res[!duplicated(pseudo_res$ID),]
 twas_eqtl_pseudo<-merge(twas_eqtl, pseudo_res[,c('ID','MODEL'),with=F], by=c('ID','MODEL'))
 twas_eqtl_pseudo$TWAS.P.BONF<-p.adjust(twas_eqtl_pseudo$TWAS.P, method = 'bonferroni')
 sum(twas_eqtl_pseudo$TWAS.P.BONF < 0.05) # 75
+sum(twas_eqtl_pseudo$TWAS.P.BONF < 0.05 & twas_eqtl_pseudo$COLOC.PP4 > 0.8) # 12
 
 sum(twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05] %in% twas_eqtl_pseudo$ID) # 93
 sum(twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05] %in% twas_eqtl_pseudo$ID[twas_eqtl_pseudo$TWAS.P.BONF < 0.05]) # 58
+sum(twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05 & twas_fusion_r2$COLOC.PP4 > 0.8] %in% twas_eqtl_pseudo$ID[twas_eqtl_pseudo$TWAS.P.BONF < 0.05 & twas_eqtl_pseudo$COLOC.PP4 > 0.8]) # 12
 
 both_2<-merge(twas_fusion_r2[,c('ID','TWAS.Z'),with=F], twas_eqtl_pseudo[,c('ID','TWAS.Z'),with=F], by='ID')
 
@@ -816,40 +1347,65 @@ twas_eqtl_hsq_pseudo<-merge(twas_eqtl_hsq, twas_eqtl_pseudo, by=c('ID'))
 twas_eqtl_hsq_pseudo$TWAS.P.BONF<-p.adjust(twas_eqtl_hsq_pseudo$TWAS.P, method = 'bonferroni')
 nrow(twas_eqtl_hsq_pseudo)
 sum(twas_eqtl_hsq_pseudo$TWAS.P.BONF < 0.05) # 49
+sum(twas_eqtl_hsq_pseudo$TWAS.P.BONF < 0.05 & twas_eqtl_hsq_pseudo$COLOC.PP4 > 0.8) # 49
 
 sum(twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05] %in% twas_eqtl_hsq_pseudo$ID) # 66
 sum(twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05] %in% twas_eqtl_hsq_pseudo$ID[twas_eqtl_hsq_pseudo$TWAS.P.BONF < 0.05]) # 39
+sum(twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05 & twas_fusion_r2$COLOC.PP4 > 0.8] %in% twas_eqtl_hsq_pseudo$ID[twas_eqtl_hsq_pseudo$TWAS.P.BONF < 0.05 & twas_eqtl_hsq_pseudo$COLOC.PP4 > 0.8]) # 9
 
 both_2<-merge(twas_fusion_r2[,c('ID','TWAS.Z'),with=F], twas_eqtl_hsq_pseudo[,c('ID','TWAS.Z')], by='ID')
 
 cor(both_2$TWAS.Z.x, both_2$TWAS.Z.y) # 0.841
 plot(both_2$TWAS.Z.x, both_2$TWAS.Z.y)
 
-# Restrict to genes based on fastBAT
-fastbat_files<-list.files(path='/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/YFS.fastbat/',pattern='.fastbat')
-fastbat_res<-NULL
-for(i in fastbat_files){
-  fastbat_res<-rbind(fastbat_res, fread(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/YFS.fastbat/',i)))
+# Restrict to genes based on fastBAT or mbat_combo
+mbat_res<-NULL
+for(i in 1:22){
+  mbat_res<-rbind(mbat_res, fread(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/YFS.mbat.combo.chr',i,'.res.txt')))
 }
 
-fwrite(fastbat_res, '/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/YFS.fastbat/fastbat_all_res.txt', sep=' ', quote=F, na='NA')
+# Check results in relation to fastbat
+sum(!is.na(mbat_res$P_fastBAT)) # 4700
+mbat_res$P_fastBAT.FDR<-p.adjust(mbat_res$P_fastBAT, method='fdr')
+fastbat_res_sig<-mbat_res[mbat_res$P_fastBAT.FDR < 0.05 | mbat_res$TopSNP_Pvalue < 5e-8,]
+nrow(fastbat_res_sig) # 4683
 
-nrow(fastbat_res) # 4700
+twas_eqtl_fastbat_pseudo<-merge(twas_eqtl_pseudo, fastbat_res_sig, by.x="ID", by.y='Gene')
 
-fastbat_res_sig<-fastbat_res[fastbat_res$Pvalue < 0.01 | fastbat_res$TopSNP.Pvalue < 5e-8,]
-nrow(fastbat_res_sig) # 4538
-
-twas_eqtl_fastbat_pseudo<-merge(twas_eqtl_pseudo, fastbat_res_sig, by.y='Set',by.x=c('ID'))
 twas_eqtl_fastbat_pseudo$TWAS.P.BONF<-p.adjust(twas_eqtl_fastbat_pseudo$TWAS.P, method = 'bonferroni')
-nrow(twas_eqtl_fastbat_pseudo) # 4523
-sum(twas_eqtl_fastbat_pseudo$TWAS.P.BONF < 0.05) # 74
+nrow(twas_eqtl_fastbat_pseudo) # 4668
+sum(twas_eqtl_fastbat_pseudo$TWAS.P.BONF < 0.05) # 75
+sum(twas_eqtl_fastbat_pseudo$TWAS.P.BONF < 0.05 & twas_eqtl_fastbat_pseudo$COLOC.PP4 > 0.8) # 12
 
 sum(twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05] %in% twas_eqtl_fastbat_pseudo$ID) # 93
 sum(twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05] %in% twas_eqtl_fastbat_pseudo$ID[twas_eqtl_fastbat_pseudo$TWAS.P.BONF < 0.05]) # 58
+sum(twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05 & twas_fusion_r2$COLOC.PP4 > 0.8] %in% twas_eqtl_fastbat_pseudo$ID[twas_eqtl_fastbat_pseudo$TWAS.P.BONF < 0.05 & twas_eqtl_fastbat_pseudo$COLOC.PP4 > 0.8]) # 12
 
 both_2<-merge(twas_fusion_r2[,c('ID','TWAS.Z'),with=F], twas_eqtl_fastbat_pseudo[,c('ID','TWAS.Z')], by='ID')
 
-cor(both_2$TWAS.Z.x, both_2$TWAS.Z.y) # 0.8540759
+cor(both_2$TWAS.Z.x, both_2$TWAS.Z.y) # 0.8510884
+plot(both_2$TWAS.Z.x, both_2$TWAS.Z.y)
+
+# Check results in relation to mbat_combo
+sum(!is.na(mbat_res$P_fastBAT)) # 4700
+mbat_res$P_mBATcombo.FDR<-p.adjust(mbat_res$P_mBATcombo, method='fdr')
+mbat_combo_res_sig<-mbat_res[mbat_res$P_mBATcombo.FDR < 0.05 | mbat_res$TopSNP_Pvalue < 5e-8,]
+nrow(mbat_combo_res_sig) # 4692
+
+twas_eqtl_mbat_combo_pseudo<-merge(twas_eqtl_pseudo, mbat_combo_res_sig, by.x="ID", by.y='Gene')
+
+twas_eqtl_mbat_combo_pseudo$TWAS.P.BONF<-p.adjust(twas_eqtl_mbat_combo_pseudo$TWAS.P, method = 'bonferroni')
+nrow(twas_eqtl_mbat_combo_pseudo) # 4677
+sum(twas_eqtl_mbat_combo_pseudo$TWAS.P.BONF < 0.05) # 75
+sum(twas_eqtl_mbat_combo_pseudo$TWAS.P.BONF < 0.05 & twas_eqtl_mbat_combo_pseudo$COLOC.PP4 > 0.8) # 12
+
+sum(twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05] %in% twas_eqtl_mbat_combo_pseudo$ID) # 93
+sum(twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05] %in% twas_eqtl_mbat_combo_pseudo$ID[twas_eqtl_mbat_combo_pseudo$TWAS.P.BONF < 0.05]) # 58
+sum(twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05 & twas_fusion_r2$COLOC.PP4 > 0.8] %in% twas_eqtl_mbat_combo_pseudo$ID[twas_eqtl_mbat_combo_pseudo$TWAS.P.BONF < 0.05 & twas_eqtl_mbat_combo_pseudo$COLOC.PP4 > 0.8]) # 12
+
+both_2<-merge(twas_fusion_r2[,c('ID','TWAS.Z'),with=F], twas_eqtl_mbat_combo_pseudo[,c('ID','TWAS.Z')], by='ID')
+
+cor(both_2$TWAS.Z.x, both_2$TWAS.Z.y) # 0.8509391
 plot(both_2$TWAS.Z.x, both_2$TWAS.Z.y)
 
 # Observations:
@@ -882,33 +1438,59 @@ ACATO <- function(p){
     pval
 }
 
+twas_eqtl$P_onesided<-twas_eqtl$TWAS.P/2
+twas_eqtl$P_onesided[twas_eqtl$TWAS.Z < 0]<- 1-twas_eqtl$P_onesided[twas_eqtl$TWAS.Z < 0]
+
 # Calc ACAT-O pvalue
-twas_eqtl_gene<-NULL
-for(i in unique(twas_eqtl$ID)){
-  twas_eqtl_gene<-rbind(twas_eqtl_gene, 
-                          data.frame(ID=i,
-                                     ACATO.P=ACATO(twas_eqtl$TWAS.P[twas_eqtl$ID == i]),
-                                     min_Z=min(twas_eqtl$TWAS.Z[twas_eqtl$ID == i]),
-                                     max_Z=max(twas_eqtl$TWAS.Z[twas_eqtl$ID == i]),
-                                     min_P=min(twas_eqtl$TWAS.P[twas_eqtl$ID == i]),
-                                     max_P=max(twas_eqtl$TWAS.P[twas_eqtl$ID == i])))
-}
+twas_eqtl_gene<-data.table(ID=sort(unique(twas_eqtl$ID)),
+                                     ACATO.P=aggregate(twas_eqtl$TWAS.P, list(twas_eqtl$ID), FUN=ACATO)$x,
+                                     ACATO.P_one=aggregate(twas_eqtl$P_onesided, list(twas_eqtl$ID), FUN=ACATO)$x,
+                                     mean_Z=aggregate(twas_eqtl$TWAS.Z, list(twas_eqtl$ID), FUN=mean)$x)
+
+# Convert one-sided ACAT P into two sided
+twas_eqtl_gene$ACATO.P_two<-twas_eqtl_gene$ACATO.P_one
+twas_eqtl_gene$ACATO.P_two[twas_eqtl_gene$ACATO.P_one > 0.5]<- 1-twas_eqtl_gene$ACATO.P_one[twas_eqtl_gene$ACATO.P_one > 0.5]
+twas_eqtl_gene$ACATO.P_two<-2*twas_eqtl_gene$ACATO.P_two
+
+# The P value is the same when all genes have the same direction of effect, indicating using one-sided p-values doesn't influence ACAT.O. By using one sided p-values we are taking account for the direction of each association, and we can calculate a signed Z scores corresponding to that P value.
+
+twas_eqtl_gene$ACATO.Z<--qnorm(twas_eqtl_gene$ACATO.P/2)
+twas_eqtl_gene$ACATO.Z_one<--qnorm(twas_eqtl_gene$ACATO.P_one)
+# This seems legit. Using one sided p-values in ACATO seems better. Check how this changes results
+
+twas_eqtl_gene<-merge(twas_eqtl_gene,twas_eqtl_pseudo[,c('ID','COLOC.PP4'), with=F],by='ID')
 
 twas_eqtl_gene$ACATO.P.BONF<-p.adjust(twas_eqtl_gene$ACATO.P, method='bonferroni')
 sum(twas_eqtl_gene$ACATO.P.BONF < 0.05) # 162
+sum(twas_eqtl_gene$ACATO.P.BONF < 0.05 & twas_eqtl_gene$COLOC.PP4 > 0.8) # 28
 sum(twas_eqtl_gene$ID[twas_eqtl_gene$ACATO.P.BONF < 0.05] %in% twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05]) # 87
+sum(twas_eqtl_gene$ID[twas_eqtl_gene$ACATO.P.BONF < 0.05 & twas_eqtl_gene$COLOC.PP4 > 0.8] %in% twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05 & twas_fusion_r2$COLOC.PP4 > 0.8]) # 18
 
 twas_eqtl_gene_hsq<-twas_eqtl_gene[twas_eqtl_gene$ID %in% twas_eqtl_hsq$ID,]
+nrow(twas_eqtl_gene_hsq) #4028
 twas_eqtl_gene_hsq$ACATO.P.BONF<-p.adjust(twas_eqtl_gene_hsq$ACATO.P, method='bonferroni')
 sum(twas_eqtl_gene_hsq$ACATO.P.BONF < 0.05) # 104
+sum(twas_eqtl_gene_hsq$ACATO.P.BONF < 0.05 & twas_eqtl_gene_hsq$COLOC.PP4 > 0.8) # 22
 sum(twas_eqtl_gene_hsq$ID[twas_eqtl_gene_hsq$ACATO.P.BONF < 0.05] %in% twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05]) # 64
+sum(twas_eqtl_gene_hsq$ID[twas_eqtl_gene_hsq$ACATO.P.BONF < 0.05 & twas_eqtl_gene_hsq$COLOC.PP4 > 0.8] %in% twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05 & twas_fusion_r2$COLOC.PP4 > 0.8]) # 15
 
-twas_eqtl_gene_fastbat<-twas_eqtl_gene[twas_eqtl_gene$ID %in% fastbat_res_sig$Set,]
+twas_eqtl_gene_fastbat<-twas_eqtl_gene[twas_eqtl_gene$ID %in% fastbat_res_sig$Gene,]
+nrow(twas_eqtl_gene_fastbat) # 4668
 twas_eqtl_gene_fastbat$ACATO.P.BONF<-p.adjust(twas_eqtl_gene_fastbat$ACATO.P, method='bonferroni')
-sum(twas_eqtl_gene_fastbat$ACATO.P.BONF < 0.05) # 157
+sum(twas_eqtl_gene_fastbat$ACATO.P.BONF < 0.05) # 162
+sum(twas_eqtl_gene_fastbat$ACATO.P.BONF < 0.05 & twas_eqtl_gene_fastbat$COLOC.PP4 > 0.8) # 28
 sum(twas_eqtl_gene_fastbat$ID[twas_eqtl_gene_fastbat$ACATO.P.BONF < 0.05] %in% twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05]) # 87
+sum(twas_eqtl_gene_fastbat$ID[twas_eqtl_gene_fastbat$ACATO.P.BONF < 0.05 & twas_eqtl_gene_fastbat$COLOC.PP4 > 0.8] %in% twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05 & twas_fusion_r2$COLOC.PP4 > 0.8]) # 18
 
-# Calc ACAT-O pvalue
+twas_eqtl_gene_mbat_combo<-twas_eqtl_gene[twas_eqtl_gene$ID %in% mbat_combo_res_sig$Gene,]
+nrow(twas_eqtl_gene_mbat_combo) # 4677
+twas_eqtl_gene_mbat_combo$ACATO.P.BONF<-p.adjust(twas_eqtl_gene_mbat_combo$ACATO.P, method='bonferroni')
+sum(twas_eqtl_gene_mbat_combo$ACATO.P.BONF < 0.05) # 162
+sum(twas_eqtl_gene_mbat_combo$ACATO.P.BONF < 0.05 & twas_eqtl_gene_mbat_combo$COLOC.PP4 > 0.8) # 28
+sum(twas_eqtl_gene_mbat_combo$ID[twas_eqtl_gene_mbat_combo$ACATO.P.BONF < 0.05] %in% twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05]) # 87
+sum(twas_eqtl_gene_mbat_combo$ID[twas_eqtl_gene_mbat_combo$ACATO.P.BONF < 0.05 & twas_eqtl_gene_mbat_combo$COLOC.PP4 > 0.8] %in% twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05 & twas_fusion_r2$COLOC.PP4 > 0.8]) # 18
+
+# Calc ACAT-O pvalue for FUSION TWAS
 twas_fusion_gene<-NULL
 for(i in unique(twas_fusion$ID)){
   twas_fusion_gene<-rbind(twas_fusion_gene, 
@@ -920,14 +1502,14 @@ for(i in unique(twas_fusion$ID)){
                                      max_P=max(twas_fusion$TWAS.P[twas_fusion$ID == i])))
 }
 
-twas_fusion_gene$ACATO.P.BONF<-p.adjust(twas_fusion_gene$ACATO.P, method='bonferroni')
-sum(twas_fusion_gene$ACATO.P.BONF < 0.05) # 105
-sum(twas_fusion_gene$ID[twas_fusion_gene$ACATO.P.BONF < 0.05] %in% twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05]) # 63
+twas_fusion_gene<-merge(twas_fusion_gene,twas_fusion_r2[,c('ID','COLOC.PP4'), with=F],by='ID')
 
-twas_fusion_gene_eqtl<-twas_fusion_gene[twas_fusion_gene$ID %in% twas_eqtl_hsq$ID,]
-twas_fusion_gene_eqtl$ACATO.P.BONF<-p.adjust(twas_fusion_gene_eqtl$ACATO.P, method='bonferroni')
-sum(twas_fusion_gene_eqtl$ACATO.P.BONF < 0.05) # 105
-sum(twas_fusion_gene_eqtl$ID[twas_fusion_gene_eqtl$ACATO.P.BONF < 0.05] %in% twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05]) # 63
+twas_fusion_gene$ACATO.P.BONF<-p.adjust(twas_fusion_gene$ACATO.P, method='bonferroni')
+sum(twas_fusion_gene$ACATO.P.BONF < 0.05) # 130
+sum(twas_fusion_gene$ACATO.P.BONF < 0.05 & twas_fusion_gene$COLOC.PP4 > 0.8) # 30
+sum(twas_fusion_gene$ID[twas_fusion_gene$ACATO.P.BONF < 0.05] %in% twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05]) # 89
+sum(twas_fusion_gene$ID[twas_fusion_gene$ACATO.P.BONF < 0.05 & twas_fusion_gene$COLOC.PP4 > 0.8] %in% twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05 & twas_fusion_r2$COLOC.PP4 > 0.8]) # 19
+# Using ACAT.O find 9 significant colocalised gene more even when using FUSION models. So the benefit isn't only avoid model selection.
 
 # Read in omnibus tests using eQTL TWAS
 omnibus<-NULL
@@ -936,22 +1518,38 @@ for(i in 1:22){
 
 }
 
+omnibus<-merge(omnibus,twas_eqtl_pseudo[,c('ID','COLOC.PP4'), with=F], by.x='GENE', by.y='ID')
+
 omnibus$OMNIBUS.P.BONF<-p.adjust(omnibus$OMNIBUS.P, method='bonferroni')
 
 sum(omnibus$OMNIBUS.P.BONF < 0.05) # 605
+sum(omnibus$OMNIBUS.P.BONF < 0.05 & omnibus$COLOC.PP4 > 0.8) # 33
 sum(omnibus$GENE[omnibus$OMNIBUS.P.BONF < 0.05] %in% twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05]) # 82
+sum(omnibus$GENE[omnibus$OMNIBUS.P.BONF < 0.05 & omnibus$COLOC.PP4 > 0.8] %in% twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05 & twas_fusion_r2$COLOC.PP4 > 0.8]) # 17
 
 omnibus_hsq<-omnibus[omnibus$GENE %in% twas_eqtl_hsq$ID,]
 omnibus_hsq$OMNIBUS.P.BONF<-p.adjust(omnibus_hsq$OMNIBUS.P, method='bonferroni')
 nrow(omnibus_hsq)
 sum(omnibus_hsq$OMNIBUS.P.BONF < 0.05) # 487
+sum(omnibus_hsq$OMNIBUS.P.BONF < 0.05 & omnibus_hsq$COLOC.PP4 > 0.8) # 27
 sum(omnibus_hsq$GENE[omnibus_hsq$OMNIBUS.P.BONF < 0.05] %in% twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05]) # 60
+sum(omnibus_hsq$GENE[omnibus_hsq$OMNIBUS.P.BONF < 0.05 & omnibus_hsq$COLOC.PP4 > 0.8] %in% twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05 & twas_fusion_r2$COLOC.PP4 > 0.8]) # 14
 
-omnibus_fastbat<-omnibus[omnibus$GENE %in% fastbat_res_sig$Set,]
+omnibus_fastbat<-omnibus[omnibus$GENE %in% fastbat_res_sig$Gene,]
 omnibus_fastbat$OMNIBUS.P.BONF<-p.adjust(omnibus_fastbat$OMNIBUS.P, method='bonferroni')
-nrow(omnibus_fastbat) # 4521
-sum(omnibus_fastbat$OMNIBUS.P.BONF < 0.05) # 568
+nrow(omnibus_fastbat) # 4666
+sum(omnibus_fastbat$OMNIBUS.P.BONF < 0.05) # 603
+sum(omnibus_fastbat$OMNIBUS.P.BONF < 0.05 & omnibus_fastbat$COLOC.PP4 > 0.8) # 33
 sum(omnibus_fastbat$GENE[omnibus_fastbat$OMNIBUS.P.BONF < 0.05] %in% twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05]) # 82
+sum(omnibus_fastbat$GENE[omnibus_fastbat$OMNIBUS.P.BONF < 0.05 & omnibus_fastbat$COLOC.PP4 > 0.8] %in% twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05 & twas_fusion_r2$COLOC.PP4 > 0.8]) # 17
+
+omnibus_mbat_combo<-omnibus[omnibus$GENE %in% mbat_combo_res_sig$Gene,]
+omnibus_mbat_combo$OMNIBUS.P.BONF<-p.adjust(omnibus_mbat_combo$OMNIBUS.P, method='bonferroni')
+nrow(omnibus_mbat_combo) # 4675
+sum(omnibus_mbat_combo$OMNIBUS.P.BONF < 0.05) # 604
+sum(omnibus_mbat_combo$OMNIBUS.P.BONF < 0.05 & omnibus_mbat_combo$COLOC.PP4 > 0.8) # 33
+sum(omnibus_mbat_combo$GENE[omnibus_mbat_combo$OMNIBUS.P.BONF < 0.05] %in% twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05]) # 82
+sum(omnibus_mbat_combo$GENE[omnibus_mbat_combo$OMNIBUS.P.BONF < 0.05 & omnibus_mbat_combo$COLOC.PP4 > 0.8] %in% twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05 & twas_fusion_r2$COLOC.PP4 > 0.8]) # 17
 
 # Read in omnibus test results from FUSION TWAS
 omnibus_fusion<-NULL
@@ -980,11 +1578,545 @@ sum(twas_fusion_gene$ID[twas_fusion_gene$ACATO.P.BONF < 0.05] %in% twas_eqtl_gen
 
 # So, far the main limitions are some significant genes aren't inclded in the eQTL TWAS, pseudovalidation isn't accurate enough to identify TWAS associations in that way, aggregate tests seem to work well but need to be checked for type-1 error rate. We also need some way of identifying the direction of effect after aggregate test. The Z-scores coming out of FUSION omnibus seem unrealistic, so will inhibit their utility in post TWAS analysis. Pseudovalidation performance doesn't change when excluding certain models, indicating it isn't any one model that is lower its performance.
 
-# Do the same analyses for eQTLGen TWAS vs. SMR.
+# Read in MAd agg BHHR omnibus tests using eQTL TWAS
+mad_omnibus<-NULL
+for(i in 1:22){
+  mad_omnibus<-rbind(mad_omnibus, read.table(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.FUSION_YFS.omnibus_edit.chr',i,'.omnibus.pv'), header=T, stringsAsFactors = F))
+
+}
+
+mad_omnibus$BHHR.P.BONF<-p.adjust(mad_omnibus$BHHR.P, method='bonferroni')
+
+mad_omnibus<-merge(mad_omnibus,twas_eqtl_pseudo[,c('ID','COLOC.PP4'), with=F],by.x='GENE', by.y='ID')
+
+nrow(mad_omnibus) # 4685     
+sum(mad_omnibus$BHHR.P.BONF < 0.05) # 124
+sum(mad_omnibus$BHHR.P.BONF < 0.05 & mad_omnibus$COLOC.PP4 > 0.8) # 24
+sum(mad_omnibus$GENE[mad_omnibus$BHHR.P.BONF < 0.05] %in% twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05]) # 85
+sum(mad_omnibus$GENE[mad_omnibus$BHHR.P.BONF < 0.05 & mad_omnibus$COLOC.PP4 > 0.8] %in% twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05 & twas_fusion_r2$COLOC.PP4 > 0.8]) # 20
+
+mad_omnibus_hsq<-mad_omnibus[mad_omnibus$GENE %in% twas_eqtl_hsq$ID,]
+mad_omnibus_hsq$BHHR.P.BONF<-p.adjust(mad_omnibus_hsq$BHHR.P, method='bonferroni')
+nrow(mad_omnibus_hsq) # 4028
+sum(mad_omnibus_hsq$BHHR.P.BONF < 0.05) # 88
+sum(mad_omnibus_hsq$BHHR.P.BONF < 0.05 & mad_omnibus_hsq$COLOC.PP4 > 0.8) # 19
+sum(mad_omnibus_hsq$GENE[mad_omnibus_hsq$BHHR.P.BONF < 0.05] %in% twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05]) # 62
+sum(mad_omnibus_hsq$GENE[mad_omnibus_hsq$BHHR.P.BONF < 0.05 & mad_omnibus_hsq$COLOC.PP4 > 0.8] %in% twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05 & twas_fusion_r2$COLOC.PP4 > 0.8]) # 17
+
+mad_omnibus_fastbat<-mad_omnibus[mad_omnibus$GENE %in% fastbat_res_sig$Gene,]
+mad_omnibus_fastbat$BHHR.P.BONF<-p.adjust(mad_omnibus_fastbat$BHHR.P, method='bonferroni')
+nrow(mad_omnibus_fastbat) # 4668
+sum(mad_omnibus_fastbat$BHHR.P.BONF < 0.05) # 124
+sum(mad_omnibus_fastbat$BHHR.P.BONF < 0.05 & mad_omnibus_fastbat$COLOC.PP4 > 0.8) # 24
+sum(mad_omnibus_fastbat$GENE[mad_omnibus_fastbat$BHHR.P.BONF < 0.05] %in% twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05]) # 85
+sum(mad_omnibus_fastbat$GENE[mad_omnibus_fastbat$BHHR.P.BONF < 0.05 & mad_omnibus_fastbat$COLOC.PP4 > 0.8] %in% twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05 & twas_fusion_r2$COLOC.PP4 > 0.8]) # 20
+
+mad_omnibus_mbat_combo<-mad_omnibus[mad_omnibus$GENE %in% mbat_combo_res_sig$Gene,]
+mad_omnibus_mbat_combo$BHHR.P.BONF<-p.adjust(mad_omnibus_mbat_combo$BHHR.P, method='bonferroni')
+nrow(mad_omnibus_mbat_combo) # 4677
+sum(mad_omnibus_mbat_combo$BHHR.P.BONF < 0.05) # 124
+sum(mad_omnibus_mbat_combo$BHHR.P.BONF < 0.05 & mad_omnibus_mbat_combo$COLOC.PP4 > 0.8) # 24
+sum(mad_omnibus_mbat_combo$GENE[mad_omnibus_mbat_combo$BHHR.P.BONF < 0.05] %in% twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05]) # 85
+sum(mad_omnibus_mbat_combo$GENE[mad_omnibus_mbat_combo$BHHR.P.BONF < 0.05 & mad_omnibus_mbat_combo$COLOC.PP4 > 0.8] %in% twas_fusion_r2$ID[twas_fusion_r2$TWAS.P.BONF < 0.05 & twas_fusion_r2$COLOC.PP4 > 0.8]) # 20
 
 ```
 
 Comparing YFS TWAS based on FUSION models and eQTL-based models, the eQTL based models seem to be working pretty well, though pseudovalidation is missing some associations. The ACAT-O omnibus test seems to work fairly well, but the FUSION OMNIBUS test seems to work better (probably because takes into account the correlation between models).
+
+***
+
+## Investigate FUSION-O
+
+AKR1A1 (chr1) in the eQTL_YFS has no strong association from any one gene, but then a high significant omnibus test result. Look into this.
+
+```{r, eval=F, echo=T}
+
+library(data.table)
+
+dat<-fread('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTL_YFS.omnibus_edit.chr1.CORR.dat')
+
+# FUSION doesn't report the model used for each gene
+dat[dat$GENE == 'FAM46C',]
+
+twas<-fread('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTL_YFS.chr1')
+
+twas[twas$ID == 'FAM46C',]
+
+# There is nothing obviously wrong with the correlations
+#      GENE              REF1              REF2  CORR
+# 1: FAM46C     YFS.eQTL_top1    YFS.eQTL_prscs 0.822
+# 2: FAM46C     YFS.eQTL_top1  YFS.eQTL_sbayesr 0.693
+# 3: FAM46C    YFS.eQTL_prscs  YFS.eQTL_sbayesr 0.925
+# 4: FAM46C     YFS.eQTL_top1    YFS.eQTL_susie 0.864
+# 5: FAM46C    YFS.eQTL_prscs    YFS.eQTL_susie 0.939
+# 6: FAM46C  YFS.eQTL_sbayesr    YFS.eQTL_susie 0.791
+# 7: FAM46C     YFS.eQTL_top1   YFS.eQTL_dbslmm 0.676
+# 8: FAM46C    YFS.eQTL_prscs   YFS.eQTL_dbslmm 0.897
+# 9: FAM46C  YFS.eQTL_sbayesr   YFS.eQTL_dbslmm 0.904
+#10: FAM46C    YFS.eQTL_susie   YFS.eQTL_dbslmm 0.819
+#11: FAM46C     YFS.eQTL_top1 YFS.eQTL_lassosum 0.578
+#12: FAM46C    YFS.eQTL_prscs YFS.eQTL_lassosum 0.777
+#13: FAM46C  YFS.eQTL_sbayesr YFS.eQTL_lassosum 0.860
+#14: FAM46C    YFS.eQTL_susie YFS.eQTL_lassosum 0.642
+#15: FAM46C   YFS.eQTL_dbslmm YFS.eQTL_lassosum 0.797
+#16: FAM46C     YFS.eQTL_top1  YFS.eQTL_ldpred2 0.885
+#17: FAM46C    YFS.eQTL_prscs  YFS.eQTL_ldpred2 0.948
+#18: FAM46C  YFS.eQTL_sbayesr  YFS.eQTL_ldpred2 0.913
+#19: FAM46C    YFS.eQTL_susie  YFS.eQTL_ldpred2 0.890
+#20: FAM46C   YFS.eQTL_dbslmm  YFS.eQTL_ldpred2 0.856
+#21: FAM46C YFS.eQTL_lassosum  YFS.eQTL_ldpred2 0.722
+#      GENE              REF1              REF2  CORR
+
+# 
+# # There is no strong evidence of association
+#       ID CHR        P0        P1    HSQ NSNP NWGT          MODEL     TWAS.Z TWAS.P
+#1: FAM46C   1 118148556 118170994 0.0418  394    1           top1  -1.810000 0.0703
+#2: FAM46C   1 118148556 118170994 0.0418  394  373          prscs   0.150749 0.8800
+#3: FAM46C   1 118148556 118170994 0.0418  394  357        sbayesr   0.497067 0.6190
+#4: FAM46C   1 118148556 118170994 0.0418    0    0 sbayesr_robust         NA     NA
+#5: FAM46C   1 118148556 118170994 0.0418  394  394          susie  -0.034066 0.9730
+#6: FAM46C   1 118148556 118170994 0.0418  394  393         dbslmm  -0.091995 0.9270
+#7: FAM46C   1 118148556 118170994 0.0418  394  338       lassosum   0.648096 0.5170
+#8: FAM46C   1 118148556 118170994 0.0418  394  356        ldpred2   1.090967 0.2750
+
+########
+# Test use agg function MAd package and compare to other methods
+########
+
+# Use the correlation data output by FUSION
+ACATO <- function(p){
+    if (all(is.na(p))) return(NA)
+    p <- p[!is.na(p)]
+    p[p == 1] <- 1 - 1e-16
+#### check if there are very small non-zero p values
+    is.small <- (p < 1e-16)
+    if (sum(is.small) == 0) {
+        cct.stat <- sum(tan((0.5 - p) * pi))/length(p)
+    } else {
+        cct.stat <- sum((1 / p[is.small]) / pi)
+        cct.stat <- cct.stat + sum(tan((0.5 - p[!is.small]) * pi))
+        cct.stat <- cct.stat/length(p)
+    }
+    #### check if the test statistic is very large.
+    if (cct.stat > 1e+15){
+        pval <- (1 / cct.stat) / pi
+    } else {
+        pval <- 1 - pcauchy(cct.stat)
+    }
+    pval
+}
+
+library(MAd)
+
+res_all<-NULL
+for(gene_i in unique(dat$GENE)){
+  
+  dat_gene<-dat[dat$GENE == gene_i,]
+  dat_gene$REF1<-gsub('YFS.eQTL_','', dat_gene$REF1)
+  dat_gene$REF2<-gsub('YFS.eQTL_','', dat_gene$REF2)
+  models<-unique(c(dat_gene$REF1, dat_gene$REF2))
+  cor_all<-NULL
+  for(i in models){
+    for(j in models){
+      if(i == j){
+            cor_all<-rbind(cor_all, data.frame(REF1=i,
+                                         REF2=j,
+                                         CORR=1))
+      } else {
+            cor_all<-rbind(cor_all, data.frame(REF1=i,
+                                               REF2=j,
+                                               CORR=dat_gene[(dat_gene$REF1 == j & dat_gene$REF2 == i) | (dat_gene$REF1 == i & dat_gene$REF2 == j),]$CORR))
+      }
+    }
+  }
+  
+  cor_mat<-as.matrix(dcast(data = data.table(cor_all) ,formula = REF1 ~ REF2, value.var = "CORR")[,-1])
+  dimnames(cor_mat)[[1]]<-dimnames(cor_mat)[[2]]
+  
+  twas_gene<-twas[which(twas$ID == gene_i),]
+  twas_gene<-twas_gene[match(dimnames(cor_mat)[[1]], twas_gene$MODEL),]
+  
+  twas_gene$TWAS.Z.SE<-1
+  
+  # Note correlation matrix has to be positive
+  agg_res<-agg(id=ID, es=TWAS.Z, var=TWAS.Z.SE, cor=abs(cor_mat), method="BHHR", mod=NULL, data=twas_gene)
+
+  res<-data.frame(Gene=gene_i,
+    							ACAT.O.P=ACATO(twas_gene$TWAS.P),
+    							agg_Z=agg_res$es/agg_res$var,
+    							agg_P=2*pnorm(-abs(agg_res$es/agg_res$var)))
+  
+  res_all<-rbind(res_all, res)
+}
+
+# Compare FUSION-O, ACAT-O and MAd results
+# Read in OMNIBUS results using default R2 threshold
+omnibus<-NULL
+for(i in 1:22){
+  omnibus<-rbind(omnibus, read.table(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTL_YFS.omnibus.chr',i,'.omnibus.pv'), header=T, stringsAsFactors = F))
+
+}
+
+res_all<-merge(res_all, omnibus[,c('GENE','OMNIBUS.P')], by.x='Gene', by.y='GENE')
+res_all_melt<-melt(res_all[,c('Gene','ACAT.O.P','agg_P','OMNIBUS.P')])
+res_all_melt$value<--log10(res_all_melt$value)
+res_all_melt$variable<-as.character(res_all_melt$variable)
+
+library("ggplot2")
+library("GGally")   
+
+lowerfun <- function(data,mapping){
+  ggplot(data = data, mapping = mapping)+
+    geom_point() +
+    geom_abline(intercept =0 , slope = 1, colour='red')
+}  
+
+ggpairs(-log10(res_all[,c('ACAT.O.P','agg_P','OMNIBUS.P')]), lower = list(continuous = wrap(lowerfun))) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+
+# Something is clearly wrong with the OMNIBUS results.
+# MAd and ACAT.O are highly correlated
+# Lets look at some genes which differ between MAd and ACAT.O
+res_all_log10<-data.frame(res_all$Gene,-log10(res_all[,c('ACAT.O.P','agg_P','OMNIBUS.P')]))
+res_all_log10$diff<-abs(res_all_log10$ACAT.O.P - res_all_log10$agg_P)
+
+res_all_log10[rev(order(res_all_log10$diff)),]$res_all.Gene[1]
+# SLC39A1 has the most discordant assoc result
+dat[dat$GENE == 'SLC39A1',]
+twas[twas$ID == 'SLC39A1',]
+# I am not sure why the association is stronger for ACAT.O.P. Perhaps because it is not accounting for the correlation between strongly and weaker associated models.
+
+res_all_log10[rev(order(res_all_log10$diff)),]$res_all.Gene[2]
+# MAP7D1 has the most discordant assoc result
+dat[dat$GENE == 'MAP7D1',]
+twas[twas$ID == 'MAP7D1',]
+# This comes out as more significant in MAd because of several highly significant associations that are partially independent.
+
+# MAd is working quite well, so I will add to the FUSION post-process script.
+
+```
+
+***
+
+# Simulate TWAS results
+
+***
+
+```{bash, eval=F, echo=T}
+
+# Simulate null TWAS results
+sbatch -p cpu --mem 20G -n 20 -t 2-0 /users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/sim_TWAS.R \
+--nperm 100 \
+--ncore 20 \
+--output /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/sim_twas/results
+
+```
+
+```{r, eval=F, echo=T}
+# Format results for fusion post process script
+library(data.table)
+
+res<-fread('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/sim_twas/results.100_perm.txt')
+res$Gene<-gsub('.RDat.*','',gsub('eQTLGen.eQTL.','',res$ID))
+res$MODEL<-gsub('.*\\.','',res$ID)
+
+twas<-fread('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTLGen.GW')
+twas<-twas[,c('PANEL','FILE','ID','CHR','P0','P1','HSQ','NSNP','NWGT','MODEL'), with=F]
+
+res_twas<-merge(twas, res, by.x=c('ID','MODEL'), by.y=c('Gene','MODEL'))
+res_twas$TWAS.Z<-res_twas$BETA/res_twas$SE
+res_twas$TWAS.P<-res_twas$P
+res_twas<-res_twas[,c("ID","MODEL","PANEL","FILE","CHR","P0","P1","HSQ","NSNP","NWGT","perm","TWAS.Z","TWAS.P"),with=F]
+ 
+for(i in unique(res_twas$perm)){
+  res_twas_i<-res_twas[res_twas$perm == i,]
+  res_twas_i$perm<-NULL
+  fwrite(res_twas_i, paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/sim_twas/results.100_perm.txt.twas_format.perm_',i,'.txt'), quote=F, sep=' ', na='NA')
+}
+ 
+```
+
+```{bash, eval=F, echo=T}
+# Perform FUSION omnibus test
+mkdir -p /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/sim_twas/FUSION.O
+for perm in $(seq 1 100); do
+  for chr in $(seq 1 22); do
+
+    sbatch -p cpu --mem=20G /users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/GenoFunc/GenoFuncPipe/resources/software/fusion/FUSION.post_process.R \
+          --input /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/sim_twas/results.100_perm.txt.twas_format.perm_${perm}.txt \
+          --sumstats /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.munged.sumstats.gz \
+          --ref_ld_chr /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
+          --out /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/sim_twas/FUSION.O/results.100_perm.txt.twas_format.perm_${perm}.txt.chr${chr} \
+          --omnibus \
+          --chr ${chr}
+          
+  done
+done
+
+# Perform MAd agg BHHR omnibus test
+mkdir -p /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/sim_twas/BHHR.O
+for perm in $(seq 1 100); do
+  for chr in $(seq 1 22); do
+
+  sbatch -p cpu --mem=20G /users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/FUSION.post_process.edit.R \
+          --input /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/sim_twas/results.100_perm.txt.twas_format.perm_${perm}.txt \
+          --sumstats /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.munged.sumstats.gz \
+          --ref_ld_chr /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
+          --out /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/sim_twas/BHHR.O/results.100_perm.txt.twas_format.perm_${perm}.txt.chr${chr} \
+          --bhhr \
+          --max_r2 1 \
+          --chr ${chr}
+          
+  done
+done
+
+```
+
+```{r, eval=F, echo=T}
+
+library(data.table)
+
+res<-fread('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/sim_twas/results.100_perm.txt')
+
+# FPR across all models and genes
+fpr_all<-NULL
+for(i in unique(res$perm)){
+  res_i<-res[res$perm == i,]
+  fpr_all<-c(fpr_all, sum(res_i$P < 0.05)/sum(!is.na(res_i$P)))
+}
+
+mean(fpr_all) # 0.05016951
+sd(fpr_all) # 0.002169729
+
+# FPR if selecting the model randomly
+fpr_rand_all<-NULL
+for(i in unique(res$perm)){
+  res_i<-res[res$perm == i,]
+  res_i$Gene<-gsub('.RDat.*','',gsub('eQTLGen.eQTL.','',res_i$ID))
+  set.seed(1)
+  res_i<-res_i[order(sample(nrow(res_i))),]
+  res_i<-res_i[!duplicated(res_i$Gene),]
+  
+  fpr_rand_all<-c(fpr_rand_all, sum(res_i$P < 0.05)/sum(!is.na(res_i$P)))
+}
+
+mean(fpr_rand_all) # 0.05033426
+sd(fpr_rand_all) # 0.002509921
+
+# FPR if selecting the model with the highest abs(TWAS.Z)
+fpr_twasz_all<-NULL
+for(i in unique(res$perm)){
+  res_i<-res[res$perm == i,]
+  res_i$Gene<-gsub('.RDat.*','',gsub('eQTLGen.eQTL.','',res_i$ID))
+  res_i<-res_i[order(res_i$P),]
+  res_i<-res_i[!duplicated(res_i$Gene),]
+  
+  fpr_twasz_all<-c(fpr_twasz_all, sum(res_i$P < 0.05)/sum(!is.na(res_i$P)))
+}
+
+mean(fpr_twasz_all) # 0.1440598
+sd(fpr_twasz_all) # 0.00479449
+
+# FPR if selecting the model by pseudovalidation
+pseudo_files<-list.files(path=paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo_full/'), pattern=paste0('pseudo_res_chr'))
+
+pseudo_res<-NULL
+for(i in pseudo_files){
+  pseudo_res<-rbind(pseudo_res, fread(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo_full/',i)))
+}
+
+pseudo_res<-pseudo_res[!is.na(pseudo_res$TWAS.Z),]
+pseudo_res<-pseudo_res[order(-pseudo_res$TWAS.Z),]
+pseudo_res<-pseudo_res[!duplicated(pseudo_res$ID),]
+names(pseudo_res)[names(pseudo_res) == 'ID']<-'Gene'
+
+fpr_pseudo_all<-NULL
+for(i in unique(res$perm)){
+  res_i<-res[res$perm == i,]
+  res_i$Gene<-gsub('.RDat.*','',gsub('eQTLGen.eQTL.','',res_i$ID))
+  res_i$MODEL<-gsub('.*\\.','',res_i$ID)
+  
+  res_i_pseudo<-merge(res_i, pseudo_res, by=c('Gene','MODEL'))
+  
+  res_i_pseudo<-res_i_pseudo[order(res_i_pseudo$P),]
+  res_i_pseudo<-res_i_pseudo[!duplicated(res_i_pseudo$Gene),]
+  
+  fpr_pseudo_all<-c(fpr_pseudo_all, sum(res_i_pseudo$P < 0.05)/sum(!is.na(res_i_pseudo$P)))
+}
+
+mean(fpr_pseudo_all) # 0.04991035
+sd(fpr_pseudo_all) # 0.002143013
+
+# FPR if selecting the model by pseudovalidation and restricting to SNP-heritable genes
+eqtl_h2<-fread('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/eQTLGen.hsq.txt')
+twas_eqtl_hsq<-eqtl_h2[which(eqtl_h2$p < 0.01),]
+
+fpr_pseudo_hsq_all<-NULL
+for(i in unique(res$perm)){
+  res_i<-res[res$perm == i,]
+  res_i$Gene<-gsub('.RDat.*','',gsub('eQTLGen.eQTL.','',res_i$ID))
+  res_i$MODEL<-gsub('.*\\.','',res_i$ID)
+  
+  res_i_pseudo<-merge(res_i, pseudo_res, by=c('Gene','MODEL'))
+  res_i_pseudo[res_i_pseudo$Gene %in% twas_eqtl_hsq$ID,]
+  
+  res_i_pseudo<-res_i_pseudo[order(res_i_pseudo$P),]
+  res_i_pseudo<-res_i_pseudo[!duplicated(res_i_pseudo$Gene),]
+  
+  fpr_pseudo_hsq_all<-c(fpr_pseudo_hsq_all, sum(res_i_pseudo$P < 0.05)/sum(!is.na(res_i_pseudo$P)))
+}
+
+mean(fpr_pseudo_hsq_all) # 0.04991035
+sd(fpr_pseudo_hsq_all) # 0.002143013
+
+# FPR if selecting the model by pseudovalidation and restricting to FastBAT significant genes
+fastbat_res<-fread('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/eQTLGen.eQTL.fastbat/fastbat_all_res.txt')
+fastbat_res_sig<-fastbat_res[fastbat_res$Pvalue < 0.01 | fastbat_res$TopSNP.Pvalue < 5e-8,]
+
+fpr_pseudo_fastbat_all<-NULL
+for(i in unique(res$perm)){
+  res_i<-res[res$perm == i,]
+  res_i$Gene<-gsub('.RDat.*','',gsub('eQTLGen.eQTL.','',res_i$ID))
+  res_i$MODEL<-gsub('.*\\.','',res_i$ID)
+  
+  res_i_pseudo<-merge(res_i, pseudo_res, by=c('Gene','MODEL'))
+  res_i_pseudo[res_i_pseudo$Gene %in% fastbat_res_sig$Set,]
+  
+  res_i_pseudo<-res_i_pseudo[order(res_i_pseudo$P),]
+  res_i_pseudo<-res_i_pseudo[!duplicated(res_i_pseudo$Gene),]
+  
+  fpr_pseudo_fastbat_all<-c(fpr_pseudo_fastbat_all, sum(res_i_pseudo$P < 0.05)/sum(!is.na(res_i_pseudo$P)))
+}
+
+mean(fpr_pseudo_fastbat_all) # 0.04991035
+sd(fpr_pseudo_fastbat_all) # 0.002143013
+
+
+# FPR of ACAT.O results
+ACATO <- function(p){
+    if (all(is.na(p))) return(NA)
+    p <- p[!is.na(p)]
+    p[p == 1] <- 1 - 1e-16
+#### check if there are very small non-zero p values
+    is.small <- (p < 1e-16)
+    if (sum(is.small) == 0) {
+        cct.stat <- sum(tan((0.5 - p) * pi))/length(p)
+    } else {
+        cct.stat <- sum((1 / p[is.small]) / pi)
+        cct.stat <- cct.stat + sum(tan((0.5 - p[!is.small]) * pi))
+        cct.stat <- cct.stat/length(p)
+    }
+    #### check if the test statistic is very large.
+    if (cct.stat > 1e+15){
+        pval <- (1 / cct.stat) / pi
+    } else {
+        pval <- 1 - pcauchy(cct.stat)
+    }
+    pval
+}
+
+res$Z<-res$BETA/res$SE
+res$P_onesided<-res$P/2
+res$P_onesided[res$Z < 0]<- 1-res$P_onesided[res$Z < 0]
+
+fpr_acat_omni_all<-NULL
+fpr_acat_omni_one_all<-NULL
+for(i in unique(res$perm)){
+  res_i<-res[res$perm == i,]
+  res_i$Gene<-gsub('.RDat.*','',gsub('eQTLGen.eQTL.','',res_i$ID))
+  
+  acato_res<-aggregate(res_i$P, list(res_i$Gene), FUN=ACATO)
+  
+  twas_gene<-data.table(ensembl_gene_id=unique(twas$Gene),
+                                     ACATO.P=aggregate(res_i$P, list(res_i$Gene), FUN=ACATO)$x,
+                                     ACATO.P_one=aggregate(res_i$P_onesided, list(res_i$Gene), FUN=ACATO)$x)
+
+  # Convert one-sided ACAT P into two sided
+  twas_gene$ACATO.P_two<-twas_gene$ACATO.P_one
+  twas_gene$ACATO.P_two[twas_gene$ACATO.P_one > 0.5]<- 1-twas_gene$ACATO.P_one[twas_gene$ACATO.P_one > 0.5]
+  twas_gene$ACATO.P_two<-2*twas_gene$ACATO.P_two
+
+  fpr_acat_omni_all<-c(fpr_acat_omni_all, sum(twas_gene$ACATO.P < 0.05)/sum(!is.na(twas_gene$ACATO.P)))
+  fpr_acat_omni_one_all<-c(fpr_acat_omni_one_all, sum(twas_gene$ACATO.P_two < 0.05)/sum(!is.na(twas_gene$ACATO.P_two)))
+
+}
+
+mean(fpr_acat_omni_all) # 0.05397758
+sd(fpr_acat_omni_all) # 0.00279165
+mean(fpr_acat_omni_one_all) # 0.05506942
+sd(fpr_acat_omni_one_all) # 0.002803079
+
+fpr_acat_omni_fastbat_all<-NULL
+for(i in unique(res$perm)){
+  res_i<-res[res$perm == i,]
+  res_i$Gene<-gsub('.RDat.*','',gsub('eQTLGen.eQTL.','',res_i$ID))
+  
+  res_i<-res_i[res_i$Gene %in% fastbat_res_sig$Set,]
+
+  acato_res<-aggregate(res_i$P, list(res_i$Gene), FUN=ACATO) 
+  
+  fpr_acat_omni_fastbat_all<-c(fpr_acat_omni_fastbat_all, sum(acato_res$x < 0.05)/sum(!is.na(acato_res$x)))
+
+}
+
+mean(fpr_acat_omni_fastbat_all) # 0.05397758
+sd(fpr_acat_omni_fastbat_all) # 0.00279165
+
+# FPR of FUSION.OMNIBUS
+fpr_fusion_omni_all<-NULL
+for(i in unique(res$perm)){
+  omnibus<-NULL
+  for(k in 1:22){
+    omnibus<-rbind(omnibus, read.table(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/sim_twas/FUSION.O/results.100_perm.txt.twas_format.perm_',i,'.txt.chr',k,'.omnibus.pv'), header=T, stringsAsFactors = F))
+  }
+  
+  omnibus<-omnibus[!is.na(omnibus$OMNIBUS.P),]
+  
+    fpr_fusion_omni_all<-c(fpr_fusion_omni_all, sum(omnibus$OMNIBUS.P < 0.05)/sum(!is.na(omnibus$OMNIBUS.P)))
+
+}
+
+mean(fpr_fusion_omni_all) # 0.1958721
+sd(fpr_fusion_omni_all) # 0.006601465
+
+# FPR of MAd agg BHHR
+fpr_bhhr_omni_all<-NULL
+for(i in unique(res$perm)){
+  omnibus<-NULL
+  for(k in 1:22){
+    omnibus<-rbind(omnibus, read.table(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/sim_twas/BHHR.O/results.100_perm.txt.twas_format.perm_',i,'.txt.chr',k,'.omnibus.pv'), header=T, stringsAsFactors = F))
+  }
+  
+    fpr_bhhr_omni_all<-c(fpr_bhhr_omni_all, sum(omnibus$BHHR.P < 0.05)/sum(!is.na(omnibus$BHHR.P)))
+
+}
+
+mean(fpr_bhhr_omni_all) # 0.09652557
+sd(fpr_bhhr_omni_all) # 0.008308424
+
+fpr_bhhr_omni_fastbat_all<-NULL
+for(i in unique(res$perm)){
+  omnibus<-NULL
+  for(k in 1:22){
+    omnibus<-rbind(omnibus, read.table(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/sim_twas/BHHR.O/results.100_perm.txt.twas_format.perm_',i,'.txt.chr',k,'.omnibus.pv'), header=T, stringsAsFactors = F))
+  }
+  
+    omnibus<-omnibus[omnibus$GENE %in% fastbat_res_sig$Set,]
+
+    fpr_bhhr_omni_fastbat_all<-c(fpr_bhhr_omni_fastbat_all, sum(omnibus$BHHR.P < 0.05)/sum(!is.na(omnibus$BHHR.P)))
+
+}
+
+mean(fpr_bhhr_omni_fastbat_all) # 0.09947539
+sd(fpr_bhhr_omni_fastbat_all) # 0.008663058
+
+# The type I error rate is good when selecting models by pseudoval or using ACATO
+# There is inflation when selecting models by TWAS.P as expected. There was aso inflation when using FUSION.O or BHHR.O omnibus tests. This seems to be regardless of filter genes in advance.
+
+```
+
+***
 
 To do:
 
