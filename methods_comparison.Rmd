@@ -3210,6 +3210,17 @@ nrow(both_best) # 4606
 median(both_best$value.x) # 0.07559274
 median(both_best$value.y) # 0.0630884
 
+both_best_melt<-melt(both_best[,c('L1','value.x','value.y'),with=F])
+names(both_best_melt)<-c('ID','Sample','R')
+both_best_melt$Sample<-ifelse(both_best_melt$Sample == 'value.x', 'eQTLGen','YFS')
+both_best_melt$Sample<-factor(both_best_melt$Sample, levels=c('YFS','eQTLGen'))
+both_best_melt$R_rank<-rank(both_best_melt$R)
+
+both_best_melt<-both_best_melt[complete.cases(both_best_melt),]
+
+wilcox.test(R ~ Sample, data=both_best_melt) 
+cor.test(x=both_best_melt$R, y=as.numeric(both_best_melt$Sample), method="spearman")
+
 library(ggplot2)
 library(cowplot)
 

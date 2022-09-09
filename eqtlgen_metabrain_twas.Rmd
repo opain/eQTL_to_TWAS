@@ -516,6 +516,27 @@ done
 
 ***
 
+### Run SMR-multi
+
+```{bash, eval=F, echo=T}
+
+mkdir /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/smr_multi
+
+for chr in $(seq 1 22); do
+
+  sbatch -p cpu --mem 20G -n 1 --wrap="/users/k1806347/oliverpainfel/Software/MyGit/GenoFunc/GenoFuncPipe/resources/software/smr/smr_Linux \
+      --bfile /users/k1806347/oliverpainfel/Software/MyGit/GenoFunc/GenoFuncPipe/resources/data/1kg/1KG.Phase3.EUR.MAF_001.chr${chr} \
+      --gwas-summary /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.cojo \
+      --beqtl-summary /users/k1806347/oliverpainfel/Software/MyGit/GenoFunc/GenoFuncPipe/resources/data/eqtlgen/cis-eQTLs-full_eQTLGen_AF_incl_nr_formatted_20191212.new.txt_besd-dense \
+      --out /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/smr_multi/SCZ_smr_multi_eqtlgen_chr${chr} \
+      --smr-multi"
+
+done
+
+```
+
+***
+
 ## Compare eQTLGen TWAS and SMR results
 
 ```{r, eval=F, echo=T}
@@ -804,6 +825,46 @@ sum(twas_gene_mbat_combo$ACATO.P.BONF < 0.05 & twas_gene_mbat_combo$COLOC.PP4 > 
 sum(twas_gene_mbat_combo$ensembl_gene_id[twas_gene_mbat_combo$ACATO.P.BONF < 0.05] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05]) # 209
 sum(twas_gene_mbat_combo$ensembl_gene_id[twas_gene_mbat_combo$ACATO.P.BONF < 0.05 & twas_gene_mbat_combo$COLOC.PP4 > 0.8] %in% smr_eqtlgen$ensembl_gene_id[smr_eqtlgen$p_SMR.BONF < 0.05 & smr_eqtlgen$p_HEIDI > 0.05]) # 44
 
+######
+# Write out table of results comparing lead ACAT mBat results
+twas_gene_big<-merge(twas_gene_mbat_combo[,c('ensembl_gene_id','ACATO.P','mean_Z','ACATO.P.BONF'), with=F],twas[,c('ensembl_gene_id','external_gene_name','MODEL','CHR','P0','P1','TWAS.Z','TWAS.P','COLOC.PP3','COLOC.PP4'), with=F],by='ensembl_gene_id', all.x=T)
+
+twas_gene_big_smr<-merge(twas_gene_big, smr_eqtlgen[,c('ensembl_gene_id','b_SMR','se_SMR','p_SMR','p_HEIDI','p_SMR.BONF'), with=F],by='ensembl_gene_id', all.x=T)
+
+twas_gene_big_smr_nov<-twas_gene_big_smr[twas_gene_big_smr$p_SMR.BONF > 0.05 & twas_gene_big_smr$ACATO.P.BONF < 0.05 & twas_gene_big_smr$COLOC.PP4 > 0.8,]
+
+# Collapse model specific information
+mod_comb<-function(x){
+  
+  paste(
+    paste0(x$MODEL,'=',round(x$TWAS.Z,1))
+    , collapse = ', ')
+}
+
+twas_gene_big_smr_nov$mod_info<-paste0(twas_gene_big_smr_nov$MODEL,'=',round(twas_gene_big_smr_nov$TWAS.Z,1))
+
+mod_info<-aggregate(twas_gene_big_smr_nov$mod_info, list(twas_gene_big_smr_nov$ensembl_gene_id), FUN=function(x) paste(x, collapse=' ;'))
+names(mod_info)<-c('ensembl_gene_id','Model_Z')
+
+twas_gene_big_smr_nov_collapse<-merge(twas_gene_big_smr_nov, mod_info,by='ensembl_gene_id')
+twas_gene_big_smr_nov_collapse$MODEL<-NULL
+twas_gene_big_smr_nov_collapse$TWAS.Z<-NULL
+twas_gene_big_smr_nov_collapse$TWAS.P<-NULL
+twas_gene_big_smr_nov_collapse$mod_info<-NULL
+twas_gene_big_smr_nov_collapse<-twas_gene_big_smr_nov_collapse[!duplicated(twas_gene_big_smr_nov_collapse),]
+
+twas_gene_big_smr_nov_collapse<-twas_gene_big_smr_nov_collapse[order(twas_gene_big_smr_nov_collapse$ACATO.P),]
+
+twas_gene_big_smr_nov_collapse<-twas_gene_big_smr_nov_collapse[order(twas_gene_big_smr_nov_collapse$CHR, twas_gene_big_smr_nov_collapse$P0),]
+
+twas_gene_big_smr_nov_collapse$Location<-paste0(twas_gene_big_smr_nov_collapse$CHR,':',twas_gene_big_smr_nov_collapse$P0,'-',twas_gene_big_smr_nov_collapse$P1)
+twas_gene_big_smr_nov_collapse<-twas_gene_big_smr_nov_collapse[,c('Location','ensembl_gene_id','external_gene_name','mean_Z','ACATO.P.BONF','COLOC.PP4','p_SMR.BONF','p_HEIDI','Model_Z'), with=F]
+names(twas_gene_big_smr_nov_collapse)<-c('Location','ID','Name','Mean TWAS Z',"ACAT-O P (bonferroni)",'Coloc PP4', "SMR P (Bonferroni)","HEIDI P", "TWAS Model Z")
+
+write.csv(twas_gene_big_smr_nov_collapse, '/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/twas_acato_mbat_vs_smr.csv', row.names=F)
+
+######
+
 # Using one-sided ACAT
 nrow(twas_gene) # 19156
 twas_gene$ACATO.P_two.BONF<-p.adjust(twas_gene$ACATO.P_two, method='bonferroni')
@@ -945,11 +1006,11 @@ Genes<-getBM(attributes=c('ensembl_gene_id','external_gene_name'), mart = ensemb
 Genes<-Genes[!duplicated(Genes$ensembl_gene_id),]
 
 # Read in TWAS results
-twas_files<-list.files(path=paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas_OLD_03092022//'), pattern=paste0('SCZ.TWAS.eQTLGen.chr'))
+twas_files<-list.files(path=paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas//'), pattern=paste0('SCZ.TWAS.eQTLGen.chr'))
 
 twas<-NULL
 for(i in twas_files){
-  twas<-rbind(twas, fread(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas_OLD_03092022/',i)))
+  twas<-rbind(twas, fread(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/',i)))
 }
 
 twas<-merge(twas,Genes, by.x='ID', by.y='ensembl_gene_id', all.x=T)
@@ -1091,7 +1152,7 @@ for(i in seq(0.05,0.95,0.05)){
 ###################
 
 # Use the significant genes when using pseudo as examples
-pseudo_files<-list.files(path=paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo_full_OLD_03092022/'), pattern=paste0('pseudo_res_chr'))
+pseudo_files<-list.files(path=paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo_full/'), pattern=paste0('pseudo_res_chr'))
 
 pseudo_res<-NULL
 for(i in pseudo_files){
@@ -1212,27 +1273,77 @@ smr_eqtlgen[smr_eqtlgen$ensembl_gene_id == 'ENSG00000151665',]
 # They suggest the heritability of the gene is low, but there are very strong eQTL signals present. The prediction of observed expression in GTEx is positive but the association is again only coming from one model, and it isn't the model that performed best. It seems like pseudovalidation might actually be biasing the results.
 
 # It would be interesting to see what the aggregation methods found for these genes with only one highly significant model
-mad_omnibus<-NULL
-for(i in 1:22){
-  mad_omnibus<-rbind(mad_omnibus, read.table(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas_OLD_03092022/SCZ.TWAS.eQTLGen.omnibus_edit.chr',i,'.omnibus.pv'), header=T, stringsAsFactors = F))
-
+ACATO <- function(p){
+    if (all(is.na(p))) return(NA)
+    p <- p[!is.na(p)]
+    p[p == 1] <- 1 - 1e-16
+#### check if there are very small non-zero p values
+    is.small <- (p < 1e-16)
+    if (sum(is.small) == 0) {
+        cct.stat <- sum(tan((0.5 - p) * pi))/length(p)
+    } else {
+        cct.stat <- sum((1 / p[is.small]) / pi)
+        cct.stat <- cct.stat + sum(tan((0.5 - p[!is.small]) * pi))
+        cct.stat <- cct.stat/length(p)
+    }
+    #### check if the test statistic is very large.
+    if (cct.stat > 1e+15){
+        pval <- (1 / cct.stat) / pi
+    } else {
+        pval <- 1 - pcauchy(cct.stat)
+    }
+    pval
 }
 
-mad_omnibus$BHHR.P.BONF<-p.adjust(mad_omnibus$BHHR.P, method='bonferroni')
-mad_omnibus[mad_omnibus$GENE == 'ENSG00000100058',]
-mad_omnibus[mad_omnibus$GENE == 'ENSG00000121940',]
-mad_omnibus[mad_omnibus$GENE == 'ENSG00000151665',]
-
-# The BHHR aggreagate test finds ENSG00000100058 to be highly significant, but ENSG00000121940 and ENSG00000151665 to be non-significant after bonferroni. This suggest the aggregate test might also help reduce false positives. Lets see what the simulations say.
-
-```
-
-```{r, eval=F, echo=T}
-##########
-# Compare significant and colocalised results found by ACAT.O but not in SMR
-##########
+acato_res<-data.table(ensembl_gene_id=sort(unique(twas$ensembl_gene_id)),
+                                     ACATO.P=aggregate(twas$TWAS.P, list(twas$ensembl_gene_id), FUN=ACATO)$x,
+                                     min.P=aggregate(twas$TWAS.P, list(twas$ensembl_gene_id), FUN=function(x) min(x, na.rm=T))$x,
+                                     mean_Z=aggregate(twas$TWAS.Z, list(twas$ensembl_gene_id), FUN=function(x) mean(x,na.rm=T))$x)
 
 
+acato_res$ACATO.P.BONF<-p.adjust(acato_res$ACATO.P, method='bonferroni')
+acato_res[acato_res$ensembl_gene_id == 'ENSG00000100058',]
+acato_res[acato_res$ensembl_gene_id == 'ENSG00000121940',]
+acato_res[acato_res$ensembl_gene_id == 'ENSG00000151665',]
+
+# They are all still significant in the ACAT-O analysis.
+
+######
+# Make some comparisons between gold standard TWAS results and SMR
+# mBAT restricted, ACATO, colocalised
+######
+
+mbat_res<-NULL
+for(i in 1:22){
+  mbat_res<-rbind(mbat_res, fread(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/eQTLGen.eQTL.mbat.combo.chr',i,'.res.txt')))
+}
+
+mbat_res$P_mBATcombo.FDR<-p.adjust(mbat_res$P_mBATcombo, method='fdr')
+mbat_combo_res_sig<-mbat_res[mbat_res$P_mBATcombo.FDR < 0.05 | mbat_res$TopSNP_Pvalue < 5e-8,]
+
+acato_res_mbat<-acato_res[acato_res$ensembl_gene_id %in% mbat_combo_res_sig$Gene,]
+acato_res_mbat$ACATO.P.BONF<-p.adjust(acato_res_mbat$ACATO.P, method='bonferroni')
+acato_res_mbat_sig<-acato_res_mbat[acato_res_mbat$ACATO.P.BONF < 0.05,]
+
+acato_res_mbat_sig<-twas_gene<-merge(acato_res_mbat_sig,twas_pseudo[,c('ensembl_gene_id','COLOC.PP4'), with=F],by='ensembl_gene_id')
+acato_res_mbat_sig_coloc<-acato_res_mbat_sig[acato_res_mbat_sig$COLOC.PP4 > 0.8,]
+
+smr_eqtlgen$p_SMR.BONF<-p.adjust(smr_eqtlgen$p_SMR, method='bonferroni')
+
+acato_res_mbat_sig_coloc_smr<-merge(acato_res_mbat_sig_coloc, smr_eqtlgen[,c('ensembl_gene_id','b_SMR','p_SMR.BONF','p_HEIDI'),with=F], by='ensembl_gene_id')
+
+acato_res_mbat_sig_coloc_smr<-acato_res_mbat_sig_coloc_smr[order(acato_res_mbat_sig_coloc_smr$ACATO.P),]
+acato_res_mbat_sig_coloc_smr[acato_res_mbat_sig_coloc_smr$p_SMR.BONF > 0.05,]
+
+twas[twas$ensembl_gene_id == 'ENSG00000100058',]
+twas[twas$ensembl_gene_id == 'ENSG00000213588',]
+twas[twas$ensembl_gene_id == 'ENSG00000197933',] # This one has a dodgy looking ldpred2 model result
+twas[twas$ensembl_gene_id == 'ENSG00000126458',]
+twas[twas$ensembl_gene_id == 'ENSG00000112667',]
+twas[twas$ensembl_gene_id == 'ENSG00000163635',]
+twas[twas$ensembl_gene_id == 'ENSG00000075292',]
+twas[twas$ensembl_gene_id == 'ENSG00000029725',]
+twas[twas$ensembl_gene_id == 'ENSG00000104765',]
 
 ```
 
@@ -1433,19 +1544,142 @@ ACATO <- function(p){
     if (cct.stat > 1e+15){
         pval <- (1 / cct.stat) / pi
     } else {
-        pval <- 1 - pcauchy(cct.stat)
+        pval <- pcauchy(cct.stat, lower.tail = F)
     }
     pval
 }
 
-twas_eqtl$P_onesided<-twas_eqtl$TWAS.P/2
-twas_eqtl$P_onesided[twas_eqtl$TWAS.Z < 0]<- 1-twas_eqtl$P_onesided[twas_eqtl$TWAS.Z < 0]
+# Edit the function to use Z scores as input
+ACATO_edit <- function(z){
+    p<-2*pnorm(-abs(z))
+    if (all(is.na(p))) return(NA)
+    p <- p[!is.na(p)]
+    p[p == 1] <- 1 - 1e-16
+#### check if there are very small non-zero p values
+    is.small <- (p < 1e-16)
+    if (sum(is.small) == 0) {
+        cct.stat <- sum(tan((0.5 - p) * pi))/length(p)
+    } else {
+        cct.stat <- sum((1 / p[is.small]) / pi)
+        cct.stat <- cct.stat + sum(tan((0.5 - p[!is.small]) * pi))
+        cct.stat <- cct.stat/length(p)
+    }
+    #### check if the test statistic is very large.
+    if (cct.stat > 1e+15){
+        pval <- (1 / cct.stat) / pi
+    } else {
+        pval <- pcauchy(cct.stat, lower.tail = F)
+    }
+    pval
+}
+
+# Edit now to account for direction of effect.
+# We cold use one-sided p-values as the input, however values close 1 in R get rounded.
+# As a result p is not always equal to 1-(1-p).
+# So, we must convert to the Cauchy distribution separately for positive and negative associations
+# with p-values being small for effects with greater magnitude.
+ACATO_dir <- function(z, dir=F){
+  if (all(is.na(z))) return(NA)
+  z <- z[!is.na(z)]
+  
+  # Split z into pos and neg
+  z_pos<-z[z >= 0]
+  z_neg<-z[z < 0]
+  
+  # Convert to p, maintaining precision
+  p_pos<-pnorm(abs(z_pos), lower.tail = F)
+  p_neg<-pnorm(abs(z_neg), lower.tail = F)
+  
+  # check if there are very small non-zero p values
+  is.small_pos <- (p_pos < 1e-16)
+  if (sum(is.small_pos) == 0) {
+      cct.stat_pos <- sum(tan((0.5 - p_pos) * pi))
+  } else {
+      cct.stat_pos <- sum((1 / p_pos[is.small_pos]) / pi)
+      cct.stat_pos <- cct.stat_pos + sum(tan((0.5 - p_pos[!is.small_pos]) * pi))
+  }
+  
+  is.small_neg <- (p_neg < 1e-16)
+  if (sum(is.small_neg) == 0) {
+      cct.stat_neg <- sum(tan((0.5 - p_neg) * pi))
+  } else {
+      cct.stat_neg <- sum((1 / p_neg[is.small_neg]) / pi)
+      cct.stat_neg <- cct.stat_neg + sum(tan((0.5 - p_neg[!is.small_neg]) * pi))
+  }
+  
+  cct.stat<-sum(c(cct.stat_pos, -cct.stat_neg), na.rm=T)
+  cct.stat <- cct.stat/length(z)
+  dir<-sign(cct.stat)
+
+  # check if the test statistic is very large.
+  if (abs(cct.stat) > 1e+15){
+      pval <- (1 / abs(cct.stat)) / pi
+  } else {
+      pval <- pcauchy(abs(cct.stat), lower.tail = F)
+  }
+  
+  # Convert to two sided p-value
+  out<-list()
+  out[['z']]<-abs(qnorm(pval))*dir
+  out[['p']]<-pval*2
+
+  out
+}
+
+####
+# Scenario A (weakly sig. pos)
+####
+ACATO(p=twas_eqtl$TWAS.P[twas_eqtl$ID == 'ZDHHC5'])
+ACATO_edit(z=twas_eqtl$TWAS.Z[twas_eqtl$ID == 'ZDHHC5'])
+ACATO_dir(z=twas_eqtl$TWAS.Z[twas_eqtl$ID == 'ZDHHC5'])
+
+####
+# Scenario B (weakly sig. neg)
+####
+ACATO(p=twas_eqtl$TWAS.P[twas_eqtl$ID == 'KLHL20'])
+ACATO_edit(z=twas_eqtl$TWAS.Z[twas_eqtl$ID == 'KLHL20'])
+ACATO_dir(z=twas_eqtl$TWAS.Z[twas_eqtl$ID == 'KLHL20'])
+
+####
+# Scenario C (strongly sig. pos)
+####
+ACATO(p=twas_eqtl$TWAS.P[twas_eqtl$ID == 'FURIN'])
+ACATO_edit(z=twas_eqtl$TWAS.Z[twas_eqtl$ID == 'FURIN'])
+ACATO_dir(z=twas_eqtl$TWAS.Z[twas_eqtl$ID == 'FURIN'])
+
+####
+# Scenario D (strongly sig. neg)
+####
+ACATO(p=twas_eqtl$TWAS.P[twas_eqtl$ID == 'ZSCAN16'])
+ACATO_edit(z=twas_eqtl$TWAS.Z[twas_eqtl$ID == 'ZSCAN16'])
+ACATO_dir(z=twas_eqtl$TWAS.Z[twas_eqtl$ID == 'ZSCAN16'])
+
+####
+# Scenario E (non sig. pos)
+####
+ACATO(p=twas_eqtl$TWAS.P[twas_eqtl$ID == 'RNMT'])
+ACATO_edit(z=twas_eqtl$TWAS.Z[twas_eqtl$ID == 'RNMT'])
+ACATO_dir(z=abs(twas_eqtl$TWAS.Z[twas_eqtl$ID == 'RNMT']))
+ACATO_dir(z=twas_eqtl$TWAS.Z[twas_eqtl$ID == 'RNMT'])
+
+# Up until scenario E, the directional method works perfectly.
+# It seems my directional adaptation diverges when the signal is weaker
+# This isn't due to a mixture of effects.
+
+# Scenario E
+
+ACATO(p=twas_eqtl$TWAS.P[twas_eqtl$ID == 'RFTN1'])
+ACATO_edit(z=twas_eqtl$TWAS.Z[twas_eqtl$ID == 'RFTN1'])
+ACATO_dir(z=abs(twas_eqtl$TWAS.Z[twas_eqtl$ID == 'RFTN1']))
+ACATO_dir(z=twas_eqtl$TWAS.Z[twas_eqtl$ID == 'RFTN1'])
 
 # Calc ACAT-O pvalue
 twas_eqtl_gene<-data.table(ID=sort(unique(twas_eqtl$ID)),
                                      ACATO.P=aggregate(twas_eqtl$TWAS.P, list(twas_eqtl$ID), FUN=ACATO)$x,
-                                     ACATO.P_one=aggregate(twas_eqtl$P_onesided, list(twas_eqtl$ID), FUN=ACATO)$x,
+                                     ACATO.Z_dir=aggregate(twas_eqtl$TWAS.Z, list(twas_eqtl$ID), FUN=function(x) ACATO_dir(z=x)$z)$x,
                                      mean_Z=aggregate(twas_eqtl$TWAS.Z, list(twas_eqtl$ID), FUN=mean)$x)
+
+twas_eqtl_gene$ACATO.P_dir<-2*pnorm(-abs(twas_eqtl_gene$ACATO.Z_dir))
 
 # Convert one-sided ACAT P into two sided
 twas_eqtl_gene$ACATO.P_two<-twas_eqtl_gene$ACATO.P_one
@@ -1457,6 +1691,9 @@ twas_eqtl_gene$ACATO.P_two<-2*twas_eqtl_gene$ACATO.P_two
 twas_eqtl_gene$ACATO.Z<--qnorm(twas_eqtl_gene$ACATO.P/2)
 twas_eqtl_gene$ACATO.Z_one<--qnorm(twas_eqtl_gene$ACATO.P_one)
 # This seems legit. Using one sided p-values in ACATO seems better. Check how this changes results
+
+twas_eqtl_gene$ACATO.Z_one2<--qnorm(twas_eqtl_gene$ACATO.P_one2)
+twas_eqtl_gene$ACATO.P_two2<-2*pnorm(-abs(twas_eqtl_gene$ACATO.Z_one2))
 
 twas_eqtl_gene<-merge(twas_eqtl_gene,twas_eqtl_pseudo[,c('ID','COLOC.PP4'), with=F],by='ID')
 
@@ -2016,36 +2253,87 @@ ACATO <- function(p){
     pval
 }
 
-res$Z<-res$BETA/res$SE
-res$P_onesided<-res$P/2
-res$P_onesided[res$Z < 0]<- 1-res$P_onesided[res$Z < 0]
+ACATO_dir <- function(z, dir=F){
+  if (all(is.na(z))) return(NA)
+  z <- z[!is.na(z)]
+  
+  # Split z into pos and neg
+  z_pos<-z[z >= 0]
+  z_neg<-z[z < 0]
+  
+  # Convert to p, maintaining precision
+  p_pos<-pnorm(abs(z_pos), lower.tail = F)
+  p_neg<-pnorm(abs(z_neg), lower.tail = F)
+  
+  # check if there are very small non-zero p values
+  is.small_pos <- (p_pos < 1e-16)
+  if (sum(is.small_pos) == 0) {
+      cct.stat_pos <- sum(tan((0.5 - p_pos) * pi))
+  } else {
+      cct.stat_pos <- sum((1 / p_pos[is.small_pos]) / pi)
+      cct.stat_pos <- cct.stat_pos + sum(tan((0.5 - p_pos[!is.small_pos]) * pi))
+  }
+  
+  is.small_neg <- (p_neg < 1e-16)
+  if (sum(is.small_neg) == 0) {
+      cct.stat_neg <- sum(tan((0.5 - p_neg) * pi))
+  } else {
+      cct.stat_neg <- sum((1 / p_neg[is.small_neg]) / pi)
+      cct.stat_neg <- cct.stat_neg + sum(tan((0.5 - p_neg[!is.small_neg]) * pi))
+  }
+  
+  cct.stat<-sum(c(cct.stat_pos, -cct.stat_neg), na.rm=T)
+  cct.stat <- cct.stat/length(z)
+  dir<-sign(cct.stat)
+
+  # check if the test statistic is very large.
+  if (abs(cct.stat) > 1e+15){
+      pval <- (1 / abs(cct.stat)) / pi
+  } else {
+      pval <- pcauchy(abs(cct.stat), lower.tail = F)
+  }
+  
+  # Convert to two sided p-value
+  out<-list()
+  out[['z']]<-abs(qnorm(pval))*dir
+  out[['p']]<-pval*2
+
+  out
+}
 
 fpr_acat_omni_all<-NULL
-fpr_acat_omni_one_all<-NULL
+fpr_acat_omni_dir_all<-NULL
+fpr_acat_omni_fdr_all<-NULL
+fpr_acat_omni_dir_fdr_all<-NULL
 for(i in unique(res$perm)){
   res_i<-res[res$perm == i,]
   res_i$Gene<-gsub('.RDat.*','',gsub('eQTLGen.eQTL.','',res_i$ID))
   
-  acato_res<-aggregate(res_i$P, list(res_i$Gene), FUN=ACATO)
+  twas_gene<-data.table(ensembl_gene_id=sort(unique(res_i$Gene)),
+                         ACATO.P=aggregate(res_i$P, list(res_i$Gene), FUN=ACATO)$x,
+                         ACATO.Z_dir=aggregate(res_i$BETA/res_i$SE, list(res_i$Gene), FUN=function(x) ACATO_dir(z=x)$z)$x)
   
-  twas_gene<-data.table(ensembl_gene_id=unique(twas$Gene),
-                                     ACATO.P=aggregate(res_i$P, list(res_i$Gene), FUN=ACATO)$x,
-                                     ACATO.P_one=aggregate(res_i$P_onesided, list(res_i$Gene), FUN=ACATO)$x)
-
-  # Convert one-sided ACAT P into two sided
-  twas_gene$ACATO.P_two<-twas_gene$ACATO.P_one
-  twas_gene$ACATO.P_two[twas_gene$ACATO.P_one > 0.5]<- 1-twas_gene$ACATO.P_one[twas_gene$ACATO.P_one > 0.5]
-  twas_gene$ACATO.P_two<-2*twas_gene$ACATO.P_two
+  twas_gene$ACATO.P.FDR<-p.adjust(twas_gene$ACATO.P, method='fdr')
+  twas_gene$ACATO.P_dir<-2*pnorm(-abs(twas_gene$ACATO.Z_dir))
+  twas_gene$ACATO.P_dir.FDR<-p.adjust(twas_gene$ACATO.P_dir, method='fdr')
 
   fpr_acat_omni_all<-c(fpr_acat_omni_all, sum(twas_gene$ACATO.P < 0.05)/sum(!is.na(twas_gene$ACATO.P)))
-  fpr_acat_omni_one_all<-c(fpr_acat_omni_one_all, sum(twas_gene$ACATO.P_two < 0.05)/sum(!is.na(twas_gene$ACATO.P_two)))
+  fpr_acat_omni_dir_all<-c(fpr_acat_omni_dir_all, sum(twas_gene$ACATO.P_dir < 0.05)/sum(!is.na(twas_gene$ACATO.P_dir)))
+
+  fpr_acat_omni_fdr_all<-c(fpr_acat_omni_fdr_all, sum(twas_gene$ACATO.P.FDR < 0.05)/sum(!is.na(twas_gene$ACATO.P.FDR)))
+  fpr_acat_omni_dir_fdr_all<-c(fpr_acat_omni_dir_fdr_all, sum(twas_gene$ACATO.P_dir.FDR < 0.05)/sum(!is.na(twas_gene$ACATO.P_dir.FDR)))
 
 }
 
 mean(fpr_acat_omni_all) # 0.05397758
 sd(fpr_acat_omni_all) # 0.00279165
-mean(fpr_acat_omni_one_all) # 0.05506942
-sd(fpr_acat_omni_one_all) # 0.002803079
+mean(fpr_acat_omni_dir_all) # 0.05594226
+sd(fpr_acat_omni_dir_all) # 0.002823548
+
+mean(fpr_acat_omni_fdr_all) # 2.095667e-06
+sd(fpr_acat_omni_fdr_all) # 1.272481e-05
+mean(fpr_acat_omni_dir_fdr_all) # 3.143501e-06
+sd(fpr_acat_omni_dir_fdr_all) # 1.45543e-05
 
 fpr_acat_omni_fastbat_all<-NULL
 for(i in unique(res$perm)){
