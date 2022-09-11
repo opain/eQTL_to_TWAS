@@ -8,7 +8,7 @@ Please refer to and cite [our paper]() comparing approaches for integration of e
 
 ***
 
-### compute_weights.R
+## compute_weights.R
 
 This script uses eQTL summary statistics to create TWAS models in a format consistent with FUSION. 
 
@@ -22,9 +22,9 @@ The essential software and data requirements vary according to the methods selec
 - [lassosum](https://github.com/tshmak/lassosum) - Lasso-regularised polygenic scoring method
 - [SuSiE](https://stephenslab.github.io/susieR/index.html) - SNP fine-mapping software, with polygenic scoring applications
 
+***
 
-
-<u>Essential software and data:</u>
+##### Essential software and data:
 
 - eQTL summary statistics
 
@@ -45,9 +45,9 @@ The essential software and data requirements vary according to the methods selec
 - [GCTB software](https://cnsgenomics.com/software/gctb/#Overview) and [GCTB reference data](https://zenodo.org/record/3376628#.Yx4JsXbMKUk)
 - [GCTA software](https://yanglab.westlake.edu.cn/software/gcta/#Overview) 
 
+***
 
-
-<u>Method specific software and data::</u>
+##### Method specific software and data:
 
 - PRS-CS
 
@@ -78,9 +78,9 @@ The essential software and data requirements vary according to the methods selec
     install.packages('susieR')
     ```
 
+***
 
-
-<u>Example of running the script for a single gene:</u>
+##### Example of running the script for a single gene:
 
 ```{bash}
 Rscript eQTL_to_TWAS/compute_weights.R \
