@@ -393,11 +393,11 @@ for(gene_i in genes){
       
       # Write out formatted sumstats
       dir.create(paste0(opt$output,'/', gene_i,'/DBSLMM'))
-      fwrite(GWAS, paste0(opt$output,'/', gene_i,'/DBSLMM/',gene_i,'.DBSLMM.txt'), sep='\t', col.names=F)
+      fwrite(GWAS, paste0(opt$output,'/', gene_i,'/DBSLMM/',gsub('\\..*','',gene_i),'.DBSLMM.txt'), sep='\t', col.names=F)
       
       # Run dbslmm
       system(paste0('chmod 777 ',opt$dbslmm,'/dbslmm'))
-      system(paste0(opt$rscript,' ',opt$dbslmm,'/DBSLMM.R --plink ',opt$plink,' --block ',opt$ld_blocks,'/fourier_ls-chr',chr_i,'.bed --dbslmm ',opt$dbslmm,'/dbslmm --h2 ',hsq_val,' --ref ',opt$output,'/', gene_i,'/ref/ref_chr',chr_i,' --summary ',opt$output,'/', gene_i,'/DBSLMM/',gene_i,'.DBSLMM.txt --n ',round(GWAS_N,0),' --nsnp ',nsnp,' --outPath ',opt$output,'/', gene_i,'/DBSLMM/ --thread 1'))
+      system(paste0(opt$rscript,' ',opt$dbslmm,'/DBSLMM.R --plink ',opt$plink,' --block ',opt$ld_blocks,'/fourier_ls-chr',chr_i,'.bed --dbslmm ',opt$dbslmm,'/dbslmm --h2 ',hsq_val,' --ref ',opt$output,'/', gene_i,'/ref/ref_chr',chr_i,' --summary ',opt$output,'/', gene_i,'/DBSLMM/',gsub('\\..*','',gene_i),'.DBSLMM.txt --n ',round(GWAS_N,0),' --nsnp ',nsnp,' --outPath ',opt$output,'/', gene_i,'/DBSLMM/ --thread 1'))
       
       # Read in the results
       if(file.exists(paste0(opt$output,'/', gene_i,'/DBSLMM/',gsub('\\..*','',gene_i),'.dbslmm.txt'))){

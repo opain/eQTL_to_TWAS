@@ -2841,6 +2841,7 @@ obs_resid<-data.table(obs_resid)
 pred_exp<-merge(eqtl, fusion, by=c('FID','IID'))
 
 # Calculate correlation between observed expression and predicted expression from each method
+# Also, calculate the significance of differences between each model for each gene.
 cor_res<-list()
 for(i in both_genes){
   # Rename columns to make output consistent across genes and label the observed expression
@@ -2859,14 +2860,18 @@ for(i in both_genes){
   cor_res[[i]]<-cor(both_exp_tmp[,-1:-2,with=F], use='p')
 }
 
+saveRDS(cor_res, '/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_YFS_full.RDS')
+
 # melt and combine all the results
 cor_res_melt<-reshape2::melt(cor_res)
 cor_res_melt_obs<-cor_res_melt[cor_res_melt$Var1 == 'obs',]
 cor_res_melt_obs<-cor_res_melt_obs[cor_res_melt_obs$Var1 != cor_res_melt_obs$Var2,]
 cor_res_melt_obs$test<-paste0(cor_res_melt_obs$Var1,'_',cor_res_melt_obs$Var2)
 
+fwrite(cor_res_melt, '/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_YFS_full.txt', quote=F, sep=' ', na='NA')
 write.table(cor_res_melt_obs, '/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_YFS.txt', row.names=F, quote=F)
 
+# cor_res_melt<-fread('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_YFS_full.txt')
 # cor_res_melt_obs<-fread('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_YFS.txt')
 
 cor_res_average<-NULL
@@ -2971,6 +2976,105 @@ write.csv(n_valid, '/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resourc
 # Read in reported R2 by weights
 yfs.profile<-fread('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/FUSION/SNP-weights/YFS.BLOOD.RNAARR/YFS.BLOOD.RNAARR.profile')
 
+################
+# Report the number of times each method does significantly better than the next best method across genes
+################
+
+cor_res_melt<-reshape2::melt(cor_res)
+cor_res_melt_eqtl<-cor_res_melt[grepl('eQTL|obs',cor_res_melt$Var1) & grepl('eQTL|obs',cor_res_melt$Var2),]
+
+library(psych)
+
+cor_res_melt_eqtl_i_obs_diff_all<-NULL
+for(i in unique(cor_res_melt_eqtl$L1)){
+  cor_res_melt_eqtl_i<-cor_res_melt_eqtl[cor_res_melt_eqtl$L1 == i,]
+  cor_res_melt_eqtl_i_obs<-cor_res_melt_eqtl_i[cor_res_melt_eqtl_i$Var1 == 'obs',]
+  cor_res_melt_eqtl_i_noobs<-cor_res_melt_eqtl_i[cor_res_melt_eqtl_i$Var1 != 'obs' & cor_res_melt_eqtl_i$Var2 != 'obs',]
+  
+  cor_res_melt_eqtl_i_obs_2<-merge(cor_res_melt_eqtl_i_obs, cor_res_melt_eqtl_i_noobs, by=c('L1','Var2'))
+  cor_res_melt_eqtl_i_obs_3<-merge(cor_res_melt_eqtl_i_obs_2, cor_res_melt_eqtl_i_obs_2, by.x=c('L1','Var2'), by.y=c('L1','Var1.y'))
+  
+  cor_res_melt_eqtl_i_obs_3<-cor_res_melt_eqtl_i_obs_3[,c('L1','Var2','Var1.x.x','value.x.x','Var2.y','value.x.y','value.y.y')]
+  names(cor_res_melt_eqtl_i_obs_3)<-c('ID','z','x','xz','y','xy','yz')
+  cor_res_melt_eqtl_i_obs_3<-cor_res_melt_eqtl_i_obs_3[,c('ID','x','z','y','xz','xy','yz')]
+  
+  cor_res_melt_eqtl_i_obs_3<-cor_res_melt_eqtl_i_obs_3[cor_res_melt_eqtl_i_obs_3$z != cor_res_melt_eqtl_i_obs_3$y,]
+  cor_res_melt_eqtl_i_obs_3<-cor_res_melt_eqtl_i_obs_3[!duplicated(cor_res_melt_eqtl_i_obs_3),]
+
+  cor_res_melt_eqtl_i_obs_3$n<-nrow(pred_exp)
+  
+  cor_res_melt_eqtl_i_obs_3$yz_diff<-cor_res_melt_eqtl_i_obs_3$xz - cor_res_melt_eqtl_i_obs_3$xy
+  
+  cor_res_melt_eqtl_i_obs_3$yz_diff_p<-apply(cor_res_melt_eqtl_i_obs_3[,c('xz','xy','yz','n')], 1, function(y) paired.r(xy=y['xy'], xz=y['xz'], yz=y['yz'], n=y['n'], twotailed=T)$p[1])
+
+  cor_res_melt_eqtl_i_obs_diff_all<-rbind(cor_res_melt_eqtl_i_obs_diff_all, cor_res_melt_eqtl_i_obs_3)
+
+}
+
+# Count the number of times each z does better than y
+cor_res_melt_eqtl_i_obs_diff_all_count<-list()
+for(i in unique(cor_res_melt_eqtl_i_obs_diff_all$z)){
+  tmp<-cor_res_melt_eqtl_i_obs_diff_all[cor_res_melt_eqtl_i_obs_diff_all$z == i,]
+  tmp<-tmp[tmp$xz > tmp$xy & tmp$yz_diff_p < 0.05,]
+  
+  tmp_count<-data.frame(table(tmp$y))
+  names(tmp_count)<-c('Ref',i)
+  
+  cor_res_melt_eqtl_i_obs_diff_all_count[[i]]<-tmp_count
+  
+}
+
+cor_res_melt_eqtl_i_obs_diff_all_count_tab<-Reduce(function(dtf1, dtf2) merge(dtf1, dtf2, by = "Ref", all.x = TRUE),
+        cor_res_melt_eqtl_i_obs_diff_all_count)
+
+fwrite(cor_res_melt_eqtl_i_obs_diff_all_count_tab, '/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/yfs_method_better_than_other.csv', quote=T, na='NA')
+
+# Count the number of times a z does better than all other models for a given gene
+cor_res_melt_eqtl_i_obs_diff_all_eqtl<-cor_res_melt_eqtl_i_obs_diff_all[grepl('eQTL',cor_res_melt_eqtl_i_obs_diff_all$z) & grepl('eQTL',cor_res_melt_eqtl_i_obs_diff_all$y),]
+cor_res_melt_eqtl_i_obs_diff_all_sig_best<-NULL
+for(i in unique(cor_res_melt_eqtl_i_obs_diff_all_eqtl$z)){
+  tmp<-cor_res_melt_eqtl_i_obs_diff_all_eqtl[cor_res_melt_eqtl_i_obs_diff_all_eqtl$z == i,]
+  tmp2<-aggregate(tmp$xy, list(tmp$ID), FUN=max)
+  tmp3<-merge(tmp,tmp2, by.x=c('ID','xy'), by.y=c('Group.1','x'))
+  tmp3<-tmp3[!duplicated(tmp3$ID),]
+  
+  tmp3<-tmp3[which(tmp3$xz > tmp3$xy & tmp3$yz_diff_p < 0.05),]
+
+  tmp_count<-data.frame(Model=i,
+                        N_best=nrow(tmp3),
+                        N_best_by_10=nrow(tmp3[abs(tmp3$yz_diff) > 0.10, ]),
+                        N_best_by_05=nrow(tmp3[abs(tmp3$yz_diff) > 0.05, ]),
+                        N_best_by_02=nrow(tmp3[abs(tmp3$yz_diff) > 0.02, ]),
+                        N_best_by_01=nrow(tmp3[abs(tmp3$yz_diff) > 0.01, ]))
+  
+  cor_res_melt_eqtl_i_obs_diff_all_sig_best<-rbind(cor_res_melt_eqtl_i_obs_diff_all_sig_best, tmp_count)
+}
+
+fwrite(cor_res_melt_eqtl_i_obs_diff_all_sig_best, '/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/yfs_method_better_than_all.csv', quote=T, na='NA')
+
+# Count the number of times the top1 model is significantly worse
+cor_res_melt_eqtl_i_obs_diff_all_eqtl<-cor_res_melt_eqtl_i_obs_diff_all[grepl('eQTL',cor_res_melt_eqtl_i_obs_diff_all$z) & grepl('eQTL',cor_res_melt_eqtl_i_obs_diff_all$y),]
+cor_res_melt_eqtl_i_obs_diff_all_sig_eqtl_worse<-NULL
+for(i in 'eQTL.top1'){
+  tmp<-cor_res_melt_eqtl_i_obs_diff_all_eqtl[cor_res_melt_eqtl_i_obs_diff_all_eqtl$z == i,]
+  tmp2<-aggregate(tmp$xy, list(tmp$ID), FUN=max)
+  tmp3<-merge(tmp,tmp2, by.x=c('ID','xy'), by.y=c('Group.1','x'))
+  tmp3<-tmp3[!duplicated(tmp3$ID),]
+  
+  tmp3<-tmp3[which(tmp3$xz < tmp3$xy & tmp3$yz_diff_p < 0.05),]
+
+  tmp_count<-data.frame(Model=i,
+                        N_worst=nrow(tmp3),
+                        N_worst_by_10=nrow(tmp3[abs(tmp3$yz_diff) > 0.10, ]),
+                        N_worst_by_05=nrow(tmp3[abs(tmp3$yz_diff) > 0.05, ]),
+                        N_worst_by_02=nrow(tmp3[abs(tmp3$yz_diff) > 0.02, ]),
+                        N_worst_by_01=nrow(tmp3[abs(tmp3$yz_diff) > 0.01, ]))
+  
+  cor_res_melt_eqtl_i_obs_diff_all_sig_eqtl_worse<-rbind(cor_res_melt_eqtl_i_obs_diff_all_sig_eqtl_worse, tmp_count)
+}
+
+fwrite(cor_res_melt_eqtl_i_obs_diff_all_sig_eqtl_worse, '/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/yfs_eqtl_worst_than_best.csv', quote=T, na='NA')
+
 ```
 
 </details>
@@ -3070,8 +3174,11 @@ cor_res_melt_obs<-cor_res_melt[cor_res_melt$Var1 == 'obs',]
 cor_res_melt_obs<-cor_res_melt_obs[cor_res_melt_obs$Var1 != cor_res_melt_obs$Var2,]
 cor_res_melt_obs$test<-paste0(cor_res_melt_obs$Var1,'_',cor_res_melt_obs$Var2)
 
+fwrite(cor_res_melt, '/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_full.txt', sep=' ', quote=F, na='NA')
+
 write.table(cor_res_melt_obs, '/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor.txt', row.names=F, quote=F)
 
+# cor_res_melt<-fread('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_full.txt')
 # cor_res_melt_obs<-fread('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor.txt')
 
 cor_res_average<-NULL
@@ -3144,6 +3251,102 @@ for(i in n_valid$Method){
 n_valid$Prop_top<-n_valid$N_top/sum(n_valid$N_top)
 
 write.csv(n_valid, '/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/n_valid_eQTLGen.csv', row.names=F)
+
+################
+# Report the number of times each method does significantly better than the next best method across genes
+################
+
+library(psych)
+
+cor_res_melt_i_obs_diff_all<-NULL
+for(i in unique(cor_res_melt$L1)){
+  cor_res_melt_i<-cor_res_melt[cor_res_melt$L1 == i,]
+  cor_res_melt_i_obs<-cor_res_melt_i[cor_res_melt_i$Var1 == 'obs',]
+  cor_res_melt_i_noobs<-cor_res_melt_i[cor_res_melt_i$Var1 != 'obs' & cor_res_melt_i$Var2 != 'obs',]
+  
+  cor_res_melt_i_obs_2<-merge(cor_res_melt_i_obs, cor_res_melt_i_noobs, by=c('L1','Var2'))
+  cor_res_melt_i_obs_3<-merge(cor_res_melt_i_obs_2, cor_res_melt_i_obs_2, by.x=c('L1','Var2'), by.y=c('L1','Var1.y'))
+  
+  cor_res_melt_i_obs_3<-cor_res_melt_i_obs_3[,c('L1','Var2','Var1.x.x','value.x.x','Var2.y','value.x.y','value.y.y')]
+  names(cor_res_melt_i_obs_3)<-c('ID','z','x','xz','y','xy','yz')
+  cor_res_melt_i_obs_3<-cor_res_melt_i_obs_3[,c('ID','x','z','y','xz','xy','yz')]
+  
+  cor_res_melt_i_obs_3<-cor_res_melt_i_obs_3[cor_res_melt_i_obs_3$z != cor_res_melt_i_obs_3$y,]
+  cor_res_melt_i_obs_3<-cor_res_melt_i_obs_3[!duplicated(cor_res_melt_i_obs_3),]
+
+  cor_res_melt_i_obs_3$n<-nrow(obs_resid)
+  
+  cor_res_melt_i_obs_3$yz_diff<-cor_res_melt_i_obs_3$xz - cor_res_melt_i_obs_3$xy
+  
+  cor_res_melt_i_obs_3$yz_diff_p<-apply(cor_res_melt_i_obs_3[,c('xz','xy','yz','n')], 1, function(y) paired.r(xy=y['xy'], xz=y['xz'], yz=y['yz'], n=y['n'], twotailed=T)$p[1])
+
+  cor_res_melt_i_obs_diff_all<-rbind(cor_res_melt_i_obs_diff_all, cor_res_melt_i_obs_3)
+
+}
+
+# Count the number of times each z does better than y
+cor_res_melt_i_obs_diff_all_count<-list()
+for(i in unique(cor_res_melt_i_obs_diff_all$z)){
+  tmp<-cor_res_melt_i_obs_diff_all[cor_res_melt_i_obs_diff_all$z == i,]
+  tmp<-tmp[tmp$xz > tmp$xy & tmp$yz_diff_p < 0.05,]
+  
+  tmp_count<-data.frame(table(tmp$y))
+  names(tmp_count)<-c('Ref',i)
+  
+  cor_res_melt_i_obs_diff_all_count[[i]]<-tmp_count
+  
+}
+
+cor_res_melt_i_obs_diff_all_count_tab<-Reduce(function(dtf1, dtf2) merge(dtf1, dtf2, by = "Ref", all.x = TRUE),
+        cor_res_melt_i_obs_diff_all_count)
+
+fwrite(cor_res_melt_i_obs_diff_all_count_tab, '/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/eqtlgen_method_better_than_other.csv', quote=T, na='NA')
+
+# Count the number of times a z does better than all other models for a given gene
+cor_res_melt_i_obs_diff_all_eqtl<-cor_res_melt_i_obs_diff_all[grepl('eQTL',cor_res_melt_i_obs_diff_all$z) & grepl('eQTL',cor_res_melt_i_obs_diff_all$y),]
+cor_res_melt_i_obs_diff_all_sig_best<-NULL
+for(i in unique(cor_res_melt_i_obs_diff_all_eqtl$z)){
+  tmp<-cor_res_melt_i_obs_diff_all_eqtl[cor_res_melt_i_obs_diff_all_eqtl$z == i,]
+  tmp2<-aggregate(tmp$xy, list(tmp$ID), FUN=max)
+  tmp3<-merge(tmp,tmp2, by.x=c('ID','xy'), by.y=c('Group.1','x'))
+  tmp3<-tmp3[!duplicated(tmp3$ID),]
+  
+  tmp3<-tmp3[which(tmp3$xz > tmp3$xy & tmp3$yz_diff_p < 0.05),]
+
+  tmp_count<-data.frame(Model=i,
+                        N_best=nrow(tmp3),
+                        N_best_by_10=nrow(tmp3[abs(tmp3$yz_diff) > 0.10, ]),
+                        N_best_by_05=nrow(tmp3[abs(tmp3$yz_diff) > 0.05, ]),
+                        N_best_by_02=nrow(tmp3[abs(tmp3$yz_diff) > 0.02, ]),
+                        N_best_by_01=nrow(tmp3[abs(tmp3$yz_diff) > 0.01, ]))
+  
+  cor_res_melt_i_obs_diff_all_sig_best<-rbind(cor_res_melt_i_obs_diff_all_sig_best, tmp_count)
+}
+
+fwrite(cor_res_melt_i_obs_diff_all_sig_best, '/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/eqtlgen_method_better_than_all.csv', quote=T, na='NA')
+
+# Count the number of times the top1 model is significantly worse
+cor_res_melt_i_obs_diff_all_eqtl<-cor_res_melt_i_obs_diff_all[grepl('eQTL',cor_res_melt_i_obs_diff_all$z) & grepl('eQTL',cor_res_melt_i_obs_diff_all$y),]
+cor_res_melt_i_obs_diff_all_sig_eqtl_worse<-NULL
+for(i in 'eQTL.top1'){
+  tmp<-cor_res_melt_i_obs_diff_all_eqtl[cor_res_melt_i_obs_diff_all_eqtl$z == i,]
+  tmp2<-aggregate(tmp$xy, list(tmp$ID), FUN=max)
+  tmp3<-merge(tmp,tmp2, by.x=c('ID','xy'), by.y=c('Group.1','x'))
+  tmp3<-tmp3[!duplicated(tmp3$ID),]
+  
+  tmp3<-tmp3[which(tmp3$xz < tmp3$xy & tmp3$yz_diff_p < 0.05),]
+
+  tmp_count<-data.frame(Model=i,
+                        N_worst=nrow(tmp3),
+                        N_worst_by_10=nrow(tmp3[abs(tmp3$yz_diff) > 0.10, ]),
+                        N_worst_by_05=nrow(tmp3[abs(tmp3$yz_diff) > 0.05, ]),
+                        N_worst_by_02=nrow(tmp3[abs(tmp3$yz_diff) > 0.02, ]),
+                        N_worst_by_01=nrow(tmp3[abs(tmp3$yz_diff) > 0.01, ]))
+  
+  cor_res_melt_i_obs_diff_all_sig_eqtl_worse<-rbind(cor_res_melt_i_obs_diff_all_sig_eqtl_worse, tmp_count)
+}
+
+fwrite(cor_res_melt_i_obs_diff_all_sig_eqtl_worse, '/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/eqtlgen_eqtl_worst_than_best.csv', quote=T, na='NA')
 
 ```
 
@@ -3483,6 +3686,19 @@ names(cor_res_melt_obs)<-c('ID','Model','R')
 cor_res_melt_obs$Model<-gsub('eQTL.','',cor_res_melt_obs$Model)
 
 obs_pseudo<-merge(pseudo_res_2, cor_res_melt_obs, by=c('ID','Model'))
+
+# Check whether median R of pseudoval models is greater than average across all models
+obs_pseudo_top<-obs_pseudo[order(obs_pseudo$TWAS.Z),]
+obs_pseudo_top<-obs_pseudo_top[!is.na(obs_pseudo_top$TWAS.Z),]
+obs_pseudo_top<-obs_pseudo_top[!duplicated(obs_pseudo_top$ID),]
+median(obs_pseudo_top$R, na.rm=T) # 0.02435701
+median(obs_pseudo$R[obs_pseudo$Model == 'dbslmm'], na.rm=T)
+median(obs_pseudo$R[obs_pseudo$Model == 'lassosum'], na.rm=T)
+median(obs_pseudo$R[obs_pseudo$Model == 'ldpred2'], na.rm=T)
+median(obs_pseudo$R[obs_pseudo$Model == 'prscs'], na.rm=T)
+median(obs_pseudo$R[obs_pseudo$Model == 'sbayesr'], na.rm=T)
+median(obs_pseudo$R[obs_pseudo$Model == 'sbayesr_robust'], na.rm=T) #0.04455735
+
 
 # Determine the best model based on TWAS.Z and observed cor, and rank methods by TWAS.Z and observed cor for each gene.
 genes<-unique(obs_pseudo$ID)
