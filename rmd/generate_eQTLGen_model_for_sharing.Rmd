@@ -1,0 +1,364 @@
+---
+title: "Generating eQTLGen TWAS models for sharing"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+***
+
+Documentation for eQTLGen TWAS models.
+Contact Oliver Pain for further information (oliver.pain@kcl.ac.uk).
+Please cite: TBC
+
+Repository contains:
+- TWAS models based on full eQTLGen results with .pos file
+- Psuedovalidation results
+- GTEx v8 validation results
+
+***
+
+## Format eQTL sumstats
+
+<details><summary>Show code</summary>
+
+```{bash, eval=F, echo=T}
+# Download the full cis-eQTL data
+mkdir /users/k1806347/oliverpainfel/Data/eQTLGen/full
+cd /users/k1806347/oliverpainfel/Data/eQTLGen/full
+
+wget https://molgenis26.gcc.rug.nl/downloads/eqtlgen/cis-eqtl/2019-12-11-cis-eQTLsFDR-ProbeLevel-CohortInfoRemoved-BonferroniAdded.txt.gz
+
+# Extract relevent columns
+zcat /users/k1806347/oliverpainfel/Data/eQTLGen/full/2019-12-11-cis-eQTLsFDR-ProbeLevel-CohortInfoRemoved-BonferroniAdded.txt.gz | cut -f 1-8,13 | gzip > /users/k1806347/oliverpainfel/Data/eQTLGen/full/2019-12-11-cis-eQTLsFDR-ProbeLevel-CohortInfoRemoved-BonferroniAdded.small.txt.gz
+
+```
+
+```{r, eval=F, echo=T}
+library(data.table)
+
+# Read in relevent columns from the sumstats
+sumstats<-fread('/users/k1806347/oliverpainfel/Data/eQTLGen/full/2019-12-11-cis-eQTLsFDR-ProbeLevel-CohortInfoRemoved-BonferroniAdded.small.txt.gz')
+
+# Extract data for each gene
+genes<-unique(sumstats$Gene)
+
+# Read in EUR MAF
+frq<-NULL
+for(i in 1:22){
+  frq<-rbind(frq, fread(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR.',i,'.frq')))
+}
+names(frq)[names(frq) == 'MAF']<-'FREQ'
+
+setkey(sumstats, Gene)
+
+# Process eQTL sumstats for each gene
+dir.create('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen')
+for(i in 1:length(genes)){
+  print(i)
+  
+  tmp<-sumstats[.(genes[i])]
+  
+  # Create A1 and A2 columns and update column names
+  tmp$A1<-tmp$AssessedAllele
+  tmp$A2<-tmp$OtherAllele
+
+  tmp<-tmp[,c('Gene','SNP','SNPChr','SNPPos', 'A1', 'A2','Pvalue','Zscore','NrSamples'), with=F]
+  names(tmp)<-c('Gene','SNP','CHR','BP','A1','A2','P','Z','N')
+
+  # Insert FREQ from EUR reference
+  # There don't seem to be any strand flips
+  tmp_match<-merge(tmp, frq[frq$CHR == tmp$CHR[1],c('SNP','A1','A2','FREQ'),with=F], by=c('SNP','A1','A2'))
+  tmp_flip<-merge(tmp, frq[frq$CHR == tmp$CHR[1],c('SNP','A1','A2','FREQ'),with=F], by.x=c('SNP','A1','A2'), by.y=c('SNP','A2','A1'))
+  tmp_flip$FREQ<-1-tmp_flip$FREQ
+  tmp<-rbind(tmp_match, tmp_flip)
+  
+  # Approximate BETA, SE, and P
+  tmp$P<-2*pnorm(-abs(tmp$Z))
+  tmp$BETA<-tmp$Z/sqrt((2*tmp$FREQ)*(1-tmp$FREQ)*(tmp$N+sqrt(abs(tmp$Z))))
+  tmp$SE<-abs(tmp$BETA)/abs(tmp$Z)
+  
+  tmp$GENE<-genes[i]
+    
+  tmp<-tmp[,c('GENE','CHR','SNP','BP','A1','A2','BETA','SE','Z','P','FREQ','N'),with=F]
+  
+  if(i == 1){
+    write.table(tmp, '/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/eQTLGen_sumstats_full.txt', col.names=T, row.names=F, quote=F)
+  } else {
+    write.table(tmp, '/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/eQTLGen_sumstats_full.txt', col.names=F, row.names=F, quote=F, append=T)
+  }
+}
+
+```
+
+</details>
+
+***
+
+## Create TWAS weights in parallel for all genes
+
+<details><summary>Show code</summary>
+
+```{bash, eval=F, echo=T}
+
+mkdir /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full_zenodo
+cut -f 1 -d' ' /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/eQTLGen_sumstats_full.txt | tail -n +2 | uniq > /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full_zenodo/gene_list.txt
+
+> /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full_zenodo/todo.txt
+for i in $(cat /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full_zenodo/gene_list.txt);do
+  if [ ! -f /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full_zenodo/eQTLGen.eQTL/${i}.done ]; then
+    echo ${i} >> /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full_zenodo/todo.txt
+  fi
+done
+
+mkdir /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full_zenodo/logs
+
+# Create shell script to run using sbatch
+cat > /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full_zenodo/sbatch.sh << 'EOF'
+#!/bin/sh
+
+#SBATCH -p cpu
+#SBATCH --mem 10G
+#SBATCH -n 1
+#SBATCH --nodes 1
+#SBATCH -J eQTL_to_TWAS
+#SBATCH -o /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full_zenodo/logs/slurm-%A_%a.log
+#SBATCH -e /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full_zenodo/logs/slurm-%A_%a.log
+#SBATCH --exclude erc-hpc-comp025
+
+
+ID=$(awk -v var="$SLURM_ARRAY_TASK_ID" 'NR == var {print $1}' /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full_zenodo/todo.txt)
+
+/users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/compute_weights_V3.R \
+--id ${ID} \
+--extract /users/k1806347/oliverpainfel/Data/ldsc/w_hm3.snplist \
+--sumstats /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/eQTLGen_sumstats_full.txt \
+--gcta /users/k1806347/oliverpainfel/Software/gcta_1.94.sh \
+--gctb /users/k1806347/oliverpainfel/Software/gctb_2.03beta_Linux/gctb_203.sh \
+--gctb_ref /scratch/prj/ukbiobank/usr/ollie_pain/GenoPredPipe/GenoPred/GenoPredPipe/resources/data/gctb_ref/ukbEURu_hm3_shrunk_sparse/ukbEURu_hm3_v3_50k_chr \
+--plink_ref_chr /users/k1806347/oliverpainfel/Data/1KG/Phase3/1KGPhase3.w_hm3.chr \
+--plink_ref_keep /users/k1806347/oliverpainfel/Data/1KG/Phase3/keep_files/EUR_samples.keep \
+--ld_blocks /users/k1806347/oliverpainfel/Data/LDetect/EUR \
+--rscript /users/k1806347/oliverpainfel/Software/Rscript.sh \
+--dbslmm /users/k1806347/oliverpainfel/Software/DBSLMM/software \
+--plink /users/k1806347/oliverpainfel/Software/plink1.9.sh \
+--PRScs_path /users/k1806347/oliverpainfel/Software/PRScs.sh \
+--PRScs_ref_path /users/k1806347/oliverpainfel/Software/PRScs/ldblk_1kg_eur \
+--ldpred2_ref_dir /scratch/prj/ukbiobank/usr/ollie_pain/GenoPredPipe/GenoPred/GenoPredPipe/resources/data/ldpred2_ref \
+--output /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full_zenodo/eQTLGen.eQTL
+
+EOF
+
+sbatch --array 1-$(wc -l /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full_zenodo/todo.txt | cut -d' ' -f1)%400 /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full_zenodo/sbatch.sh
+
+```
+
+```{r, eval=F, echo=T}
+
+# Quantify average time taken to run script for each gene
+logs<-list.files(path='/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full_zenodo/logs/', pattern='.log')
+
+library(data.table)
+secs_all<-NULL
+for(i in 1:length(logs)){
+  print(i)
+  log<-fread(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full_zenodo/logs/',logs[i]), sep='\n', header=F)$V1
+  if(any(grepl('Analysis duration was',log))){
+    
+  log<-log[grepl('Analysis duration was',log)]
+  time<-gsub('Analysis duration was ','',log)
+  number<-as.numeric(gsub(' .*','',time))
+  units<-gsub('.*\\ ','',gsub(' $','',time))
+  if(units == 'mins'){
+    time_seconds<-number*60
+  }
+  if(units == 'secs'){
+    time_seconds<-number
+  }
+  secs_all<-c(secs_all,time_seconds)
+  
+  }
+}
+
+mins_all<-secs_all/60
+
+min(mins_all) # 0.8558333
+max(mins_all) # 3.27
+median(mins_all) #1.88
+
+```
+
+```{R, echo=T, eval=F}
+# Create .pos file
+library(data.table)
+
+# Read in list of RDat files
+rdat_list<-list.files(path='/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full_zenodo/eQTLGen.eQTL', pattern='.RDat')
+
+# Start making pos file
+pos<-data.frame(PANEL='eQTLGen.eQTL',
+                WGT=paste0('eQTLGen.eQTL/',rdat_list),
+                ID=gsub('\\..*','',rdat_list))
+
+# Insert CHR, P0 and P1 (GRCh=37)
+library(biomaRt)
+ensembl = useEnsembl(biomart="ensembl", dataset="hsapiens_gene_ensembl", GRCh=37)
+Genes<-getBM(attributes=c('ensembl_gene_id_version','chromosome_name','start_position','end_position'), mart = ensembl)
+Genes$ensembl_gene_id_version<-gsub('\\..*','',Genes$ensembl_gene_id_version)
+names(Genes)<-c('ID','CHR','P0','P1')
+Genes<-Genes[complete.cases(Genes),]
+Genes<-Genes[!duplicated(Genes),]
+
+pos<-merge(pos, Genes, all.x=T, by='ID')
+
+# Some genes may not be found in biomart, for these update P0 and P1 using min/max(BP)
+
+# Read in each RDat file to retrieve N
+for(i in 1:length(rdat_list)){
+  load(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full_zenodo/eQTLGen.eQTL/',rdat_list[i]))
+  pos$N[i]<-N.tot
+  pos$CHR_pos[i]<-snps$V1[1]
+  pos$P0_pos[i]<-min(snps$V4)
+  pos$P1_pos[i]<-max(snps$V4)
+
+}
+
+pos$CHR<-pos$CHR_pos
+pos$P0[is.na(pos$P0)]<-pos$P0_pos[is.na(pos$P0)]
+pos$P1[is.na(pos$P1)]<-pos$P0_pos[is.na(pos$P1)]
+
+pos<-pos[,c('PANEL','WGT','ID','CHR','P0','P1','N')]
+
+write.table(pos, '/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full_zenodo/eQTLGen.eQTL.pos', col.names=T, row.names=F, quote=F)
+
+```
+
+***
+
+# Tidy pseudovalidation results
+
+```{r, eval=F, echo=T}
+
+library(data.table)
+
+pseudo_files<-list.files(path=paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo_full/'), pattern=paste0('pseudo_res_chr'))
+
+pseudo_res<-NULL
+for(i in pseudo_files){
+  pseudo_res<-rbind(pseudo_res, fread(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/pseudo_full/',i)))
+}
+
+pseudo_res<-pseudo_res[!is.na(pseudo_res$TWAS.Z),]
+pseudo_res<-pseudo_res[,c('ID','MODEL','TWAS.Z'),with=F]
+
+write.table(pseudo_res, '/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full_zenodo/Pseudovalidation.txt', col.names=T, row.names=F, quote=F)
+
+```
+
+***
+
+# Tidy validation results in GTEx v8
+
+TWAS models were generated using a version of eQTLGen excluding GTEx. Here we tidy the results comparing the predicted and observed expression values in GTEx.
+
+```{r, eval=F, echo=T}
+
+library(data.table)
+
+cor_res_melt_obs<-fread('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor.txt')
+
+cor_res_melt_obs<-cor_res_melt_obs[,c('Var2','value','L1'), with=F]
+names(cor_res_melt_obs)<-c('MODEL','R','ID')
+cor_res_melt_obs<-cor_res_melt_obs[!is.na(cor_res_melt_obs$R),]
+
+write.table(cor_res_melt_obs, '/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full_zenodo/GTEx_v8.validation.txt', col.names=T, row.names=F, quote=F)
+
+```
+
+***
+
+# Tidy heritability estimates
+
+```{r, eval=F, echo=T}
+
+library(data.table)
+eqtl_h2<-fread('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/eQTLGen.hsq.txt')
+eqtl_h2$row<-NULL
+
+write.table(eqtl_h2, '/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full_zenodo/hsq.txt', col.names=T, row.names=F, quote=F)
+
+```
+
+***
+
+# Run test
+
+```{bash, eval=F, echo=T}
+# Run test to check the results are the same as before and format is ok for FUSION
+
+mkdir /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full_zenodo/test
+chr=22
+
+sbatch -p cpu --mem 20G -n 1 /users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/FUSION.assoc_test.pseudo_V2.R \
+    --sumstats /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.munged.sumstats.gz \
+    --weights /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full_zenodo/eQTLGen.eQTL.pos \
+    --weights_dir /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full_zenodo \
+    --ref_ld_chr /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
+    --out /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full_zenodo/test/SCZ.TWAS.eQTLGen.chr${chr} \
+    --chr ${chr} \
+    --coloc_P 1 \
+    --GWASN 126282
+
+```
+
+```{r, eval=F, echo=T}
+library(data.table)
+
+orig<-fread('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/SCZ.TWAS.eQTLGen.chr22')
+new<-fread('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full_zenodo/test/SCZ.TWAS.eQTLGen.chr22')
+
+nrow(orig)
+nrow(new)
+
+head(orig)
+head(new)
+
+sum(is.na(orig$TWAS.Z))
+sum(is.na(new$TWAS.Z))
+
+both<-merge(orig[,c('ID','NSNP','NWGT','MODEL','TWAS.Z','COLOC.PP4'), with=T], new[,c('ID','NSNP','NWGT','MODEL','TWAS.Z','COLOC.PP4'), with=T], by=c('ID','MODEL'))
+nrow(both)
+cor(both$TWAS.Z.x, both$TWAS.Z.y, use='p')
+cor(both$COLOC.PP4.x, both$COLOC.PP4.y, use='p')
+
+both[round(both$TWAS.Z.x,3) !=  round(both$TWAS.Z.y,3),]
+
+# Results are identical, except very small differences for PRS-CS and LDpred2. These methods obviously have some random process. The differences are inconequential.
+
+```
+
+
+***
+
+# Remove unessecary files and compress
+
+```{bash, eval=F, echo=T}
+
+cd /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full_zenodo
+
+rm -r test logs sbatch.sh gene_list.txt todo.txt
+rm eQTLGen.eQTL/*.done
+
+tar -zcvf eQTLGen.eQTL.tar.gz eQTLGen.eQTL
+
+```
+
+***
+
+
+
+
+
+
