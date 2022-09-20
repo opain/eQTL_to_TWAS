@@ -3427,7 +3427,7 @@ cor.test(x=both_best_melt$R, y=as.numeric(both_best_melt$Sample), method="spearm
 library(ggplot2)
 library(cowplot)
 
-bitmap('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_eQTLGen_YFS_comp.png', units='px', width=1500, height=1500, res=300)
+png('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_eQTLGen_YFS_comp.png', units='px', width=1500, height=1500, res=300)
 
 ggplot(both_best, aes(x=value.x, y=value.y)) +
   geom_point() +
@@ -3451,7 +3451,7 @@ eqtlgen_subset$YFS<-T
 
 eqtlgen_comp_plot<-rbind(eqtlgen_not_in_yfs, eqtlgen_subset)
 
-bitmap('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/present_in_YFS_hist.png', units='px', width=1500, height=1000, res=300)
+png('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/present_in_YFS_hist.png', units='px', width=1500, height=1000, res=300)
 
 ggplot(eqtlgen_comp_plot, aes(x=value, fill=YFS, colour=YFS)) +
   geom_histogram(position="identity", alpha=0.5) +
@@ -3461,6 +3461,33 @@ ggplot(eqtlgen_comp_plot, aes(x=value, fill=YFS, colour=YFS)) +
 
 dev.off()
 
+# Make the same plot but restricted to genes with mBAT-combo or sig eQTL
+mbat_res<-NULL
+for(i in 1:22){
+  mbat_res<-rbind(mbat_res, fread(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/eQTLGen_exclGTEx.mbat.combo.chr',i,'.res.txt')))
+}
+
+# Check results in relation to fastbat
+sum(!(is.na(mbat_res$P_fastBAT) & is.na(mbat_res$TopSNP_Pvalue))) # 19214
+mbat_res$P_fastBAT.FDR<-p.adjust(mbat_res$P_fastBAT, method='fdr')
+# Restrict to genes with either FDR sig gene association or gneome-wide sig eQTL
+mbat_res<-merge(mbat_res, Genes, by.x='Gene', by.y='ensembl_gene_id')
+fastbat_res_sig<-mbat_res[mbat_res$P_fastBAT.FDR < 0.05 | mbat_res$TopSNP_Pvalue < 5e-8,]
+nrow(fastbat_res_sig) # 16540
+
+eqtlgen_comp_plot_mbat<-eqtlgen_comp_plot[eqtlgen_comp_plot$L1 %in% fastbat_res_sig$external_gene_name,]
+
+png('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/present_in_YFS_hist_sigsig.png', units='px', width=1500, height=1000, res=300)
+
+ggplot(eqtlgen_comp_plot_mbat, aes(x=value, fill=YFS, colour=YFS)) +
+  geom_histogram(position="identity", alpha=0.5) +
+  theme_half_open() +
+  background_grid() +
+  labs(x='R', fill = 'In YFS', colour='In YFS')
+
+dev.off()
+
+# Subsetting to genes with sig mbat or eQTL doesn't change the figure much. Leave as is.
 
 ```
 
@@ -3938,6 +3965,26 @@ sbatch -p cpu --mem 10G -n 1 --nodes 1 /users/k1806347/oliverpainfel/Software/Rs
 	--plink_ref_keep /users/k1806347/oliverpainfel/Data/1KG/Phase3/keep_files/EUR_samples.keep \
 	--gcta /users/k1806347/oliverpainfel/Software/gcta_1.94.sh \
   --output /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/YFS.mbat.combo.chr${chr}
+done
+
+```
+
+***
+
+# Run mbat_combo on eQTLGen (excl. GTEx v8)
+
+```{bash, eval=F, echo=T}
+# Run mBAT to see whether this could work as an inclusion criteria
+
+for chr in $(seq 1 22); do
+sbatch -p cpu --exclude erc-hpc-comp025 --mem 10G -n 1 --nodes 1 /users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/private/eQTL_mbat_combo.R \
+	--chr ${chr} \
+	--extract /users/k1806347/oliverpainfel/Data/ldsc/w_hm3.snplist \
+	--sumstats /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/eQTLGen_sumstats_exclGTeX.txt \
+	--plink_ref_chr /users/k1806347/oliverpainfel/Data/1KG/Phase3/1KGPhase3.w_hm3.chr \
+	--plink_ref_keep /users/k1806347/oliverpainfel/Data/1KG/Phase3/keep_files/EUR_samples.keep \
+	--gcta /users/k1806347/oliverpainfel/Software/gcta_1.94.sh \
+  --output /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/eQTLGen_exclGTEx.mbat.combo.chr${chr}
 done
 
 ```

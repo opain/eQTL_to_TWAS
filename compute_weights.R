@@ -509,41 +509,44 @@ for(gene_i in genes){
       # Perform lassosum to shrink effects using a range of parameters
       setwd(system.file("data", package="lassosum"))
       
-      out<-lassosum.pipeline(cor=cor, chr=ss_gene_i$CHR, pos=ss_gene_i$BP, 
-                             A1=ss_gene_i$A1, A2=ss_gene_i$A2,
-                             ref.bfile=paste0(opt$output,'/', gene_i,'/ref/ref_chr',chr_i), 
-                             LDblocks = 'EUR.hg19')
-      
-      setwd(orig_wd)
-      
-      # Perform pseudovalidation to idenitfy the best p-value threshold
-      setwd(system.file("data", package="lassosum"))
       skip_to_next<-F
-      tryCatch(v <- pseudovalidate(out), error = function(e){skip_to_next <<- TRUE})
+      tryCatch(out<-lassosum.pipeline(cor=cor, chr=ss_gene_i$CHR, pos=ss_gene_i$BP, 
+                                      A1=ss_gene_i$A1, A2=ss_gene_i$A2,
+                                      ref.bfile=paste0(opt$output,'/', gene_i,'/ref/ref_chr',chr_i), 
+                                      LDblocks = 'EUR.hg19'), error = function(e){skip_to_next <<- TRUE})
       setwd(orig_wd)
-
+      
       if(skip_to_next == F){
         
-        # Subset the validated lassosum model
-        out2 <- subset(out, s=v$best.s, lambda=v$best.lambda)
-        
-        # Write out a score file
-        lassosum_score<-data.table(SNP=ss_gene_i$SNP[out$sumstats$order],
-                                   A1=out2$sumstats$A1,
-                                   BETA=out2$beta[[1]][,1])
-        
-        # Flip effects so allele match eQTL sumstats
-        lassosum_score<-merge(ref_tmp, lassosum_score, by='SNP', all=T)
-        lassosum_score$BETA[which(lassosum_score$A1.x != lassosum_score$A1.y)]<--lassosum_score$BETA[which(lassosum_score$A1.x != lassosum_score$A1.y)]
-        lassosum_score<-lassosum_score[,c('SNP','A1.x','A2','BETA'), with=F]
-        names(lassosum_score)<-c('SNP','A1','A2','BETA')
-        
-        # Sort score file according ss_gene_i
-        lassosum_score<-lassosum_score[match(ss_gene_i$SNP, lassosum_score$SNP),]
-        wgt.matrix[,colnames(wgt.matrix) == 'lassosum']<-lassosum_score$BETA
+        # Perform pseudovalidation to idenitfy the best p-value threshold
+        setwd(system.file("data", package="lassosum"))
+        skip_to_next<-F
+        tryCatch(v <- pseudovalidate(out), error = function(e){skip_to_next <<- TRUE})
+        setwd(orig_wd)
+  
+        if(skip_to_next == F){
+          
+          # Subset the validated lassosum model
+          out2 <- subset(out, s=v$best.s, lambda=v$best.lambda)
+          
+          # Write out a score file
+          lassosum_score<-data.table(SNP=ss_gene_i$SNP[out$sumstats$order],
+                                     A1=out2$sumstats$A1,
+                                     BETA=out2$beta[[1]][,1])
+          
+          # Flip effects so allele match eQTL sumstats
+          lassosum_score<-merge(ref_tmp, lassosum_score, by='SNP', all=T)
+          lassosum_score$BETA[which(lassosum_score$A1.x != lassosum_score$A1.y)]<--lassosum_score$BETA[which(lassosum_score$A1.x != lassosum_score$A1.y)]
+          lassosum_score<-lassosum_score[,c('SNP','A1.x','A2','BETA'), with=F]
+          names(lassosum_score)<-c('SNP','A1','A2','BETA')
+          
+          # Sort score file according ss_gene_i
+          lassosum_score<-lassosum_score[match(ss_gene_i$SNP, lassosum_score$SNP),]
+          wgt.matrix[,colnames(wgt.matrix) == 'lassosum']<-lassosum_score$BETA
+        }
       }
     }
-
+    
     #####
     # ldpred2
     #####
