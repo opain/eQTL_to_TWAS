@@ -2648,7 +2648,7 @@ for(panel_i in panel){
         tmp$BP<-tmp$V4
       
         # Sum sample numbers
-        n_dat<-do.call(rbind, strsplit(tmp$DatasetsNrSamples, ';'))
+        n_dat<-do.call(rbind, strsplit(as.character(tmp$DatasetsNrSamples), ';'))
         n_dat<-matrix(apply(n_dat, 2, as.numeric), nrow=nrow(tmp))
         if(nrow(n_dat) > 1){
           tmp$N<-rowSums(n_dat, na.rm=T)
@@ -2692,6 +2692,10 @@ for(panel_i in panel){
 
 ```{bash, eval=F, echo=T}
 
+#############
+# Cortex
+#############
+
 head -n 2 /users/k1806347/oliverpainfel/Data/MetaBrain/Cortex/cleaned/MetaBrain_Cortex_chr22_sumstats.txt > /users/k1806347/oliverpainfel/Data/MetaBrain/Cortex/cleaned/MetaBrain_Cortex_GW_sumstats.txt; tail -n +2 -q /users/k1806347/oliverpainfel/Data/MetaBrain/Cortex/cleaned/MetaBrain_Cortex_chr*_sumstats.txt >> /users/k1806347/oliverpainfel/Data/MetaBrain/Cortex/cleaned/MetaBrain_Cortex_GW_sumstats.txt
 
 mkdir /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Cortex
@@ -2699,7 +2703,7 @@ cut -f 1 -d' ' /users/k1806347/oliverpainfel/Data/MetaBrain/Cortex/cleaned/MetaB
 
 > /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Cortex/todo.txt
 for i in $(cat /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Cortex/gene_list.txt);do
-  if [ ! -f /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Cortex/eQTLGen.eQTL/${i}.done ]; then
+  if [ ! -f /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Cortex/MetaBrain_Cortex.eQTL/${i}.done ]; then
     echo ${i} >> /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Cortex/todo.txt
   fi
 done
@@ -2721,7 +2725,7 @@ cat > /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS
 
 ID=$(awk -v var="$SLURM_ARRAY_TASK_ID" 'NR == var {print $1}' /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Cortex/todo.txt)
 
-/users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/compute_weights_V3.R \
+/users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/compute_weights.R \
 --id ${ID} \
 --extract /users/k1806347/oliverpainfel/Data/ldsc/w_hm3.snplist \
 --sumstats /users/k1806347/oliverpainfel/Data/MetaBrain/Cortex/cleaned/MetaBrain_Cortex_GW_sumstats.txt \
@@ -2741,40 +2745,233 @@ ID=$(awk -v var="$SLURM_ARRAY_TASK_ID" 'NR == var {print $1}' /users/k1806347/ol
 
 EOF
 
-sbatch --array 1-20 /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Cortex/sbatch.sh
+sbatch --array 1-$(wc -l /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Cortex/todo.txt | cut -d' ' -f1)%500 /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Cortex/sbatch.sh
 
-sbatch --array 1-$(wc -l /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Cortex/todo.txt | cut -d' ' -f1)%400 /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Cortex/sbatch.sh
+#############
+# Basalganglia
+#############
 
-opt$id<-'ENSG00000015475.18'
-opt$extract<-'/users/k1806347/oliverpainfel/Data/ldsc/w_hm3.snplist'
-opt$sumstats<-'/users/k1806347/oliverpainfel/Data/MetaBrain/Cortex/cleaned/MetaBrain_Cortex_GW_sumstats.txt'
-opt$gcta<-'/users/k1806347/oliverpainfel/Software/gcta_1.94.sh'
-opt$gctb<-'/users/k1806347/oliverpainfel/Software/gctb_2.03beta_Linux/gctb_203.sh'
-opt$gctb_ref<-'/scratch/prj/ukbiobank/usr/ollie_pain/GenoPredPipe/GenoPred/GenoPredPipe/resources/data/gctb_ref/ukbEURu_hm3_shrunk_sparse/ukbEURu_hm3_v3_50k_chr'
-opt$plink_ref_chr<-'/users/k1806347/oliverpainfel/Data/1KG/Phase3/1KGPhase3.w_hm3.chr'
-opt$plink_ref_keep<-'/users/k1806347/oliverpainfel/Data/1KG/Phase3/keep_files/EUR_samples.keep'
-opt$ld_blocks<-'/users/k1806347/oliverpainfel/Data/LDetect/EUR'
-opt$rscript<-'/users/k1806347/oliverpainfel/Software/Rscript.sh'
-opt$dbslmm<-'/users/k1806347/oliverpainfel/Software/DBSLMM/software'
-opt$plink<-'/users/k1806347/oliverpainfel/Software/plink1.9.sh'
-opt$PRScs_path<-'/users/k1806347/oliverpainfel/Software/PRScs.sh'
-opt$PRScs_ref_path<-'/users/k1806347/oliverpainfel/Software/PRScs/ldblk_1kg_eur'
-opt$ldpred2_ref_dir<-'/scratch/prj/ukbiobank/usr/ollie_pain/GenoPredPipe/GenoPred/GenoPredPipe/resources/data/ldpred2_ref'
-opt$output<-'/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Cortex/MetaBrain_Cortex.eQTL'
+head -n 2 /users/k1806347/oliverpainfel/Data/MetaBrain/Basalganglia/cleaned/MetaBrain_Basalganglia_chr22_sumstats.txt > /users/k1806347/oliverpainfel/Data/MetaBrain/Basalganglia/cleaned/MetaBrain_Basalganglia_GW_sumstats.txt; tail -n +2 -q /users/k1806347/oliverpainfel/Data/MetaBrain/Basalganglia/cleaned/MetaBrain_Basalganglia_chr*_sumstats.txt >> /users/k1806347/oliverpainfel/Data/MetaBrain/Basalganglia/cleaned/MetaBrain_Basalganglia_GW_sumstats.txt
+
+mkdir /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Basalganglia
+cut -f 1 -d' ' /users/k1806347/oliverpainfel/Data/MetaBrain/Basalganglia/cleaned/MetaBrain_Basalganglia_GW_sumstats.txt | tail -n +2 | uniq > /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Basalganglia/gene_list.txt
+
+> /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Basalganglia/todo.txt
+for i in $(cat /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Basalganglia/gene_list.txt);do
+  if [ ! -f /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Basalganglia/MetaBrain_Basalganglia.eQTL/${i}.done ]; then
+    echo ${i} >> /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Basalganglia/todo.txt
+  fi
+done
+
+mkdir /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Basalganglia/logs
+
+# Create shell script to run using sbatch
+cat > /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Basalganglia/sbatch.sh << 'EOF'
+#!/bin/sh
+
+#SBATCH -p cpu
+#SBATCH --mem 10G
+#SBATCH -n 1
+#SBATCH --nodes 1
+#SBATCH -J eQTL_to_TWAS
+#SBATCH -o /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Basalganglia/logs/slurm-%A_%a.log
+#SBATCH -e /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Basalganglia/logs/slurm-%A_%a.log
+#SBATCH --exclude erc-hpc-comp025
+
+ID=$(awk -v var="$SLURM_ARRAY_TASK_ID" 'NR == var {print $1}' /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Basalganglia/todo.txt)
+
+/users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/compute_weights.R \
+--id ${ID} \
+--extract /users/k1806347/oliverpainfel/Data/ldsc/w_hm3.snplist \
+--sumstats /users/k1806347/oliverpainfel/Data/MetaBrain/Basalganglia/cleaned/MetaBrain_Basalganglia_GW_sumstats.txt \
+--gcta /users/k1806347/oliverpainfel/Software/gcta_1.94.sh \
+--gctb /users/k1806347/oliverpainfel/Software/gctb_2.03beta_Linux/gctb_203.sh \
+--gctb_ref /scratch/prj/ukbiobank/usr/ollie_pain/GenoPredPipe/GenoPred/GenoPredPipe/resources/data/gctb_ref/ukbEURu_hm3_shrunk_sparse/ukbEURu_hm3_v3_50k_chr \
+--plink_ref_chr /users/k1806347/oliverpainfel/Data/1KG/Phase3/1KGPhase3.w_hm3.chr \
+--plink_ref_keep /users/k1806347/oliverpainfel/Data/1KG/Phase3/keep_files/EUR_samples.keep \
+--ld_blocks /users/k1806347/oliverpainfel/Data/LDetect/EUR \
+--rscript /users/k1806347/oliverpainfel/Software/Rscript.sh \
+--dbslmm /users/k1806347/oliverpainfel/Software/DBSLMM/software \
+--plink /users/k1806347/oliverpainfel/Software/plink1.9.sh \
+--PRScs_path /users/k1806347/oliverpainfel/Software/PRScs.sh \
+--PRScs_ref_path /users/k1806347/oliverpainfel/Software/PRScs/ldblk_1kg_eur \
+--ldpred2_ref_dir /scratch/prj/ukbiobank/usr/ollie_pain/GenoPredPipe/GenoPred/GenoPredPipe/resources/data/ldpred2_ref \
+--output /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Basalganglia/MetaBrain_Basalganglia.eQTL
+
+EOF
+
+sbatch --array 1-$(wc -l /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Basalganglia/todo.txt | cut -d' ' -f1)%300 /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Basalganglia/sbatch.sh
+
+#############
+# Cerebellum
+#############
+
+head -n 2 /users/k1806347/oliverpainfel/Data/MetaBrain/Cerebellum/cleaned/MetaBrain_Cerebellum_chr22_sumstats.txt > /users/k1806347/oliverpainfel/Data/MetaBrain/Cerebellum/cleaned/MetaBrain_Cerebellum_GW_sumstats.txt; tail -n +2 -q /users/k1806347/oliverpainfel/Data/MetaBrain/Cerebellum/cleaned/MetaBrain_Cerebellum_chr*_sumstats.txt >> /users/k1806347/oliverpainfel/Data/MetaBrain/Cerebellum/cleaned/MetaBrain_Cerebellum_GW_sumstats.txt
+
+mkdir /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Cerebellum
+cut -f 1 -d' ' /users/k1806347/oliverpainfel/Data/MetaBrain/Cerebellum/cleaned/MetaBrain_Cerebellum_GW_sumstats.txt | tail -n +2 | uniq > /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Cerebellum/gene_list.txt
+
+> /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Cerebellum/todo.txt
+for i in $(cat /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Cerebellum/gene_list.txt);do
+  if [ ! -f /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Cerebellum/MetaBrain_Cerebellum.eQTL/${i}.done ]; then
+    echo ${i} >> /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Cerebellum/todo.txt
+  fi
+done
+
+mkdir /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Cerebellum/logs
+
+# Create shell script to run using sbatch
+cat > /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Cerebellum/sbatch.sh << 'EOF'
+#!/bin/sh
+
+#SBATCH -p cpu
+#SBATCH --mem 10G
+#SBATCH -n 1
+#SBATCH --nodes 1
+#SBATCH -J eQTL_to_TWAS
+#SBATCH -o /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Cerebellum/logs/slurm-%A_%a.log
+#SBATCH -e /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Cerebellum/logs/slurm-%A_%a.log
+#SBATCH --exclude erc-hpc-comp025
+
+ID=$(awk -v var="$SLURM_ARRAY_TASK_ID" 'NR == var {print $1}' /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Cerebellum/todo.txt)
+
+/users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/compute_weights.R \
+--id ${ID} \
+--extract /users/k1806347/oliverpainfel/Data/ldsc/w_hm3.snplist \
+--sumstats /users/k1806347/oliverpainfel/Data/MetaBrain/Cerebellum/cleaned/MetaBrain_Cerebellum_GW_sumstats.txt \
+--gcta /users/k1806347/oliverpainfel/Software/gcta_1.94.sh \
+--gctb /users/k1806347/oliverpainfel/Software/gctb_2.03beta_Linux/gctb_203.sh \
+--gctb_ref /scratch/prj/ukbiobank/usr/ollie_pain/GenoPredPipe/GenoPred/GenoPredPipe/resources/data/gctb_ref/ukbEURu_hm3_shrunk_sparse/ukbEURu_hm3_v3_50k_chr \
+--plink_ref_chr /users/k1806347/oliverpainfel/Data/1KG/Phase3/1KGPhase3.w_hm3.chr \
+--plink_ref_keep /users/k1806347/oliverpainfel/Data/1KG/Phase3/keep_files/EUR_samples.keep \
+--ld_blocks /users/k1806347/oliverpainfel/Data/LDetect/EUR \
+--rscript /users/k1806347/oliverpainfel/Software/Rscript.sh \
+--dbslmm /users/k1806347/oliverpainfel/Software/DBSLMM/software \
+--plink /users/k1806347/oliverpainfel/Software/plink1.9.sh \
+--PRScs_path /users/k1806347/oliverpainfel/Software/PRScs.sh \
+--PRScs_ref_path /users/k1806347/oliverpainfel/Software/PRScs/ldblk_1kg_eur \
+--ldpred2_ref_dir /scratch/prj/ukbiobank/usr/ollie_pain/GenoPredPipe/GenoPred/GenoPredPipe/resources/data/ldpred2_ref \
+--output /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Cerebellum/MetaBrain_Cerebellum.eQTL
+
+EOF
+
+sbatch --array 1-$(wc -l /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Cerebellum/todo.txt | cut -d' ' -f1)%300 /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Cerebellum/sbatch.sh
+
+#############
+# Hippocampus
+#############
+
+head -n 2 /users/k1806347/oliverpainfel/Data/MetaBrain/Hippocampus/cleaned/MetaBrain_Hippocampus_chr22_sumstats.txt > /users/k1806347/oliverpainfel/Data/MetaBrain/Hippocampus/cleaned/MetaBrain_Hippocampus_GW_sumstats.txt; tail -n +2 -q /users/k1806347/oliverpainfel/Data/MetaBrain/Hippocampus/cleaned/MetaBrain_Hippocampus_chr*_sumstats.txt >> /users/k1806347/oliverpainfel/Data/MetaBrain/Hippocampus/cleaned/MetaBrain_Hippocampus_GW_sumstats.txt
+
+mkdir /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Hippocampus
+cut -f 1 -d' ' /users/k1806347/oliverpainfel/Data/MetaBrain/Hippocampus/cleaned/MetaBrain_Hippocampus_GW_sumstats.txt | tail -n +2 | uniq > /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Hippocampus/gene_list.txt
+
+> /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Hippocampus/todo.txt
+for i in $(cat /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Hippocampus/gene_list.txt);do
+  if [ ! -f /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Hippocampus/MetaBrain_Hippocampus.eQTL/${i}.done ]; then
+    echo ${i} >> /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Hippocampus/todo.txt
+  fi
+done
+
+mkdir /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Hippocampus/logs
+
+# Create shell script to run using sbatch
+cat > /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Hippocampus/sbatch.sh << 'EOF'
+#!/bin/sh
+
+#SBATCH -p cpu
+#SBATCH --mem 10G
+#SBATCH -n 1
+#SBATCH --nodes 1
+#SBATCH -J eQTL_to_TWAS
+#SBATCH -o /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Hippocampus/logs/slurm-%A_%a.log
+#SBATCH -e /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Hippocampus/logs/slurm-%A_%a.log
+#SBATCH --exclude erc-hpc-comp025
+
+ID=$(awk -v var="$SLURM_ARRAY_TASK_ID" 'NR == var {print $1}' /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Hippocampus/todo.txt)
+
+/users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/compute_weights.R \
+--id ${ID} \
+--extract /users/k1806347/oliverpainfel/Data/ldsc/w_hm3.snplist \
+--sumstats /users/k1806347/oliverpainfel/Data/MetaBrain/Hippocampus/cleaned/MetaBrain_Hippocampus_GW_sumstats.txt \
+--gcta /users/k1806347/oliverpainfel/Software/gcta_1.94.sh \
+--gctb /users/k1806347/oliverpainfel/Software/gctb_2.03beta_Linux/gctb_203.sh \
+--gctb_ref /scratch/prj/ukbiobank/usr/ollie_pain/GenoPredPipe/GenoPred/GenoPredPipe/resources/data/gctb_ref/ukbEURu_hm3_shrunk_sparse/ukbEURu_hm3_v3_50k_chr \
+--plink_ref_chr /users/k1806347/oliverpainfel/Data/1KG/Phase3/1KGPhase3.w_hm3.chr \
+--plink_ref_keep /users/k1806347/oliverpainfel/Data/1KG/Phase3/keep_files/EUR_samples.keep \
+--ld_blocks /users/k1806347/oliverpainfel/Data/LDetect/EUR \
+--rscript /users/k1806347/oliverpainfel/Software/Rscript.sh \
+--dbslmm /users/k1806347/oliverpainfel/Software/DBSLMM/software \
+--plink /users/k1806347/oliverpainfel/Software/plink1.9.sh \
+--PRScs_path /users/k1806347/oliverpainfel/Software/PRScs.sh \
+--PRScs_ref_path /users/k1806347/oliverpainfel/Software/PRScs/ldblk_1kg_eur \
+--ldpred2_ref_dir /scratch/prj/ukbiobank/usr/ollie_pain/GenoPredPipe/GenoPred/GenoPredPipe/resources/data/ldpred2_ref \
+--output /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Hippocampus/MetaBrain_Hippocampus.eQTL
+
+EOF
+
+sbatch --array 1-$(wc -l /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Hippocampus/todo.txt | cut -d' ' -f1)%100 /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Hippocampus/sbatch.sh
+
+#############
+# Spinalcord
+#############
+
+head -n 2 /users/k1806347/oliverpainfel/Data/MetaBrain/Spinalcord/cleaned/MetaBrain_Spinalcord_chr22_sumstats.txt > /users/k1806347/oliverpainfel/Data/MetaBrain/Spinalcord/cleaned/MetaBrain_Spinalcord_GW_sumstats.txt; tail -n +2 -q /users/k1806347/oliverpainfel/Data/MetaBrain/Spinalcord/cleaned/MetaBrain_Spinalcord_chr*_sumstats.txt >> /users/k1806347/oliverpainfel/Data/MetaBrain/Spinalcord/cleaned/MetaBrain_Spinalcord_GW_sumstats.txt
+
+mkdir /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Spinalcord
+cut -f 1 -d' ' /users/k1806347/oliverpainfel/Data/MetaBrain/Spinalcord/cleaned/MetaBrain_Spinalcord_GW_sumstats.txt | tail -n +2 | uniq > /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Spinalcord/gene_list.txt
+
+> /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Spinalcord/todo.txt
+for i in $(cat /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Spinalcord/gene_list.txt);do
+  if [ ! -f /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Spinalcord/MetaBrain_Spinalcord.eQTL/${i}.done ]; then
+    echo ${i} >> /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Spinalcord/todo.txt
+  fi
+done
+
+mkdir /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Spinalcord/logs
+
+# Create shell script to run using sbatch
+cat > /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Spinalcord/sbatch.sh << 'EOF'
+#!/bin/sh
+
+#SBATCH -p cpu
+#SBATCH --mem 10G
+#SBATCH -n 1
+#SBATCH --nodes 1
+#SBATCH -J eQTL_to_TWAS
+#SBATCH -o /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Spinalcord/logs/slurm-%A_%a.log
+#SBATCH -e /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Spinalcord/logs/slurm-%A_%a.log
+#SBATCH --exclude erc-hpc-comp025
+
+ID=$(awk -v var="$SLURM_ARRAY_TASK_ID" 'NR == var {print $1}' /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Spinalcord/todo.txt)
+
+/users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/compute_weights.R \
+--id ${ID} \
+--extract /users/k1806347/oliverpainfel/Data/ldsc/w_hm3.snplist \
+--sumstats /users/k1806347/oliverpainfel/Data/MetaBrain/Spinalcord/cleaned/MetaBrain_Spinalcord_GW_sumstats.txt \
+--gcta /users/k1806347/oliverpainfel/Software/gcta_1.94.sh \
+--gctb /users/k1806347/oliverpainfel/Software/gctb_2.03beta_Linux/gctb_203.sh \
+--gctb_ref /scratch/prj/ukbiobank/usr/ollie_pain/GenoPredPipe/GenoPred/GenoPredPipe/resources/data/gctb_ref/ukbEURu_hm3_shrunk_sparse/ukbEURu_hm3_v3_50k_chr \
+--plink_ref_chr /users/k1806347/oliverpainfel/Data/1KG/Phase3/1KGPhase3.w_hm3.chr \
+--plink_ref_keep /users/k1806347/oliverpainfel/Data/1KG/Phase3/keep_files/EUR_samples.keep \
+--ld_blocks /users/k1806347/oliverpainfel/Data/LDetect/EUR \
+--rscript /users/k1806347/oliverpainfel/Software/Rscript.sh \
+--dbslmm /users/k1806347/oliverpainfel/Software/DBSLMM/software \
+--plink /users/k1806347/oliverpainfel/Software/plink1.9.sh \
+--PRScs_path /users/k1806347/oliverpainfel/Software/PRScs.sh \
+--PRScs_ref_path /users/k1806347/oliverpainfel/Software/PRScs/ldblk_1kg_eur \
+--ldpred2_ref_dir /scratch/prj/ukbiobank/usr/ollie_pain/GenoPredPipe/GenoPred/GenoPredPipe/resources/data/ldpred2_ref \
+--output /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Spinalcord/MetaBrain_Spinalcord.eQTL
+
+EOF
+
+sbatch --array 1-$(wc -l /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Spinalcord/todo.txt | cut -d' ' -f1)%100 /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Spinalcord/sbatch.sh
 
 ```
 
 ```{R, echo=T, eval=F}
 # Create .pos file
 library(data.table)
-
-# Read in list of RDat files
-rdat_list<-list.files(path='/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/eQTLGen.eQTL', pattern='.RDat')
-
-# Start making pos file
-pos<-data.frame(PANEL='eQTLGen.eQTL',
-                WGT=paste0('eQTLGen.eQTL/',rdat_list),
-                ID=gsub('\\..*','',rdat_list))
 
 # Insert CHR, P0 and P1 (GRCh=37)
 library(biomaRt)
@@ -2785,27 +2982,568 @@ names(Genes)<-c('ID','CHR','P0','P1')
 Genes<-Genes[complete.cases(Genes),]
 Genes<-Genes[!duplicated(Genes),]
 
-pos<-merge(pos, Genes, all.x=T, by='ID')
+panel<-c('Cortex','Basalganglia','Cerebellum','Hippocampus','Spinalcord')
 
-# Some genes may not be found in biomart, for these update P0 and P1 using min/max(BP)
-
-# Read in each RDat file to retrieve N
-for(i in 1:length(rdat_list)){
-  load(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/eQTLGen.eQTL/',rdat_list[i]))
-  pos$N[i]<-N.tot
-  pos$CHR_pos[i]<-snps$V1[1]
-  pos$P0_pos[i]<-min(snps$V4)
-  pos$P1_pos[i]<-max(snps$V4)
+for(panel_i in panel){
+  
+  # Read in list of RDat files
+  rdat_list<-list.files(path=paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_',panel_i,'/MetaBrain_',panel_i,'.eQTL'), pattern='.RDat')
+  
+  # Start making pos file
+  pos<-data.frame(PANEL=paste0('MetaBrain_',panel_i,'.eQTL'),
+                  WGT=paste0('MetaBrain_',panel_i,'.eQTL/',rdat_list),
+                  ID=gsub('\\..*','',rdat_list))
+  
+  
+  pos<-merge(pos, Genes, all.x=T, by='ID')
+  
+  # Some genes may not be found in biomart, for these update P0 and P1 using min/max(BP)
+  
+  # Read in each RDat file to retrieve N
+  for(i in 1:length(rdat_list)){
+    load(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_',panel_i,'/MetaBrain_',panel_i,'.eQTL/',rdat_list[i]))
+    pos$N[i]<-N.tot
+    pos$CHR_pos[i]<-snps$V1[1]
+    pos$P0_pos[i]<-min(snps$V4)
+    pos$P1_pos[i]<-max(snps$V4)
+  
+  }
+  
+  pos$CHR<-pos$CHR_pos
+  pos$P0[is.na(pos$P0)]<-pos$P0_pos[is.na(pos$P0)]
+  pos$P1[is.na(pos$P1)]<-pos$P0_pos[is.na(pos$P1)]
+  
+  pos<-pos[,c('PANEL','WGT','ID','CHR','P0','P1','N')]
+  
+  write.table(pos, paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_',panel_i,'/MetaBrain_',panel_i,'.eQTL.pos'), col.names=T, row.names=F, quote=F)
 
 }
 
-pos$CHR<-pos$CHR_pos
-pos$P0[is.na(pos$P0)]<-pos$P0_pos[is.na(pos$P0)]
-pos$P1[is.na(pos$P1)]<-pos$P0_pos[is.na(pos$P1)]
+```
 
-pos<-pos[,c('PANEL','WGT','ID','CHR','P0','P1','N')]
+***
 
-write.table(pos, '/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen_full/eQTLGen.eQTL.pos', col.names=T, row.names=F, quote=F)
+## Run TWAS
+
+***
+
+### MetaBrain - Cortex
+
+```{bash, eval=F, echo=T}
+
+cat /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.munged.median_N.txt
+
+panels=$(echo Cortex)
+
+for panel in ${panels}; do
+
+  mkdir /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/MetaBrain_${panel}
+  
+  for chr in $(seq 1 22); do
+  
+    sbatch -p cpu --mem 20G -n 1 /users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/FUSION.assoc_test.edit.R \
+      --sumstats /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.munged.sumstats.gz \
+      --weights /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_${panel}/MetaBrain_${panel}.eQTL.pos \
+      --weights_dir /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_${panel}/ \
+      --ref_ld_chr /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
+      --out /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/MetaBrain_${panel}/SCZ.TWAS.MetaBrain_${panel}.chr${chr} \
+      --chr ${chr} \
+      --coloc_P 1 \
+      --GWASN 126282
+    
+  done
+
+done
 
 ```
+
+***
+
+### PsychENCODE
+
+```{bash, eval=F, echo=T}
+    
+cat /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.munged.median_N.txt
+
+mkdir /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/PsychENCODE
+
+for chr in $(seq 1 22); do
+
+  sbatch -p cpu --mem 20G -n 1 /users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/FUSION.assoc_test.edit.R \
+    --sumstats /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.munged.sumstats.gz \
+    --weights /users/k1806347/oliverpainfel/Software/MyGit/GenoFunc/GenoFuncPipe/resources/data/fusion_snp_weights/psychencode/psychencode.pos \
+    --weights_dir /users/k1806347/oliverpainfel/Software/MyGit/GenoFunc/GenoFuncPipe/resources/data/fusion_snp_weights/psychencode \
+    --ref_ld_chr /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
+    --out /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/PsychENCODE/SCZ.TWAS.PsychENCODE.chr${chr} \
+    --chr ${chr} \
+    --coloc_P 1 \
+    --GWASN 126282
+  
+done
+
+```
+
+***
+
+## Characterise the MetaBrain TWAS models
+
+```{r, echo=T, eval=F}
+
+library(data.table)
+
+panel<-c('Cortex','Basalganglia','Cerebellum','Hippocampus','Spinalcord')
+
+for(panel_i in panel){
+  pos<-fread(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_',panel_i,'/MetaBrain_',panel_i,'.eQTL.pos'))
+  
+  res<-NULL
+  for(i in 1:nrow(pos)){
+    print(i)
+    load(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_',panel_i,'/',pos$WGT[i]))
+    res<-rbind(res, data.frame(ID=pos$ID[i],
+                               h2_est=hsq[1],
+                               h2_se=hsq[2],
+                               h2_p=hsq.pv,
+                               mbatcombo_p=signal[1,2],
+                               topsnp_p=signal[1,1]))
+  }
+  
+  fwrite(res, paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_',panel_i,'/MetaBrain_',panel_i,'.hsq_mbat_top.txt'), sep=' ', na='NA', quote=F)
+
+}
+
+panel_n<-NULL
+for(i in panel){
+  res<-fread(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_',i,'/MetaBrain_',i,'.hsq_mbat_top.txt'))
+  
+  res$mbatcombo_p.fdr<-p.adjust(res$mbatcombo_p, method='fdr')
+  
+  panel_n<-rbind(panel_n, data.frame(Panel=paste0('MetaBrain - ',i),
+                                     N=nrow(res),
+                                     N_h2=sum(res$h2_p < 0.01, na.rm=T),
+                                     N_mbat_top=sum(res$mbatcombo_p.fdr < 0.05 | res$topsnp_p < 5e-8, na.rm=T)))
+  
+}
+
+write.csv(panel_n, paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_N_gene.csv'), row.names=F)
+
+```
+
+***
+
+## Compare MetaBrain Cortex and PsychENCODE results
+
+```{r, eval=F, echo=T}
+library(data.table)
+
+# Read in PsychENCODE TWAS results
+psychencode_files<-list.files(path=paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/PsychENCODE/'), pattern=paste0('SCZ.TWAS.PsychENCODE.chr'))
+
+twas_psychencode<-NULL
+for(i in psychencode_files){
+  twas_psychencode<-rbind(twas_psychencode, fread(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/PsychENCODE/',i)))
+}
+
+twas_psychencode<-twas_psychencode[!is.na(twas_psychencode$TWAS.Z),]
+twas_psychencode$TWAS.P.BONF<-p.adjust(twas_psychencode$TWAS.P, method = 'bonferroni')
+
+# Restrict PsychENCODE TWAS to best model by CV
+twas_psychencode_r2<-twas_psychencode[rev(order(twas_psychencode$MODELCV.R2)),]
+twas_psychencode_r2<-twas_psychencode_r2[!duplicated(twas_psychencode_r2$ID),]
+twas_psychencode_r2$TWAS.P.BONF<-p.adjust(twas_psychencode_r2$TWAS.P, method = 'bonferroni')
+nrow(twas_psychencode_r2)
+sum(twas_psychencode_r2$TWAS.P.BONF < 0.05) # 211
+sum(twas_psychencode_r2$TWAS.P.BONF < 0.05 & twas_psychencode_r2$COLOC.PP4 > 0.8) # 78
+
+# Read in MetaBrain TWAS results
+metabrain_files<-list.files(path=paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/MetaBrain_Cortex/'), pattern=paste0('SCZ.TWAS.MetaBrain_Cortex.chr'))
+
+twas_metabrain<-NULL
+for(i in metabrain_files){
+  twas_metabrain<-rbind(twas_metabrain, fread(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/twas/MetaBrain_Cortex/',i)))
+}
+
+twas_metabrain<-twas_metabrain[!is.na(twas_metabrain$TWAS.Z),]
+twas_metabrain$TWAS.P.BONF<-p.adjust(twas_metabrain$TWAS.P, method = 'bonferroni')
+
+# Number of unique genes tested
+length(unique(twas_psychencode$ID)) # 14628
+length(unique(twas_metabrain$ID)) # 18270
+sum(unique(twas_psychencode$ID) %in% twas_metabrain$ID) # 10587
+
+# Restrict metabrain_twas to genes based on mbat_combo or sig eqtl
+metabrain_pos<-fread('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Cortex/MetaBrain_Cortex.eQTL.pos')
+metabrain_h2<-NULL
+for(i in 1:nrow(metabrain_pos)){
+  print(i)
+  load(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Cortex/',metabrain_pos$WGT[i]))
+  metabrain_h2<-rbind(metabrain_h2, data.frame(ID=metabrain_pos$ID[i],
+                                     h2_est=hsq[1],
+                                     h2_se=hsq[2],
+                                     h2_p=hsq.pv,
+                                     mbatcombo_p=signal[1,2],
+                                     topsnp_p=signal[1,1]))
+}
+
+fwrite(metabrain_h2, '/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Cortex/MetaBrain_Cortex.hsq_mbat_top.txt', sep=' ', na='NA', quote=F)
+
+metabrain_h2<-fread('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Cortex/MetaBrain_Cortex.hsq_mbat_top.txt')
+
+metabrain_h2$mbatcombo_p.FDR<-p.adjust(metabrain_h2$mbatcombo_p, method='fdr')
+fastbat_res_sig<-metabrain_h2[metabrain_h2$mbatcombo_p.FDR < 0.05 | metabrain_h2$topsnp_p < 5e-8,]
+nrow(fastbat_res_sig) # 11594
+sum(unique(twas_psychencode$ID) %in% fastbat_res_sig$ID) # 8365
+
+######
+# Run ACAT-O aggreagation approaches
+######
+
+# Write ACAT-O funcion
+ACATO <- function(p){
+    if (all(is.na(p))) return(NA)
+    p <- p[!is.na(p)]
+    p[p == 1] <- 1 - 1e-16
+#### check if there are very small non-zero p values
+    is.small <- (p < 1e-16)
+    if (sum(is.small) == 0) {
+        cct.stat <- sum(tan((0.5 - p) * pi))/length(p)
+    } else {
+        cct.stat <- sum((1 / p[is.small]) / pi)
+        cct.stat <- cct.stat + sum(tan((0.5 - p[!is.small]) * pi))
+        cct.stat <- cct.stat/length(p)
+    }
+    #### check if the test statistic is very large.
+    if (cct.stat > 1e+15){
+        pval <- (1 / cct.stat) / pi
+    } else {
+        pval <- pcauchy(cct.stat, lower.tail = F)
+    }
+    pval
+}
+
+# Calc ACAT-O pvalue
+twas_metabrain_gene<-data.table(ID=sort(unique(twas_metabrain$ID)),
+                                     ACATO.P=aggregate(twas_metabrain$TWAS.P, list(twas_metabrain$ID), FUN=ACATO)$x,
+                                Mean_Z=aggregate(twas_metabrain$TWAS.Z, list(twas_metabrain$ID), FUN=mean)$x)
+
+twas_metabrain_gene<-merge(twas_metabrain_gene,twas_metabrain[,c('ID','CHR','P0','P1','COLOC.PP4'), with=F],by='ID')
+twas_metabrain_gene<-twas_metabrain_gene[!duplicated(twas_metabrain_gene$ID),]
+
+twas_metabrain_gene_fastbat<-twas_metabrain_gene[twas_metabrain_gene$ID %in% fastbat_res_sig$ID,]
+nrow(twas_metabrain_gene_fastbat) # 11549
+twas_metabrain_gene_fastbat$ACATO.P.BONF<-p.adjust(twas_metabrain_gene_fastbat$ACATO.P, method='bonferroni')
+sum(twas_metabrain_gene_fastbat$ACATO.P.BONF < 0.05) # 374
+sum(twas_metabrain_gene_fastbat$ACATO.P.BONF < 0.05 & twas_metabrain_gene_fastbat$COLOC.PP4 > 0.8) # 59
+sum(twas_metabrain_gene_fastbat$ID[twas_metabrain_gene_fastbat$ACATO.P.BONF < 0.05] %in% twas_psychencode_r2$ID[twas_psychencode_r2$TWAS.P.BONF < 0.05]) # 61
+sum(twas_metabrain_gene_fastbat$ID[twas_metabrain_gene_fastbat$ACATO.P.BONF < 0.05 & twas_metabrain_gene_fastbat$COLOC.PP4 > 0.8] %in% twas_psychencode_r2$ID[twas_psychencode_r2$TWAS.P.BONF < 0.05 & twas_psychencode_r2$COLOC.PP4 > 0.8]) # 11
+
+# Calc ACAT-O pvalue for FUSION TWAS
+twas_psychencode_gene<-NULL
+for(i in unique(twas_psychencode$ID)){
+  twas_psychencode_gene<-rbind(twas_psychencode_gene, 
+                          data.frame(ID=i,
+                                     ACATO.P=ACATO(twas_psychencode$TWAS.P[twas_psychencode$ID == i]),
+                                     Mean_Z=mean(twas_psychencode$TWAS.P[twas_psychencode$ID == i], na.rm=T)))
+}
+
+twas_psychencode_gene<-merge(twas_psychencode_gene,twas_psychencode_r2[,c('ID','CHR','P0','P1','COLOC.PP4'), with=F],by='ID')
+
+twas_psychencode_gene$ACATO.P.BONF<-p.adjust(twas_psychencode_gene$ACATO.P, method='bonferroni')
+sum(twas_psychencode_gene$ACATO.P.BONF < 0.05) # 312
+sum(twas_psychencode_gene$ACATO.P.BONF < 0.05 & twas_psychencode_gene$COLOC.PP4 > 0.8) # 115
+sum(twas_psychencode_gene$ID[twas_psychencode_gene$ACATO.P.BONF < 0.05] %in% twas_psychencode_r2$ID[twas_psychencode_r2$TWAS.P.BONF < 0.05]) # 190
+sum(twas_psychencode_gene$ID[twas_psychencode_gene$ACATO.P.BONF < 0.05 & twas_psychencode_gene$COLOC.PP4 > 0.8] %in% twas_psychencode_r2$ID[twas_psychencode_r2$TWAS.P.BONF < 0.05 & twas_psychencode_r2$COLOC.PP4 > 0.8]) # 73
+
+sum(twas_psychencode_gene$ID[twas_psychencode_gene$ACATO.P.BONF < 0.05] %in% twas_metabrain_gene_fastbat$ID[twas_metabrain_gene_fastbat$ACATO.P.BONF < 0.05]) # 93
+sum(twas_psychencode_gene$ID[twas_psychencode_gene$ACATO.P.BONF < 0.05 & twas_psychencode_gene$COLOC.PP4 > 0.8] %in% twas_metabrain_gene_fastbat$ID[twas_metabrain_gene_fastbat$ACATO.P.BONF < 0.05 & twas_metabrain_gene_fastbat$COLOC.PP4 > 0.8]) # 19
+
+# This analysis is interesting and highlights the limitations in MetaBrain compared to PsychENCODE.
+# Unlike before, using PsychENCODE identifies more associations than the metabrain data, despite metabrain being a larger sample. The sample size increase is smaller than when comparing eQTLGen and YFS, and it seems this doesn't out weigh the reduced accuracy of the summary statistic methods and increased heterogeneity between metabrain cohorts. I think this point should be emphasised in the paper. We can't show. We could also include a MetaBrain SMR analysis for comparison, which might highlight whether this is a problem with the sumstat methods or just a reflection of metabrain limitations. Or, we could use the sumstats methods on the PsychENCODE eQTL sumstats to see what is due to the methods and what is due to the different datasets.
+# Another distinction is that PsychENCODE uses all hrc imputed SNPs whereas we are only using hapmap 3 variants in MetaBrain.
+
+##############
+# Have a closer look at some of the differences between PsychENCODE and MetaBrain results
+##############
+
+twas_metabrain_gene_fastbat_sig<-twas_metabrain_gene_fastbat[twas_metabrain_gene_fastbat$ACATO.P.BONF < 0.05,]
+twas_metabrain_gene_fastbat_sig_coloc<-twas_metabrain_gene_fastbat_sig[twas_metabrain_gene_fastbat_sig$COLOC.PP4 > 0.8,]
+twas_psychencode_r2_sig<-twas_psychencode_r2[twas_psychencode_r2$TWAS.P.BONF < 0.05,]
+twas_psychencode_r2_sig_coloc<-twas_psychencode_r2_sig[twas_psychencode_r2_sig$COLOC.PP4 > 0.8,]
+
+
+twas_metabrain_gene_fastbat_sig[(twas_metabrain_gene_fastbat_sig$ID %in% twas_psychencode_r2_sig_coloc$ID) & twas_metabrain_gene_fastbat_sig$COLOC.PP4 < 0.1,]
+# There are 12 genes which were significant in both TWAS but the evidence of colocalisation is much lower in the MetaBrain TWAS.
+
+twas_psychencode_r2_sig[(twas_psychencode_r2_sig$ID %in% twas_metabrain_gene_fastbat_sig_coloc$ID) & twas_psychencode_r2_sig$COLOC.PP4 < 0.1,]
+# There is only one gene which was significant in both TWAS, but only colocalised in MetaBrain
+
+# This could suggest colocalisation does not work well when using meta-analysis summary statistics.
+# Have a look at the weights for some of the genes that do not colocalised in MetaBrain but do in PsychENCODE
+
+metabrain_eQTL<-fread('/users/k1806347/oliverpainfel/Data/MetaBrain/Cortex/cleaned/MetaBrain_Cortex_GW_sumstats.txt')
+metabrain_eQTL$GENE<-gsub('\\..*','',metabrain_eQTL$GENE)
+
+ENSG00000073969<-metabrain_eQTL[metabrain_eQTL$GENE == 'ENSG00000073969',]
+ENSG00000073969<-ENSG00000073969[ENSG00000073969$N > max(ENSG00000073969$N)*0.8,]
+sd(ENSG00000073969$N)
+
+bitmap('test.png')
+hist(ENSG00000073969$N)
+dev.off()
+
+# Below we show the heritability of genes is roughly consistent across MetaBrain and PsychENCODE. Here, we show that the MetaBrain TWAS is often not colocalising when it does for PsychENCODE. This may be due to MetaBrain being a meta-analysis, thereby violating the assumption that the same sample was used to estimate the effect size of all variants.
+
+#################
+# Compare MetaBrain and PsychENCODE associations within each locus
+#################
+
+metabrain_tmp<-twas_metabrain_gene_fastbat[,c('ID','CHR','P0','P1','ACATO.P','ACATO.P.BONF'), with=F]
+names(metabrain_tmp)<-c('ID','CHR','P0','P1','TWAS.P','TWAS.P.BONF')
+metabrain_tmp$PANEL<-'MetaBrain'
+psychencode_tmp<-twas_psychencode_r2[,c('ID','CHR','P0','P1','TWAS.P','TWAS.P.BONF'), with=F]
+psychencode_tmp$PANEL<-'PsychENCODE'
+
+metabrain_psychencode<-rbind(metabrain_tmp, psychencode_tmp)
+metabrain_psychencode<-metabrain_psychencode[order(metabrain_psychencode$CHR, metabrain_psychencode$P0),]
+
+# Split sig associations into blocks using 0.5Mb window
+cor_window<-1e6
+metabrain_psychencode_sig<-metabrain_psychencode[metabrain_psychencode$TWAS.P.BONF < 0.05 & metabrain_psychencode$PANEL == 'MetaBrain',]
+
+metabrain_psychencode_sig$Block<-NA
+for(i in 1:dim(metabrain_psychencode_sig)[1]){
+	if(i == 1){
+		metabrain_psychencode_sig$Block[i]<-1
+	} else {
+		if(i > 1 & metabrain_psychencode_sig$CHR[i] == metabrain_psychencode_sig$CHR[i-1] & metabrain_psychencode_sig$P1[i] > (metabrain_psychencode_sig$P0[i-1] - cor_window) & metabrain_psychencode_sig$P0[i] < (metabrain_psychencode_sig$P1[i-1] + cor_window)){
+			metabrain_psychencode_sig$Block[i]<-metabrain_psychencode_sig$Block[i-1]
+		}
+		if(!(i > 1 & metabrain_psychencode_sig$CHR[i] == metabrain_psychencode_sig$CHR[i-1] & metabrain_psychencode_sig$P1[i] > (metabrain_psychencode_sig$P0[i-1] - cor_window) & metabrain_psychencode_sig$P0[i] < (metabrain_psychencode_sig$P1[i-1] + cor_window))){
+			metabrain_psychencode_sig$Block[i]<-metabrain_psychencode_sig$Block[i-1]+1
+		}
+	}
+}
+
+# MetaBrain associations can be split into 114 blocks > 1Mb apart.
+# Check how many of these blocks have a signifcant association in PsychENCODE
+cor_window_2<-1e6
+block_check<-NULL
+for(i in unique(metabrain_psychencode_sig$Block)){
+  chr_block<-metabrain_psychencode_sig$CHR[metabrain_psychencode_sig$Block == i][1]
+  min_block<-min(metabrain_psychencode_sig$P0[metabrain_psychencode_sig$Block == i])
+  max_block<-max(metabrain_psychencode_sig$P1[metabrain_psychencode_sig$Block == i])
+
+  block_check<-c(block_check,any(metabrain_psychencode$TWAS.P.BONF[metabrain_psychencode$PANEL == 'PsychENCODE' & metabrain_psychencode$CHR == chr_block & metabrain_psychencode$P0 > min_block-cor_window_2 & metabrain_psychencode$P1 < max_block+cor_window_2] < 0.05))
+}
+
+sum(block_check) # 46
+length(block_check) # 114
+
+##################
+
+# Looking at the sumstats is also highlighting that the sample size is often not very large for a given gene. Check the median N across genes.
+metabrain_Cortex_pos<-fread('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Cortex/MetaBrain_Cortex.eQTL.pos')
+metabrain_Basalganglia_pos<-fread('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Basalganglia/MetaBrain_Basalganglia.eQTL.pos')
+metabrain_Cerebellum_pos<-fread('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Cerebellum/MetaBrain_Cerebellum.eQTL.pos')
+metabrain_Hippocampus_pos<-fread('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Hippocampus/MetaBrain_Hippocampus.eQTL.pos')
+metabrain_Spinalcord_pos<-fread('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Spinalcord/MetaBrain_Spinalcord.eQTL.pos')
+
+summary(metabrain_Cortex_pos$N)
+summary(metabrain_Basalganglia_pos$N)
+summary(metabrain_Cerebellum_pos$N)
+summary(metabrain_Hippocampus_pos$N)
+summary(metabrain_Spinalcord_pos$N)
+
+```
+
+***
+
+## Compare SNP-based heritability estimates from PsychENCODE and MetaBrain
+
+***
+
+### Convert PsychENCODE TWAS weights to eQTL summary statistics
+
+Only perform for chromosome 22.
+
+```{r, echo=T, eval=F}
+library(data.table)
+
+# Read in the pos file
+pos<-fread('/users/k1806347/oliverpainfel/Software/MyGit/GenoFunc/GenoFuncPipe/resources/data/fusion_snp_weights/psychencode/psychencode.pos')
+pos<-pos[pos$CHR == 22,]
+
+# Read in EUR MAF
+frq<-NULL
+for(i in 22:22){
+  frq<-rbind(frq, fread(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/FUSION/LDREF/1000G.EUR.',i,'.frq')))
+}
+names(frq)[names(frq) == 'MAF']<-'FREQ'
+
+setkey(frq, SNP)
+
+dir.create('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/PsychENCODE')
+
+for(i in 1:nrow(pos)){
+  print(i)
+  
+  load(paste0('/users/k1806347/oliverpainfel/Software/MyGit/GenoFunc/GenoFuncPipe/resources/data/fusion_snp_weights/psychencode/',pos$WGT[i]))
+  tmp<-data.table(cbind(snps, wgt.matrix[,which(colnames(wgt.matrix) == 'top1')]))
+  names(tmp)<-c('CHR','SNP','POS','BP','A1','A2','Z')
+  tmp$N<-pos$N[i]
+  
+  frq_tmp<-frq[.(tmp$SNP)]
+  
+  # Insert EUR MAF
+  tmp_match<-merge(tmp, frq_tmp[,c('SNP','A1','A2','FREQ'),with=F], by=c('SNP','A1','A2'))
+  tmp_flip<-merge(tmp, frq_tmp[,c('SNP','A1','A2','FREQ'),with=F], by.x=c('SNP','A1','A2'), by.y=c('SNP','A2','A1'))
+  tmp_flip$FREQ<-1-tmp_flip$FREQ
+  tmp<-rbind(tmp_match, tmp_flip)
+  
+  # Approximate BETA, SE, and P
+  tmp$P<-2*pnorm(-abs(tmp$Z))
+  tmp$BETA<-tmp$Z/sqrt((2*tmp$FREQ)*(1-tmp$FREQ)*(tmp$N+(tmp$Z^2)))
+  tmp$SE<-abs(tmp$BETA)/abs(tmp$Z)
+  
+  tmp$GENE<-pos$ID[i]
+    
+  tmp<-tmp[,c('GENE','CHR','SNP','BP','A1','A2','BETA','SE','Z','P','FREQ','N'),with=F]
+  
+  if(i == 1){
+    write.table(tmp, '/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/PsychENCODE/PsychENCODE_eQTL_hm3_from_fusion.txt', col.names=T, row.names=F, quote=F)
+  } else {
+    write.table(tmp, '/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/PsychENCODE/PsychENCODE_eQTL_hm3_from_fusion.txt', col.names=F, row.names=F, quote=F, append=T)
+  }
+}
+
+```
+
+***
+
+### Estimate SNP-h2 using SBayesR
+
+```{bash, eval=F, echo=T}
+
+mkdir /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/PsychENCODE
+cut -f 1 -d' ' /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/PsychENCODE/PsychENCODE_eQTL_hm3_from_fusion.txt | tail -n +2 | uniq > /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/PsychENCODE/gene_list.txt
+
+> /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/PsychENCODE/todo.txt
+for i in $(cat /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/PsychENCODE/gene_list.txt);do
+  if [ ! -f /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/PsychENCODE/PsychENCODE.eQTL/${i}.done ]; then
+    echo ${i} >> /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/PsychENCODE/todo.txt
+  fi
+done
+
+# Create shell script to run using sbatch
+cat > /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/PsychENCODE/sbatch.sh << 'EOF'
+#!/bin/sh
+
+#SBATCH -p cpu
+#SBATCH --mem 10G
+#SBATCH -n 1
+#SBATCH --nodes 1
+#SBATCH -J eQTL_to_TWAS
+#SBATCH --exclude erc-hpc-comp006,erc-hpc-comp025
+
+ID=$(awk -v var="$SLURM_ARRAY_TASK_ID" 'NR == var {print $1}' /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/PsychENCODE/todo.txt)
+
+/users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/compute_weights.R \
+--id ${ID} \
+--extract /users/k1806347/oliverpainfel/Data/ldsc/w_hm3.snplist \
+--sumstats /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/PsychENCODE/PsychENCODE_eQTL_hm3_from_fusion.txt \
+--gcta /users/k1806347/oliverpainfel/Software/gcta_1.94.sh \
+--gctb /users/k1806347/oliverpainfel/Software/gctb_2.03beta_Linux/gctb_203.sh \
+--gctb_ref /scratch/prj/ukbiobank/usr/ollie_pain/GenoPredPipe/GenoPred/GenoPredPipe/resources/data/gctb_ref/ukbEURu_hm3_shrunk_sparse/ukbEURu_hm3_v3_50k_chr \
+--plink_ref_chr /users/k1806347/oliverpainfel/Data/1KG/Phase3/1KGPhase3.w_hm3.chr \
+--plink_ref_keep /users/k1806347/oliverpainfel/Data/1KG/Phase3/keep_files/EUR_samples.keep \
+--ld_blocks /users/k1806347/oliverpainfel/Data/LDetect/EUR \
+--rscript /users/k1806347/oliverpainfel/Software/Rscript.sh \
+--dbslmm /users/k1806347/oliverpainfel/Software/DBSLMM/software \
+--plink /users/k1806347/oliverpainfel/Software/plink1.9.sh \
+--PRScs_path /users/k1806347/oliverpainfel/Software/PRScs.sh \
+--PRScs_ref_path /users/k1806347/oliverpainfel/Software/PRScs/ldblk_1kg_eur \
+--ldpred2_ref_dir /scratch/prj/ukbiobank/usr/ollie_pain/GenoPredPipe/GenoPred/GenoPredPipe/resources/data/ldpred2_ref \
+--output /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/PsychENCODE/PsychENCODE.eQTL
+
+
+EOF
+
+sbatch --array 1-$(wc -l /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/PsychENCODE/todo.txt | cut -d' ' -f1)%400 /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/PsychENCODE/sbatch.sh
+
+```
+
+***
+
+### Compare to metabrain
+
+```{r, eval=F, echo=T}
+
+library(data.table)
+
+files<-list.files(path='/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/PsychENCODE/PsychENCODE.eQTL', pattern='.RDat')
+
+psychencode_h2<-NULL
+for(i in 1:length(files)){
+  print(i)
+  load(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/PsychENCODE/PsychENCODE.eQTL/',files[i]))
+  psychencode_h2<-rbind(psychencode_h2, data.table(ID=gsub('.RDat','',files[i]),
+                                                   h2_est=hsq[1],
+                                                   h2_se=hsq[2],
+                                                   h2_p=hsq.pv))
+}
+
+metabrain_h2<-fread('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_Cortex/MetaBrain_Cortex.hsq_mbat_top.txt')
+
+both_h2<-merge(psychencode_h2[,c('ID','h2_est','h2_se','h2_p'), with=F], metabrain_h2[,c('ID','h2_est','h2_se','h2_p'), with=F], by='ID')
+
+both_h2<-both_h2[complete.cases(both_h2),]
+
+nrow(both_h2) # 286
+
+median(both_h2$h2_est.x) # 0.0264635
+median(both_h2$h2_est.y) # 0.0278325
+
+both_h2_melt<-melt(both_h2[,c('ID','h2_est.x','h2_est.y'), with=F])
+
+wilcox.test(value ~ variable, data=both_h2_melt) 
+
+sum(both_h2$h2_p.x < 0.01) # 168
+sum(both_h2$h2_p.y < 0.01) # 226
+
+library(ggplot2)
+library(cowplot)
+
+ggplot(both_h2, aes(x=h2_est.x, y=h2_est.y)) +
+  geom_point()
+
+```
+
+
+***
+
+## Package up the MetaBrain TWAS models
+
+```{bash, eval=F, echo=T}
+
+panel=$(echo Cortex Basalganglia Cerebellum Hippocampus Spinalcord)
+panel=$(echo Basalganglia Cerebellum Hippocampus)
+
+for panel_i in ${panel}; do
+
+cd /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/MetaBrain_${panel_i}/
+rm gene_list.txt
+rm -r logs
+rm sbatch.sh
+rm todo.txt
+rm MetaBrain_${panel_i}.eQTL/*.done
+
+cd ..
+
+tar -zcvf MetaBrain_${panel_i}.tar.gz MetaBrain_${panel_i}
+
+done
+
+```
+
+***
 
