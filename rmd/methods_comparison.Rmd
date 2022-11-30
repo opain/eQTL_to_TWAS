@@ -1824,6 +1824,209 @@ write.table(pos, '/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/
 
 ***
 
+#### Create TWAS weights to diagnose SBayesR/SBayesR-robust
+
+<details><summary>Show code</summary>
+
+```{bash, eval=F, echo=T}
+# Create file listing GWAS that haven't been processed.
+mkdir /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall_sbayesr_only
+cut -f 1 -d' ' /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/eQTLGen_sumstats_exclGTeX.txt | tail -n +2 | uniq > /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall_sbayesr_only/gene_list.txt
+
+> /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall_sbayesr_only/todo.txt
+for i in $(cat /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall_sbayesr_only/gene_list.txt);do
+  if [ ! -f /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall_sbayesr_only/eQTLGen.eQTL/${i}.done ]; then
+    echo ${i} >> /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall_sbayesr_only/todo.txt
+  fi
+done
+
+# Create shell script to run using sbatch
+cat > /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall_sbayesr_only/sbatch.sh << 'EOF'
+#!/bin/sh
+
+#SBATCH -p cpu
+#SBATCH --mem 10G
+#SBATCH -n 1
+#SBATCH --nodes 1
+#SBATCH -J eQTL_to_TWAS
+
+ID=$(awk -v var="$SLURM_ARRAY_TASK_ID" 'NR == var {print $1}' /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall_sbayesr_only/todo.txt)
+
+/users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/compute_weights.R \
+	--id ${ID} \
+	--extract /users/k1806347/oliverpainfel/Data/ldsc/w_hm3.snplist \
+	--sumstats /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/eQTLGen_sumstats_exclGTeX.txt \
+  --gcta /users/k1806347/oliverpainfel/Software/gcta_1.94.sh \
+	--gctb /users/k1806347/oliverpainfel/Software/gctb_2.03beta_Linux/gctb_203.sh \
+	--gctb_ref /scratch/prj/ukbiobank/usr/ollie_pain/GenoPredPipe/GenoPred/GenoPredPipe/resources/data/gctb_ref/ukbEURu_hm3_shrunk_sparse/ukbEURu_hm3_v3_50k_chr \
+	--plink_ref_chr /users/k1806347/oliverpainfel/Data/1KG/Phase3/1KGPhase3.w_hm3.chr \
+	--plink_ref_keep /users/k1806347/oliverpainfel/Data/1KG/Phase3/keep_files/EUR_samples.keep \
+	--models sbayesr,sbayesr_robust \
+	--ld_blocks /users/k1806347/oliverpainfel/Data/LDetect/EUR \
+  --rscript /users/k1806347/oliverpainfel/Software/Rscript.sh \
+  --dbslmm /users/k1806347/oliverpainfel/Software/DBSLMM/software \
+  --plink /users/k1806347/oliverpainfel/Software/plink1.9.sh \
+  --PRScs_path /users/k1806347/oliverpainfel/Software/PRScs.sh \
+  --PRScs_ref_path /users/k1806347/oliverpainfel/Software/PRScs/ldblk_1kg_eur \
+	--ldpred2_ref_dir /scratch/prj/ukbiobank/usr/ollie_pain/GenoPredPipe/GenoPred/GenoPredPipe/resources/data/ldpred2_ref \
+--output /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall_sbayesr_only/eQTLGen.eQTL
+
+EOF
+
+sbatch --array 1-1000 /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall_sbayesr_only/sbatch.sh
+
+```
+
+```{r, eval=F, echo=T}
+# Find genes that didn't converge and look up why
+rdat_list<-list.files(path='~/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall_sbayesr_only/eQTLGen.eQTL', pattern='.RDat')
+
+converge<-NULL
+for(i in 1:length(rdat_list)){
+  load(paste0('~/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall_sbayesr_only/eQTLGen.eQTL/',rdat_list[i]))
+  
+  converge<-rbind(converge, data.frame(ID=rdat_list[i],
+              sbayesr=var(wgt.matrix[,'sbayesr'], na.rm=T) != 0,
+              sbayesr_robust=var(wgt.matrix[,'sbayesr_robust'], na.rm=T) != 0))
+  
+}
+
+# Identify genes where sbayesr_robust did not converge but sbayesr did
+converge$ID<-gsub('.RDat','',converge$ID)
+
+table(converge$sbayesr, converge$sbayesr_robust)
+
+# Interestingly the model 'converges' for both sbayesr and sbayesr_robust, but the variance of the weights from sbayesr_robust is 0, so there are no predictions.
+
+# Now look at the log files for genes that didn't converge for sbayesr_robust, but did for sbayesr
+converge$ID[which(converge$sbayesr == T & converge$sbayesr_robust == F)]
+
+readLines('~/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall_sbayesr_only/eQTLGen.eQTL/ENSG00000079459/SBayesR/ENSG00000079459.SBayesR.log')
+readLines('~/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall_sbayesr_only/eQTLGen.eQTL/ENSG00000079459/SBayesR_robust/ENSG00000079459.SBayesR.log')
+
+readLines('~/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall_sbayesr_only/eQTLGen.eQTL/ENSG00000130653/SBayesR/ENSG00000130653.SBayesR.log')
+readLines('~/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall_sbayesr_only/eQTLGen.eQTL/ENSG00000130653/SBayesR_robust/ENSG00000130653.SBayesR.log')
+
+
+```
+
+***
+
+#### Test SuSiE (L=1)
+
+Given LD mismatch is a problem for SuSiE, we are going to try using SuSiE assuming a single causal variant, which does not consider LD estimates.
+
+<details><summary>Show code</summary>
+
+```{bash, eval=F, echo=T}
+# Create file listing GWAS that haven't been processed.
+mkdir /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall_SuSiE
+cut -f 1 -d' ' /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/eQTLGen_sumstats_exclGTeX.txt | tail -n +2 | uniq > /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall_SuSiE/gene_list.txt
+
+> /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall_SuSiE/todo.txt
+for i in $(cat /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall_SuSiE/gene_list.txt);do
+  if [ ! -f /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall_SuSiE/eQTLGen.eQTL/${i}.done ]; then
+    echo ${i} >> /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall_SuSiE/todo.txt
+  fi
+done
+
+# Create shell script to run using sbatch
+cat > /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall_SuSiE/sbatch.sh << 'EOF'
+#!/bin/sh
+
+#SBATCH -p cpu
+#SBATCH --mem 10G
+#SBATCH -n 1
+#SBATCH --nodes 1
+#SBATCH -J eQTL_to_TWAS
+
+ID=$(awk -v var="$SLURM_ARRAY_TASK_ID" 'NR == var {print $1}' /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall_SuSiE/todo.txt)
+
+/users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/compute_weights.R \
+	--id ${ID} \
+	--models top1,susie,susie1 \
+	--extract /users/k1806347/oliverpainfel/Data/ldsc/w_hm3.snplist \
+	--sumstats /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGen/eQTLGen_sumstats_exclGTeX.txt \
+  --gcta /users/k1806347/oliverpainfel/Software/gcta_1.94.sh \
+	--gctb /users/k1806347/oliverpainfel/Software/gctb_2.03beta_Linux/gctb_203.sh \
+	--gctb_ref /scratch/prj/ukbiobank/usr/ollie_pain/GenoPredPipe/GenoPred/GenoPredPipe/resources/data/gctb_ref/ukbEURu_hm3_shrunk_sparse/ukbEURu_hm3_v3_50k_chr \
+	--plink_ref_chr /users/k1806347/oliverpainfel/Data/1KG/Phase3/1KGPhase3.w_hm3.chr \
+	--plink_ref_keep /users/k1806347/oliverpainfel/Data/1KG/Phase3/keep_files/EUR_samples.keep \
+	--ld_blocks /users/k1806347/oliverpainfel/Data/LDetect/EUR \
+  --rscript /users/k1806347/oliverpainfel/Software/Rscript.sh \
+  --dbslmm /users/k1806347/oliverpainfel/Software/DBSLMM/software \
+  --plink /users/k1806347/oliverpainfel/Software/plink1.9.sh \
+  --PRScs_path /users/k1806347/oliverpainfel/Software/PRScs.sh \
+  --PRScs_ref_path /users/k1806347/oliverpainfel/Software/PRScs/ldblk_1kg_eur \
+	--ldpred2_ref_dir /scratch/prj/ukbiobank/usr/ollie_pain/GenoPredPipe/GenoPred/GenoPredPipe/resources/data/ldpred2_ref \
+--output /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall_SuSiE/eQTLGen.eQTL
+
+EOF
+
+sbatch --array 1-$(wc -l /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall_SuSiE/todo.txt | cut -d' ' -f1)%400 /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall_SuSiE/sbatch.sh
+
+```
+
+```{r, eval=F, echo=T}
+# Check some of the wgt.matrices
+files<-list.files(path='/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall_SuSiE/eQTLGen.eQTL', pattern='.RDat')
+
+for(i in files[1:50]){
+  load(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall_SuSiE/eQTLGen.eQTL/',i))
+  
+  wgt.matrix<-data.frame(wgt.matrix)
+  print(head(wgt.matrix[rev(order(abs(wgt.matrix$top1))),]))
+  print(head(wgt.matrix[rev(order(abs(wgt.matrix$susie))),]))
+  print(head(wgt.matrix[rev(order(abs(wgt.matrix$susie1))),]))
+  
+  wgt.matrix$top1[abs(wgt.matrix$top1) != max(abs(wgt.matrix$top1))]<-0
+  print(cor(wgt.matrix))
+}
+
+# This indicates susie1 consistently list the top SNP as the largest effect, but some susie1 models also contain incorporate effects from other variants. This warrants further examination.
+
+```
+
+```{R, echo=T, eval=F}
+# Create .pos file
+library(data.table)
+
+# Read in list of RDat files
+rdat_list<-list.files(path='/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall_SuSiE/eQTLGen.eQTL', pattern='.RDat')
+
+# Start making pos file
+pos<-data.frame(PANEL='eQTLGen.eQTL',
+                WGT=paste0('eQTLGen.eQTL/',rdat_list),
+                ID=gsub('\\..*','',rdat_list))
+
+# Insert CHR, P0 and P1 (GRCh=37)
+library(biomaRt)
+ensembl = useEnsembl(biomart="ensembl", dataset="hsapiens_gene_ensembl", GRCh=37)
+Genes<-getBM(attributes=c('ensembl_gene_id_version','chromosome_name','start_position','end_position'), mart = ensembl)
+Genes$ensembl_gene_id_version<-gsub('\\..*','',Genes$ensembl_gene_id_version)
+names(Genes)<-c('ID','CHR','P0','P1')
+Genes<-Genes[complete.cases(Genes),]
+Genes<-Genes[!duplicated(Genes),]
+
+pos<-merge(pos, Genes, all.x=T, by='ID')
+
+# Read in each RDat file to retrieve N
+for(i in 1:nrow(pos)){
+  load(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall_SuSiE/',pos$WGT[i]))
+  pos$N[i]<-N.tot
+  pos$CHR_pos[i]<-snps$V1[1]
+}
+
+pos<-pos[,c('PANEL','WGT','ID','CHR','P0','P1','N')]
+
+write.table(pos, '/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall_SuSiE/eQTLGen.eQTL.pos', col.names=T, row.names=F, quote=F)
+
+```
+
+</details>
+
+***
+
 ### Generate SNP-weights from FUSION released YFS eQTL data
 
 FUSION only provide the N of the sample and the Z of each SNP for each gene. We can convert this to the required information using reference MAF, though using these approximations is not ideal. This may not be the best comparison since they are finish and there may therefore be MAF and LD mismatch with target sample. Though I assume FUSION developers restricted the analysis to those os EUR ancestry.
@@ -2236,6 +2439,108 @@ for(i in 1:nrow(pos)){
 pos<-pos[,c('PANEL','WGT','ID','CHR','P0','P1','N')]
 
 write.table(pos, '/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFSall_300722/YFS.eQTL.pos', col.names=T, row.names=F, quote=F)
+
+```
+
+</details>
+
+***
+
+#### Test SuSie (L=1)
+
+<details><summary>Show code</summary>
+
+```{bash, eval=F, echo=T}
+# Create file listing GWAS that haven't been processed.
+mkdir /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFSall_SuSiE
+cut -f 1 -d' ' /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/YFS_eQTL_from_fusion.txt | tail -n +2 | uniq > /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFSall_SuSiE/gene_list.txt
+
+> /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFSall_SuSiE/todo.txt
+for i in $(cat /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFSall_SuSiE/gene_list.txt);do
+  if [ ! -f /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFSall_SuSiE/YFS.eQTL/${i}.done ]; then
+    echo ${i} >> /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFSall_SuSiE/todo.txt
+  fi
+done
+
+# Create shell script to run using sbatch
+cat > /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFSall_SuSiE/sbatch.sh << 'EOF'
+#!/bin/sh
+
+#SBATCH -p cpu
+#SBATCH --mem 10G
+#SBATCH -n 1
+#SBATCH --nodes 1
+#SBATCH -J eQTL_to_TWAS
+
+ID=$(awk -v var="$SLURM_ARRAY_TASK_ID" 'NR == var {print $1}' /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFSall_SuSiE/todo.txt)
+
+/users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/compute_weights.R \
+	--id ${ID} \
+	--models top1,susie,susie1 \
+	--extract /users/k1806347/oliverpainfel/Data/ldsc/w_hm3.snplist \
+	--sumstats /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFS/YFS_eQTL_from_fusion.txt \
+  --gcta /users/k1806347/oliverpainfel/Software/gcta_1.94.sh \
+	--gctb /users/k1806347/oliverpainfel/Software/gctb_2.03beta_Linux/gctb_203.sh \
+	--gctb_ref /scratch/prj/ukbiobank/usr/ollie_pain/GenoPredPipe/GenoPred/GenoPredPipe/resources/data/gctb_ref/ukbEURu_hm3_shrunk_sparse/ukbEURu_hm3_v3_50k_chr \
+	--plink_ref_chr /users/k1806347/oliverpainfel/Data/1KG/Phase3/1KGPhase3.w_hm3.chr \
+	--plink_ref_keep /users/k1806347/oliverpainfel/Data/1KG/Phase3/keep_files/EUR_samples.keep \
+	--ld_blocks /users/k1806347/oliverpainfel/Data/LDetect/EUR \
+  --rscript /users/k1806347/oliverpainfel/Software/Rscript.sh \
+  --dbslmm /users/k1806347/oliverpainfel/Software/DBSLMM/software \
+  --plink /users/k1806347/oliverpainfel/Software/plink1.9.sh \
+  --PRScs_path /users/k1806347/oliverpainfel/Software/PRScs.sh \
+  --PRScs_ref_path /users/k1806347/oliverpainfel/Software/PRScs/ldblk_1kg_eur \
+	--ldpred2_ref_dir /scratch/prj/ukbiobank/usr/ollie_pain/GenoPredPipe/GenoPred/GenoPredPipe/resources/data/ldpred2_ref \
+  --output /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFSall_SuSiE/YFS.eQTL
+
+EOF
+
+sbatch --array 1-$(wc -l /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFSall_SuSiE/todo.txt | cut -d' ' -f1)%400 /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFSall_SuSiE/sbatch.sh
+
+```
+
+```{R, echo=T, eval=F}
+# Create .pos file
+library(data.table)
+
+# Read in list of RDat files
+rdat_list<-list.files(path='/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFSall_SuSiE/YFS.eQTL', pattern='.RDat')
+
+# Start making pos file
+pos<-data.frame(PANEL='YFS.eQTL',
+                WGT=paste0('YFS.eQTL/',rdat_list),
+                ID=gsub('\\..*','',rdat_list))
+
+# Insert CHR, P0 and P1 (GRCh=37)
+library(biomaRt)
+ensembl = useEnsembl(biomart="ensembl", dataset="hsapiens_gene_ensembl", GRCh=37)
+Genes<-getBM(attributes=c('external_gene_name','external_synonym','chromosome_name','start_position','end_position'), mart = ensembl)
+names(Genes)<-c('ID','ID_2','CHR','P0','P1')
+Genes<-Genes[!duplicated(Genes),]
+
+# Rename TMEM256-PLSCR3 to PLSCR3 to match FUSION IDs
+Genes$ID[Genes$ID == 'TMEM256-PLSCR3']<-'PLSCR3'
+
+Genes_ID<-Genes[Genes$ID %in% pos$ID,]
+Genes_ID_2<-Genes[Genes$ID_2 %in% pos$ID & !(Genes$ID_2 %in% Genes_ID$ID),]
+Genes_ID_2$ID<-Genes_ID_2$ID_2
+Genes<-rbind(Genes_ID,Genes_ID_2)
+Genes$ID_2<-NULL
+
+pos<-merge(pos, Genes, all.x=T, by='ID')
+pos<-pos[order(pos$CHR),]
+pos<-pos[!duplicated(pos$WGT),]
+
+# Read in each RDat file to retrieve N
+for(i in 1:nrow(pos)){
+  load(paste0('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFSall_SuSiE/',pos$WGT[i]))
+  pos$N[i]<-N.tot
+  pos$CHR_pos[i]<-snps$V1[1]
+}
+
+pos<-pos[,c('PANEL','WGT','ID','CHR','P0','P1','N')]
+
+write.table(pos, '/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFSall_SuSiE/YFS.eQTL.pos', col.names=T, row.names=F, quote=F)
 
 ```
 
@@ -2712,6 +3017,43 @@ tar -zcvf for_zac_300722.tar.gz for_zac_300722
 
 ***
 
+#### Prepare files for SuSiE test
+
+<details><summary>Show code</summary>
+
+```{bash, eval=F, echo=T}
+mkdir -p /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/for_zac_300922
+cd /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/for_zac_300922
+
+# Copy eQTL-based .pos, .Rdat files, score files, and reference expression
+cd /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/for_zac_300922
+mkdir eQTL.YFS
+cd eQTL.YFS
+
+cp /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFSall_SuSiE/YFS.eQTL.pos ./
+cp -r /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/YFSall_SuSiE/YFS.eQTL ./
+
+rm YFS.eQTL/*.done
+
+# Copy eQTL-Gen eQTL-based .pos, .Rdat files, score files, and reference expression
+cd /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/for_zac_300922
+mkdir eQTL.eQTLGen
+cd eQTL.eQTLGen
+
+cp /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall_SuSiE/eQTLGen.eQTL.pos ./
+cp -r /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/eQTLGenall_SuSiE/eQTLGen.eQTL ./
+
+rm eQTLGen.eQTL/*.done
+
+cd /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS
+tar -zcvf for_zac_300922.tar.gz for_zac_300922
+
+```
+
+</details>
+
+***
+
 #### FUSION YFS models
 
 <details><summary>Show code</summary>
@@ -3180,6 +3522,7 @@ write.table(cor_res_melt_obs, '/users/k1806347/oliverpainfel/biomarkers-brc-mh/T
 
 # cor_res_melt<-fread('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_full.txt')
 # cor_res_melt_obs<-fread('/users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor.txt')
+
 
 cor_res_average<-NULL
 for(i in unique(cor_res_melt_obs$test)){

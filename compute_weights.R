@@ -10,7 +10,7 @@ option_list = list(
     help="ID of feature [optional]"),
   make_option("--extract", action="store", default=NA, type='character',
     help="File specifying SNPs to retain [optional]"),
-  make_option("--models", action="store", default=c('top1','prscs','sbayesr','sbayesr_robust','susie','dbslmm','lassosum','ldpred2'), type='character',
+  make_option("--models", action="store", default=c('top1','prscs','sbayesr','sbayesr_robust','susie','susie1','dbslmm','lassosum','ldpred2'), type='character',
     help="List of models to use for generating weights[optional]"),
   
   make_option("--plink_ref_chr", action="store", default=NA, type='character',
@@ -61,7 +61,7 @@ if(any(models == 'susie')){
   library(susieR)
 }
 
-if(any(models == 'susie')){
+if(any(models %in% c('susie','susie1'))){
   library(susieR)
 }
 
@@ -488,6 +488,39 @@ for(gene_i in genes){
       
       wgt.matrix[,colnames(wgt.matrix) == 'susie']<-susie_score$BETA
       
+      }
+    }
+    
+    ######
+    # SuSiE finemapping assuming single casual signal (L=1)
+    ######
+    
+    if(mod == 'susie1'){
+      
+      # Make fake LD matrix
+      ld<-matrix(0, nrow=nrow(ss_gene_i), ncol=nrow(ss_gene_i))
+      diag(ld)<-1
+
+      skip_to_next<-F
+      tryCatch(fitted_rss <- susie_rss(ss_gene_i$BETA/ss_gene_i$SE, n=N.tot, ld, L = 1), error = function(e){skip_to_next <<- TRUE})
+      
+      # Scale BETAs by PIP
+      if(skip_to_next == F){
+        susie1_score<-data.table(SNP=ss_gene_i$SNP,
+                                A1=ss_gene_i$A1,
+                                BETA=ss_gene_i$BETA*fitted_rss$pip)
+        
+        # Flip effects so allele match eQTL sumstats
+        susie1_score<-merge(ref_tmp, susie1_score, by='SNP', all=T)
+        susie1_score$BETA[which(susie1_score$A1.x != susie1_score$A1.y)]<--susie1_score$BETA[which(susie1_score$A1.x != susie1_score$A1.y)]
+        susie1_score<-susie1_score[,c('SNP','A1.x','A2','BETA'), with=F]
+        names(susie1_score)<-c('SNP','A1','A2','BETA')
+        
+        # Sort score file according ss_gene_i
+        susie1_score<-susie1_score[match(ss_gene_i$SNP, susie1_score$SNP),]
+        
+        wgt.matrix[,colnames(wgt.matrix) == 'susie1']<-susie1_score$BETA
+        
       }
     }
     
