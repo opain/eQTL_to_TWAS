@@ -14,7 +14,7 @@ option_list = list(
     help="List of models to use for generating weights[optional]"),
   
   make_option("--plink_ref_chr", action="store", default=NA, type='character',
-    help="Path to per chromosome refrence plink files [optional]"),
+    help="Path to per chromosome reference plink files [optional]"),
   make_option("--plink_ref_keep", action="store", default=NA, type='character',
     help="Path to keep file for plink reference [optional]"),
   
@@ -93,13 +93,20 @@ if(is.na(opt$id)){
   cat('Sumstats contain',length(unique(ss$SNP)),' unique variants.\n')
   cat('Sumstats contain',length(unique(ss$GENE)),' unique genes\n')
 
+  # Identify unique list of genes
+  genes<-unique(ss$GENE)
+  
 } else {
   # Extract SNPs for opt$id
   ss<-fread(cmd=paste0('grep -E "GENE|',opt$id,'" ', opt$sumstats))
   ss<-ss[ss$GENE == opt$id,]
   
   cat('Computing weights for ',opt$id,'.\n')
-  cat('Afer extracting gene, sumstats contain',nrow(ss),'variants.\n')
+  cat('After extracting gene, sumstats contain',nrow(ss),'variants.\n')
+  
+  # Identify unique list of genes
+  genes<-opt$id
+  
 }
 
 # Extract SNPs in opt$extract
@@ -109,19 +116,23 @@ if(!is.na(opt$extract)){
   extract<-extract[['SNP']]
   ss<-ss[(ss$SNP %in% extract),]
   
-  cat('Afer extracting variants, sumstats contain',nrow(ss),'variant-gene associations.\n')
-  cat('Afer extracting variants, sumstats contain',length(unique(ss$SNP)),'unique variants.\n')
+  cat('After extracting variants, sumstats contain',nrow(ss),'variant-gene associations.\n')
+  cat('After extracting variants, sumstats contain',length(unique(ss$SNP)),'unique variants.\n')
 }
 
 # Remove variants with MAF < 1%
 ss<-ss[ss$FREQ >= 0.01 & ss$FREQ <= 0.99,]
 
-# Identify unique list of genes
-genes<-unique(ss$GENE)
+cat('After filtering variants with MAF < 1%, sumstats contain',nrow(ss),'variant-gene associations.\n')
 
 for(gene_i in genes){
   # Subset sumstats to gene (if not already)
   ss_gene_i<-ss[ss$GENE == gene_i,]
+  
+  if(nrow(ss_gene_i) == 0){
+    cat('Skipping ',gene_i,': There are no variants present.\n', sep='')
+    next
+  }
   
   # Remove genes with missing values
   ss_gene_i<-ss_gene_i[complete.cases(ss_gene_i),]
@@ -682,15 +693,17 @@ for(gene_i in genes){
        snps,
        wgt.matrix,
        file = paste0(opt$output,'/',gene_i,'.RDat'))
-}
+  
+  # Remove temporary files
+  system(paste0('rm -r ',opt$output,'/', gene_i))
 
-# Remove temporary files
-system(paste0('rm -r ',opt$output,'/', gene_i))
+  x <- data.frame()
+  write.table(x, file=paste0(opt$output,'/',gene_i,'.done'), col.names=FALSE)
+  
+}
 
 end.time <- Sys.time()
 time.taken <- end.time - start.time
 cat('Analysis finished at',as.character(end.time),'\n')
 cat('Analysis duration was',as.character(round(time.taken,2)),attr(time.taken, 'units'),'\n')
 
-x <- data.frame()
-write.table(x, file=paste0(opt$output,'/',gene_i,'.done'), col.names=FALSE)
