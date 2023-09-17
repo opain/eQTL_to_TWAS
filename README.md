@@ -2,7 +2,7 @@
 
 This repo contains code for deriving TWAS models from eQTL summary statistics. The same code can be used for other molecular features as well (e.g. methylation, protein, chromatin). The models are in [FUSION ](http://gusevlab.org/projects/fusion/) format. 
 
-Please refer to and cite [our paper]() comparing approaches for integration of eQTL summary statistics with GWAS summary statistics.
+Please refer to and cite [our paper](https://www.biorxiv.org/content/10.1101/2022.11.23.517213v1) comparing approaches for integration of eQTL summary statistics with GWAS summary statistics.
 
 
 
