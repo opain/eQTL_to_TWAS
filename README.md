@@ -57,6 +57,11 @@ The essential software and data requirements vary according to the methods selec
 - DBSLMM
 
   - [DBSLMM software](https://biostat0903.github.io/DBSLMM/)
+  - Note. compute_weights.R does not work with the latest version of DBSLMM. You must git reset to a previous branch as follows
+  
+  - ```{bash}
+   git reset --hard aa6e7ad5b8a7d3b6905556a4007c4a1fa2925b7d
+   ```
 
 - LDpred2
 
