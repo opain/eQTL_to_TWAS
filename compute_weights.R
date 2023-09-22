@@ -166,22 +166,25 @@ for(gene_i in genes){
   # Make a reference to harmonise weights from each method
   ref_tmp<-ss_gene_i[, c('SNP','A1','A2'), with=F]
   
+  # Create output directory
+  dir.create(paste0(opt$output,'/', gene_i,'/ref'), recursive = T)
+    
+  # Output snplist to retain in reference
+  write.table(ref_tmp$SNP, paste0(opt$output,'/', gene_i,'/ref/ref.snplist'), col.names=F, row.names = F, quote=F)
+      
   # Subset reference plink files
   if(!is.na(opt$plink_ref_keep)){
-    cat('ref_keep used to subset reference genotype data.\n')
-    
-    dir.create(paste0(opt$output,'/', gene_i,'/ref'), recursive = T)
-    write.table(ref_tmp$SNP, paste0(opt$output,'/', gene_i,'/ref/ref.snplist'), col.names=F, row.names = F, quote=F)
-    
-    system(paste0(opt$plink,' --bfile ',opt$plink_ref_chr,chr_i,' --extract ',opt$output,'/', gene_i,'/ref/ref.snplist --keep ',opt$plink_ref_keep,' --make-bed --out ',opt$output,'/', gene_i,'/ref/ref_chr',chr_i))
-    
-    system(paste0('rm ',opt$output,'/', gene_i,'/ref/ref.snplist'))
-    
+    log<-system2(command=opt$plink, args=paste0('--bfile ',opt$plink_ref_chr,chr_i,' --extract ',opt$output,'/', gene_i,'/ref/ref.snplist --keep ',opt$plink_ref_keep,' --make-bed --out ',opt$output,'/', gene_i,'/ref/ref_chr',chr_i), stderr = T)
   } else {
-    
-    dir.create(paste0(opt$output,'/', gene_i,'/ref'), recursive = T)
-    system(paste0(opt$plink,' --bfile ',opt$plink_ref_chr,chr_i,' --extract ',opt$output,'/', gene_i,'/ref/dbslmm_ref.snplist --make-bed --out ',opt$output,'/', gene_i,'/ref/ref_chr',chr_i))
-    
+    log<-system2(command=opt$plink, args=paste0('--bfile ',opt$plink_ref_chr,chr_i,' --extract ',opt$output,'/', gene_i,'/ref/ref.snplist --make-bed --out ',opt$output,'/', gene_i,'/ref/ref_chr',chr_i), stderr = T)
+  }
+  
+  # Delete temporary ref.snplist
+  system(paste0('rm ',opt$output,'/', gene_i,'/ref/ref.snplist'))
+  
+  if(any(grepl("Error: No variants remaining after --extract.", log))){
+    cat('Skipping ',gene_i,": No variants within the gene are present in the reference data (--plink_ref_chr).\n", sep='')
+    next
   }
   
   ###########
