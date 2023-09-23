@@ -146,6 +146,37 @@ for(gene_i in genes){
   # Filter SNPs to those with N > 80% of max(N)
   ss_gene_i<-ss_gene_i[ss_gene_i$N >= 0.8*max(ss_gene_i$N),]
   
+  ##
+  # Create reference plink files
+  ##
+  
+  # Create output directory
+  dir.create(paste0(opt$output,'/', gene_i,'/ref'), recursive = T)
+    
+  # Output snplist to retain in reference
+  write.table(ss_gene_i$SNP, paste0(opt$output,'/', gene_i,'/ref/ref.snplist'), col.names=F, row.names = F, quote=F)
+      
+  # Subset reference plink files
+  if(!is.na(opt$plink_ref_keep)){
+    log<-system2(command=opt$plink, args=paste0('--bfile ',opt$plink_ref_chr,chr_i,' --extract ',opt$output,'/', gene_i,'/ref/ref.snplist --keep ',opt$plink_ref_keep,' --make-bed --out ',opt$output,'/', gene_i,'/ref/ref_chr',chr_i), stderr = T)
+  } else {
+    log<-system2(command=opt$plink, args=paste0('--bfile ',opt$plink_ref_chr,chr_i,' --extract ',opt$output,'/', gene_i,'/ref/ref.snplist --make-bed --out ',opt$output,'/', gene_i,'/ref/ref_chr',chr_i), stderr = T)
+  }
+  
+  # Delete temporary ref.snplist
+  system(paste0('rm ',opt$output,'/', gene_i,'/ref/ref.snplist'))
+  
+  if(any(grepl("Error: No variants remaining after --extract.", log))){
+    cat('Skipping ',gene_i,": No variants within the gene are present in the reference data (--plink_ref_chr).\n", sep='')
+    next
+  }
+  
+  # Read in the reference data
+  bim<-fread(paste0(opt$output,'/', gene_i,'/ref/ref_chr',chr_i,'.bim'))
+  
+  # Remove variants in ss_gene_i that are not present in bim
+  ss_gene_i<-ss_gene_i[ss_gene_i$SNP %in% bim$V2,]
+  
   # Create N.tot object
   N.tot<-max(ss_gene_i$N)
   GWAS_N<-mean(ss_gene_i$N)
@@ -165,27 +196,6 @@ for(gene_i in genes){
   
   # Make a reference to harmonise weights from each method
   ref_tmp<-ss_gene_i[, c('SNP','A1','A2'), with=F]
-  
-  # Create output directory
-  dir.create(paste0(opt$output,'/', gene_i,'/ref'), recursive = T)
-    
-  # Output snplist to retain in reference
-  write.table(ref_tmp$SNP, paste0(opt$output,'/', gene_i,'/ref/ref.snplist'), col.names=F, row.names = F, quote=F)
-      
-  # Subset reference plink files
-  if(!is.na(opt$plink_ref_keep)){
-    log<-system2(command=opt$plink, args=paste0('--bfile ',opt$plink_ref_chr,chr_i,' --extract ',opt$output,'/', gene_i,'/ref/ref.snplist --keep ',opt$plink_ref_keep,' --make-bed --out ',opt$output,'/', gene_i,'/ref/ref_chr',chr_i), stderr = T)
-  } else {
-    log<-system2(command=opt$plink, args=paste0('--bfile ',opt$plink_ref_chr,chr_i,' --extract ',opt$output,'/', gene_i,'/ref/ref.snplist --make-bed --out ',opt$output,'/', gene_i,'/ref/ref_chr',chr_i), stderr = T)
-  }
-  
-  # Delete temporary ref.snplist
-  system(paste0('rm ',opt$output,'/', gene_i,'/ref/ref.snplist'))
-  
-  if(any(grepl("Error: No variants remaining after --extract.", log))){
-    cat('Skipping ',gene_i,": No variants within the gene are present in the reference data (--plink_ref_chr).\n", sep='')
-    next
-  }
   
   ###########
   # Estimate heritability using SBayesR
@@ -234,9 +244,6 @@ for(gene_i in genes){
   ##########
   # Estimate mBAT-combo association
   ##########
-  
-  # Read in the reference data
-  bim<-fread(paste0(opt$output,'/', gene_i,'/ref/ref_chr',chr_i,'.bim'))
   
   # Identify chromosome number
   chr_i<-ss_gene_i$CHR[1]
@@ -623,8 +630,7 @@ for(gene_i in genes){
 
       skip_to_next<-F
       tryCatch(info_snp <- snp_match(ss_gene_i_ldpred2, map, match.min.prop = 0), error = function(e){skip_to_next <<- TRUE})
-      
-      # Scale BETAs by PIP
+
       if(skip_to_next == F){
         
         # Perform additional suggested QC for LDPred2
