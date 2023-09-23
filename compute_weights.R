@@ -644,8 +644,20 @@ for(gene_i in genes){
         ind.chr2 <- ss_gene_i_ldpred2$`_NUM_ID_`[ind.chr]
         ## indices in 'corr_chr'
         ind.chr3 <- match(ind.chr2, which(map$chr == chr_i))
-          
-        corr0 <- readRDS(paste0(opt$ldpred2_ref_dir,'/LD_chr', chr_i, ".rds"))[ind.chr3, ind.chr3]
+        
+        ldpred2_ref<-NULL
+        if(file.exists(paste0(opt$ldpred2_ref_dir,'/LD_chr', chr_i, ".rds"))){
+          ldpred2_ref<-paste0(opt$ldpred2_ref_dir,'/LD_chr', chr_i, ".rds")
+        }
+        if(file.exists(paste0(opt$ldpred2_ref_dir,'/LD_with_blocks_chr', chr_i, ".rds"))){
+          ldpred2_ref<-paste0(opt$ldpred2_ref_dir,'/LD_with_blocks_chr', chr_i, ".rds")
+        }
+        if(is.null(ldpred2_ref)){
+          cat("Error: Cannot find ldpred2 LD reference files. Must be within --ldpred2_ref_dir folder, and be named either 'LD_chr<CHROM>.rds' or 'LD_with_blocks_chr<CHROM>.rds'.\n")
+          q()
+        }
+
+        corr0 <- readRDS(ldpred2_ref)[ind.chr3, ind.chr3]
           
         if(file.exists(paste0(opt$output,'/', gene_i,'/ref/LD_GW_sparse.sbk'))){
           system(paste0('rm ',opt$output,'/', gene_i,'/ref/LD_GW_sparse.sbk'))
