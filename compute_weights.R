@@ -677,7 +677,8 @@ for(gene_i in genes){
           # Run LDPred2-auto
           multi_auto <- snp_ldpred2_auto(corr, ss_gene_i_ldpred2, h2_init = hsq_val,
                                          vec_p_init = seq_log(1e-4, 0.9, 30),
-                                         ncores = NCORES)
+                                         ncores = NCORES,
+                                         use_MLE = FALSE) # Added this option as was getting a lot of NAs when T.
           
           beta_auto <- sapply(multi_auto, function(auto) auto$beta_est)
           
