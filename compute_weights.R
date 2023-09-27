@@ -174,8 +174,65 @@ for(gene_i in genes){
   # Read in the reference data
   bim<-fread(paste0(opt$output,'/', gene_i,'/ref/ref_chr',chr_i,'.bim'))
   
+  ######
+  # Harmonise the sumstats with the reference
+  ######
+  # Remove variants that do not match based on RSID, A1 and A2
+  # Flip strand in sumstats to match reference
+  
   # Remove variants in ss_gene_i that are not present in bim
   ss_gene_i<-ss_gene_i[ss_gene_i$SNP %in% bim$V2,]
+  
+  # Insert IUPAC codes
+  ss_gene_i$IUPAC[ss_gene_i$A1 == 'A' & ss_gene_i$A2 =='T' | ss_gene_i$A1 == 'T' & ss_gene_i$A2 =='A']<-'W'
+  ss_gene_i$IUPAC[ss_gene_i$A1 == 'C' & ss_gene_i$A2 =='G' | ss_gene_i$A1 == 'G' & ss_gene_i$A2 =='C']<-'S'
+  ss_gene_i$IUPAC[ss_gene_i$A1 == 'A' & ss_gene_i$A2 =='G' | ss_gene_i$A1 == 'G' & ss_gene_i$A2 =='A']<-'R'
+  ss_gene_i$IUPAC[ss_gene_i$A1 == 'C' & ss_gene_i$A2 =='T' | ss_gene_i$A1 == 'T' & ss_gene_i$A2 =='C']<-'Y'
+  ss_gene_i$IUPAC[ss_gene_i$A1 == 'G' & ss_gene_i$A2 =='T' | ss_gene_i$A1 == 'T' & ss_gene_i$A2 =='G']<-'K'
+  ss_gene_i$IUPAC[ss_gene_i$A1 == 'A' & ss_gene_i$A2 =='C' | ss_gene_i$A1 == 'C' & ss_gene_i$A2 =='A']<-'M'
+  
+  bim$IUPAC[bim$V5 == 'A' & bim$V6 =='T' | bim$V5 == 'T' & bim$V6 =='A']<-'W'
+  bim$IUPAC[bim$V5 == 'C' & bim$V6 =='G' | bim$V5 == 'G' & bim$V6 =='C']<-'S'
+  bim$IUPAC[bim$V5 == 'A' & bim$V6 =='G' | bim$V5 == 'G' & bim$V6 =='A']<-'R'
+  bim$IUPAC[bim$V5 == 'C' & bim$V6 =='T' | bim$V5 == 'T' & bim$V6 =='C']<-'Y'
+  bim$IUPAC[bim$V5 == 'G' & bim$V6 =='T' | bim$V5 == 'T' & bim$V6 =='G']<-'K'
+  bim$IUPAC[bim$V5 == 'A' & bim$V6 =='C' | bim$V5 == 'C' & bim$V6 =='A']<-'M'
+  
+  # Remove ambiguous variants
+  ss_gene_i<-ss_gene_i[!(ss_gene_i$IUPAC %in% c('W', 'S')),]
+  
+  # Merge sumstats and ref, and then retain variants with equivalent IUPAC codes
+  ss_gene_i<-merge(ss_gene_i, bim[,c('V2','IUPAC'), with=F], by.x='SNP', by.y='V2')
+  ss_gene_i<-ss_gene_i[ss_gene_i$IUPAC.x == ss_gene_i$IUPAC.y | 
+  					   ss_gene_i$IUPAC.x == 'R' & ss_gene_i$IUPAC.y == 'Y' | 
+  					   ss_gene_i$IUPAC.x == 'Y' & ss_gene_i$IUPAC.y == 'R' | 
+  					   ss_gene_i$IUPAC.x == 'K' & ss_gene_i$IUPAC.y == 'M' | 
+  					   ss_gene_i$IUPAC.x == 'M' & ss_gene_i$IUPAC.y == 'K',]
+   
+  # Flip alleles where strand mismatch is present
+  A1_new<-ss_gene_i$A1
+  A2_new<-ss_gene_i$A2
+  
+  allele_flip<-function(x){
+	x_new<-x
+	x_new[x == 'A']<-'T'
+	x_new[x == 'T']<-'A'
+	x_new[x == 'C']<-'G'
+	x_new[x == 'G']<-'C'
+	
+	return(x_new)
+  }
+
+  A1_new[ss_gene_i$IUPAC.x != ss_gene_i$IUPAC.y]<-allele_flip(ss_gene_i$A1[ss_gene_i$IUPAC.x != ss_gene_i$IUPAC.y])
+  A2_new[ss_gene_i$IUPAC.x != ss_gene_i$IUPAC.y]<-allele_flip(ss_gene_i$A2[ss_gene_i$IUPAC.x != ss_gene_i$IUPAC.y])
+  
+  ss_gene_i$A1<-A1_new
+  ss_gene_i$A2<-A2_new
+  
+  # Subset ref to matched variants
+  bim<-bim[bim$V2 %in% ss_gene_i$SNP,]
+  
+  ####################
   
   # Create N.tot object
   N.tot<-max(ss_gene_i$N)
@@ -210,7 +267,7 @@ for(gene_i in genes){
   fwrite(ss_gene_i_sbayesr, paste0(opt$output,'/', gene_i,'/SBayesR/',gene_i,'.txt'), sep=' ', na = "NA", quote=F)
   
   # Run SBayesR
-  log<-system(paste0(opt$gctb,' --sbayes R --ldm ',opt$gctb_ref,chr_i,'.ldm.sparse --pi 0.95,0.02,0.02,0.01 --gamma 0.0,0.01,0.1,1 --gwas-summary ',opt$output,'/', gene_i,'/SBayesR/',gene_i,'.txt --chain-length 10000 --exclude-mhc --burn-in 2000 --out-freq 1000 --out ',opt$output,'/', gene_i,'/SBayesR/',gene_i,'.SBayesR'), intern=T)
+  log<-system(paste0(opt$gctb,' --sbayes R --seed 1 --ldm ',opt$gctb_ref,chr_i,'.ldm.sparse --pi 0.95,0.02,0.02,0.01 --gamma 0.0,0.01,0.1,1 --gwas-summary ',opt$output,'/', gene_i,'/SBayesR/',gene_i,'.txt --chain-length 10000 --exclude-mhc --burn-in 2000 --out-freq 1000 --out ',opt$output,'/', gene_i,'/SBayesR/',gene_i,'.SBayesR'), intern=T)
   
   # Read SbayesR heritability result
   if(file.exists(paste0(opt$output,'/', gene_i,'/SBayesR/',gene_i,'.SBayesR.parRes'))){
@@ -278,32 +335,6 @@ for(gene_i in genes){
   
   if(nrow(res) == 0){
     # For genes with only one SNP available, insert the min P
-    # Make sure the SNP is actually available for TWAS by checking alleles and SNP ID
-    
-    ss_gene_i_mbat<-ss_gene_i_mbat[ss_gene_i_mbat$SNP %in% bim$V2,]
-    bim_gene_i<-bim[bim$V2 %in% ss_gene_i_mbat$SNP,]
-    
-    ss_gene_i_mbat$IUPAC[ss_gene_i_mbat$A1 == 'A' & ss_gene_i_mbat$A2 =='T' | ss_gene_i_mbat$A1 == 'T' & ss_gene_i_mbat$A2 =='A']<-'W'
-    ss_gene_i_mbat$IUPAC[ss_gene_i_mbat$A1 == 'C' & ss_gene_i_mbat$A2 =='G' | ss_gene_i_mbat$A1 == 'G' & ss_gene_i_mbat$A2 =='C']<-'S'
-    ss_gene_i_mbat$IUPAC[ss_gene_i_mbat$A1 == 'A' & ss_gene_i_mbat$A2 =='G' | ss_gene_i_mbat$A1 == 'G' & ss_gene_i_mbat$A2 =='A']<-'R'
-    ss_gene_i_mbat$IUPAC[ss_gene_i_mbat$A1 == 'C' & ss_gene_i_mbat$A2 =='T' | ss_gene_i_mbat$A1 == 'T' & ss_gene_i_mbat$A2 =='C']<-'Y'
-    ss_gene_i_mbat$IUPAC[ss_gene_i_mbat$A1 == 'G' & ss_gene_i_mbat$A2 =='T' | ss_gene_i_mbat$A1 == 'T' & ss_gene_i_mbat$A2 =='G']<-'K'
-    ss_gene_i_mbat$IUPAC[ss_gene_i_mbat$A1 == 'A' & ss_gene_i_mbat$A2 =='C' | ss_gene_i_mbat$A1 == 'C' & ss_gene_i_mbat$A2 =='A']<-'M'
-    
-    bim_gene_i$IUPAC[bim_gene_i$V5 == 'A' & bim_gene_i$V6 =='T' | bim_gene_i$V5 == 'T' & bim_gene_i$V6 =='A']<-'W'
-    bim_gene_i$IUPAC[bim_gene_i$V5 == 'C' & bim_gene_i$V6 =='G' | bim_gene_i$V5 == 'G' & bim_gene_i$V6 =='C']<-'S'
-    bim_gene_i$IUPAC[bim_gene_i$V5 == 'A' & bim_gene_i$V6 =='G' | bim_gene_i$V5 == 'G' & bim_gene_i$V6 =='A']<-'R'
-    bim_gene_i$IUPAC[bim_gene_i$V5 == 'C' & bim_gene_i$V6 =='T' | bim_gene_i$V5 == 'T' & bim_gene_i$V6 =='C']<-'Y'
-    bim_gene_i$IUPAC[bim_gene_i$V5 == 'G' & bim_gene_i$V6 =='T' | bim_gene_i$V5 == 'T' & bim_gene_i$V6 =='G']<-'K'
-    bim_gene_i$IUPAC[bim_gene_i$V5 == 'A' & bim_gene_i$V6 =='C' | bim_gene_i$V5 == 'C' & bim_gene_i$V6 =='A']<-'M'
-    
-    ss_gene_i_mbat<-merge(ss_gene_i_mbat, bim_gene_i[,c('V2','IUPAC'), with=F], by.x='SNP', by.y='V2')
-    ss_gene_i_mbat<-ss_gene_i_mbat[ss_gene_i_mbat$IUPAC.x == ss_gene_i_mbat$IUPAC.y | 
-                           ss_gene_i_mbat$IUPAC.x == 'R' & ss_gene_i_mbat$IUPAC.y == 'Y' | 
-                           ss_gene_i_mbat$IUPAC.x == 'Y' & ss_gene_i_mbat$IUPAC.y == 'R' | 
-                           ss_gene_i_mbat$IUPAC.x == 'K' & ss_gene_i_mbat$IUPAC.y == 'M' | 
-                           ss_gene_i_mbat$IUPAC.x == 'M' & ss_gene_i_mbat$IUPAC.y == 'K',]
-    
     res_tmp<-data.frame(matrix(NA, nrow=1, ncol=ncol(res)))
     names(res_tmp)<-names(res)
     res_tmp$Gene<-gene_i
@@ -363,7 +394,7 @@ for(gene_i in genes){
     #####
     if(mod == 'sbayesr_robust'){
       dir.create(paste0(opt$output,'/', gene_i,'/SBayesR_robust'))
-      log<-system(paste0(opt$gctb,' --sbayes R --ldm ',opt$gctb_ref,chr_i,'.ldm.sparse --pi 0.95,0.02,0.02,0.01 --gamma 0.0,0.01,0.1,1 --gwas-summary ',opt$output,'/', gene_i,'/SBayesR/',gene_i,'.txt --robust --chain-length 10000 --exclude-mhc --burn-in 2000 --out-freq 1000 --out ',opt$output,'/', gene_i,'/SBayesR_robust/',gene_i,'.SBayesR'), intern=T)
+      log<-system(paste0(opt$gctb,' --sbayes R --seed 1 --ldm ',opt$gctb_ref,chr_i,'.ldm.sparse --pi 0.95,0.02,0.02,0.01 --gamma 0.0,0.01,0.1,1 --gwas-summary ',opt$output,'/', gene_i,'/SBayesR/',gene_i,'.txt --robust --chain-length 10000 --exclude-mhc --burn-in 2000 --out-freq 1000 --out ',opt$output,'/', gene_i,'/SBayesR_robust/',gene_i,'.SBayesR'), intern=T)
       
       if(file.exists(paste0(opt$output,'/', gene_i,'/SBayesR_robust/',gene_i,'.SBayesR.parRes'))){
         
@@ -452,7 +483,7 @@ for(gene_i in genes){
       dir.create(paste0(opt$output,'/', gene_i,'/PRScs'))
       fwrite(ss_gene_i_prscs, paste0(opt$output,'/', gene_i,'/PRScs/',gene_i,'.txt'), sep=' ', na = "NA", quote=F)
       
-      system(paste0(opt$PRScs_path,' --ref_dir=',opt$PRScs_ref_path,' --bim_prefix=',opt$output,'/', gene_i,'/ref/ref_chr',chr_i,' --sst_file=',opt$output,'/', gene_i,'/PRScs/',gene_i,'.txt --n_gwas=',round(GWAS_N,0),' --out_dir=',opt$output,'/', gene_i,'/PRScs/',gene_i,' --chrom=',chr_i))
+      system(paste0(opt$PRScs_path,' --seed=1 --ref_dir=',opt$PRScs_ref_path,' --bim_prefix=',opt$output,'/', gene_i,'/ref/ref_chr',chr_i,' --sst_file=',opt$output,'/', gene_i,'/PRScs/',gene_i,'.txt --n_gwas=',round(GWAS_N,0),' --out_dir=',opt$output,'/', gene_i,'/PRScs/',gene_i,' --chrom=',chr_i))
       
       # Read in the results
       prscs_score<-fread(paste0(opt$output,'/', gene_i,'/PRScs/',gene_i,'_pst_eff_a1_b0.5_phiauto_chr',chr_i,'.txt'))
@@ -482,7 +513,9 @@ for(gene_i in genes){
     
     if(mod == 'susie'){
 
-      # Read LD estimates for eQTL sumstats
+		set.seed(1)
+      
+	  # Read LD estimates for eQTL sumstats
       dir.create(paste0(opt$output,'/', gene_i,'/SuSiE'))
       write.table(ss_gene_i$SNP, paste0(opt$output,'/', gene_i,'/SuSiE/',gene_i,'_snps.txt'), col.names=F, row.names=F, quote=F)
       system(paste0(opt$plink,' --bfile ',opt$output,'/', gene_i,'/ref/ref_chr',chr_i,' --extract ',opt$output,'/', gene_i,'/SuSiE/',gene_i,'_snps.txt --r square --out ',opt$output,'/', gene_i,'/SuSiE/',gene_i))
@@ -518,6 +551,8 @@ for(gene_i in genes){
     
     if(mod == 'susie1'){
       
+		set.seed(1)
+
       # Make fake LD matrix
       ld<-matrix(0, nrow=nrow(ss_gene_i), ncol=nrow(ss_gene_i))
       diag(ld)<-1
@@ -550,6 +585,9 @@ for(gene_i in genes){
     #####
     
     if(mod == 'lassosum'){
+	
+		set.seed(1)
+
       # Calculate correlation between SNP and phenotype
       # Adapt the p2cor function to allow for very small p-values
       p2cor_new<-function(z, n){
@@ -606,6 +644,8 @@ for(gene_i in genes){
     #####
 
     if(mod == 'ldpred2'){
+			set.seed(1)
+
       # Attach the "bigSNP" object in R session
       if(file.exists(paste0(opt$output,'/', gene_i,'/ref/ref.bk'))){
         system(paste0('rm ',opt$output,'/', gene_i,'/ref/ref.bk'))
