@@ -449,10 +449,13 @@ for(gene_i in genes){
       
       # Run dbslmm
       system(paste0('chmod 777 ',opt$dbslmm,'/dbslmm'))
-      system(paste0(opt$rscript,' ',opt$dbslmm,'/DBSLMM.R --plink ',opt$plink,' --block ',opt$ld_blocks,'/fourier_ls-chr',chr_i,'.bed --dbslmm ',opt$dbslmm,'/dbslmm --h2 ',hsq_val,' --ref ',opt$output,'/', gene_i,'/ref/ref_chr',chr_i,' --summary ',opt$output,'/', gene_i,'/DBSLMM/',gsub('\\..*','',gene_i),'.DBSLMM.txt --n ',round(GWAS_N,0),' --nsnp ',nsnp,' --outPath ',opt$output,'/', gene_i,'/DBSLMM/ --thread 1'))
+
+      log<-system2(command=opt$rscript, args=paste0(opt$dbslmm,'/DBSLMM.R --plink ',opt$plink,' --block ',opt$ld_blocks,'/fourier_ls-chr',chr_i,'.bed --dbslmm ',opt$dbslmm,'/dbslmm --h2 ',hsq_val,' --ref ',opt$output,'/', gene_i,'/ref/ref_chr',chr_i,' --summary ',opt$output,'/', gene_i,'/DBSLMM/',gsub('\\..*','',gene_i),'.DBSLMM.txt --n ',round(GWAS_N,0),' --nsnp ',nsnp,' --outPath ',opt$output,'/', gene_i,'/DBSLMM/ --thread 1'), stderr = T)
+      print(log)
+      skip_to_next<-ifelse(any(grepl('Segmentation fault', log)), T, F)
       
       # Read in the results
-      if(file.exists(paste0(opt$output,'/', gene_i,'/DBSLMM/',gsub('\\..*','',gene_i),'.dbslmm.txt'))){
+      if(skip_to_next == F & file.exists(paste0(opt$output,'/', gene_i,'/DBSLMM/',gsub('\\..*','',gene_i),'.dbslmm.txt'))){
         dbslmm_score<-fread(paste0(opt$output,'/', gene_i,'/DBSLMM/',gsub('\\..*','',gene_i),'.dbslmm.txt'))
         dbslmm_score<-dbslmm_score[,c(1,2,4), with=T]
         names(dbslmm_score)<-c('SNP','A1','BETA')
