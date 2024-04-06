@@ -1488,22 +1488,24 @@ for(i in 1:length(genes)){
 mamba env create -f env.yaml
 conda activate eqtl_to_twas
 Rscript -e 'remotes::install_github("tshmak/lassosum@v0.4.5")'
+Rscript -e 'remotes::install_github("opain/GenoUtils@4beb75620f3291b633598acd06febb22298418c8")'
+Rscript -e 'remotes::install_github("gabraham/plink2R@d74be015e8f54d662b96c6c2a52a614746f9030d", subdir="plink2R")'
 ```
 
 ```{bash, eval=F, echo=T}
 # Create file listing GWAS that haven't been processed.
-mkdir /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGenall_140324
-cut -f 1 -d' ' /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGen/eQTLGen_sumstats_exclGTeX.txt | tail -n +2 | uniq > /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGenall_140324/gene_list.txt
+mkdir /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGen/weights
+cut -f 1 -d' ' /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGen/eQTLGen_sumstats_exclGTeX.txt | tail -n +2 | uniq > /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGen/weights/gene_list.txt
 
-> /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGenall_140324/todo.txt
-for i in $(cat /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGenall_140324/gene_list.txt);do
-  if [ ! -f /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGenall_140324/eQTLGen.eQTL/${i}.done ]; then
-    echo ${i} >> /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGenall_140324/todo.txt
+> /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGen/weights/todo.txt
+for i in $(cat /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGen/weights/gene_list.txt);do
+  if [ ! -f /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGen/weights/eQTLGen.eQTL/${i}.done ]; then
+    echo ${i} >> /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGen/weights/todo.txt
   fi
 done
 
 # Create shell script to run using sbatch
-cat > /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGenall_140324/sbatch.sh << 'EOF'
+cat > /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGen/weights/sbatch.sh << 'EOF'
 #!/bin/sh
 
 #SBATCH -p neurohack_cpu,cpu
@@ -1512,13 +1514,15 @@ cat > /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGenall_140324
 #SBATCH --nodes 1
 #SBATCH -J eQTL_to_TWAS
 #SBATCH -t 10
+#SBATCH --output=/dev/null
+#SBATCH --error=/dev/null
 
 source ~/miniconda3/etc/profile.d/conda.sh
 conda activate eqtl_to_twas
 
 # Use software and PGS method reference data downloaded for GenoPred v2.2.0
 
-ID=$(awk -v var="$SLURM_ARRAY_TASK_ID" 'NR == var {print $1}' /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGenall_140324/todo.txt)
+ID=$(awk -v var="$SLURM_ARRAY_TASK_ID" 'NR == var {print $1}' /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGen/weights/todo.txt)
 
 # Use 1kg reference data from GenoPred v2.0.0
 Rscript /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/compute_weights.R \
@@ -1537,11 +1541,11 @@ Rscript /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/compute_weight
   --PRScs_path /users/k1806347/oliverpainfel/Software/PRScs.sh \
   --PRScs_ref_path /users/k1806347/oliverpainfel/Software/PRScs/ldblk_1kg_eur \
 	--ldpred2_ref_dir /scratch/prj/ukbiobank/usr/ollie_pain/GenoPredPipe/GenoPred/pipeline/resources/data/ldpred2_ref \
-  --output /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGenall_140324/eQTLGen.eQTL
+  --output /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGen/weights/eQTLGen.eQTL
 
 EOF
 
-sbatch --array 1-$(wc -l /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGenall_140324/todo.txt | cut -d' ' -f1)%400 /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGenall_140324/sbatch.sh
+sbatch --array 1-$(wc -l /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGen/weights/todo.txt | cut -d' ' -f1)%400 /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGen/weights/sbatch.sh
 
 ```
 
@@ -1550,7 +1554,7 @@ sbatch --array 1-$(wc -l /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/dat
 library(data.table)
 
 # Read in list of RDat files
-rdat_list<-list.files(path='/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGenall_140324/eQTLGen.eQTL', pattern='.RDat')
+rdat_list<-list.files(path='/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGen/weights/eQTLGen.eQTL', pattern='.RDat')
 
 # Start making pos file
 pos<-data.frame(PANEL='eQTLGen.eQTL',
@@ -1570,14 +1574,14 @@ pos<-merge(pos, Genes, all.x=T, by='ID')
 
 # Read in each RDat file to retrieve N
 for(i in 1:nrow(pos)){
-  load(paste0('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGenall_140324/',pos$WGT[i]))
+  load(paste0('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGen/weights/',pos$WGT[i]))
   pos$N[i]<-N.tot
   pos$CHR_pos[i]<-snps$V1[1]
 }
 
 pos<-pos[,c('PANEL','WGT','ID','CHR','P0','P1','N')]
 
-write.table(pos, '/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGenall_140324/eQTLGen.eQTL.pos', col.names=T, row.names=F, quote=F)
+write.table(pos, '/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGen/weights/eQTLGen.eQTL.pos', col.names=T, row.names=F, quote=F)
 
 ```
 
@@ -1603,6 +1607,14 @@ tar xjvf YFS.BLOOD.RNAARR.tar.bz2
 rm YFS.BLOOD.RNAARR.tar.bz2
 ```
 
+```{r}
+# Insert PANEL column into YFS .pos
+library(data.table)
+pos<-fread('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/FUSION/YFS.BLOOD.RNAARR.pos')
+pos$PANEL<-'YFS.BLOOD.RNAARR'
+pos<-pos[,c('PANEL',names(pos)[names(pos) != 'PANEL']), with=F]
+write.table(pos, '/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/FUSION/YFS.BLOOD.RNAARR.pos', col.names=T, row.names=F, quote=F)
+```
 ```{r, echo=T, eval=F}
 library(data.table)
 
@@ -1662,18 +1674,18 @@ for(i in 1:nrow(pos)){
 
 ```{bash, eval=F, echo=T}
 # Create file listing GWAS that haven't been processed.
-mkdir /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFSall_300722
-cut -f 1 -d' ' /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/YFS_eQTL_from_fusion.txt | tail -n +2 | uniq > /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFSall_300722/gene_list.txt
+mkdir /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/eQTL
+cut -f 1 -d' ' /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/YFS_eQTL_from_fusion.txt | tail -n +2 | uniq > /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/eQTL/gene_list.txt
 
-> /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFSall_300722/todo.txt
-for i in $(cat /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFSall_300722/gene_list.txt);do
-  if [ ! -f /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFSall_300722/YFS.eQTL/${i}.done ]; then
-    echo ${i} >> /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFSall_300722/todo.txt
+> /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/eQTL/todo.txt
+for i in $(cat /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/eQTL/gene_list.txt);do
+  if [ ! -f /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/eQTL/YFS.eQTL/${i}.done ]; then
+    echo ${i} >> /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/eQTL/todo.txt
   fi
 done
 
 # Create shell script to run using sbatch
-cat > /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFSall_300722/sbatch.sh << 'EOF'
+cat > /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/eQTL/sbatch.sh << 'EOF'
 #!/bin/sh
 
 #SBATCH -p neurohack_cpu,cpu
@@ -1682,10 +1694,18 @@ cat > /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFSall_300722/sba
 #SBATCH --nodes 1
 #SBATCH -J eQTL_to_TWAS
 #SBATCH -t 10
+#SBATCH --output=/dev/null
+#SBATCH --error=/dev/null
 
-ID=$(awk -v var="$SLURM_ARRAY_TASK_ID" 'NR == var {print $1}' /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFSall_300722/todo.txt)
+source ~/miniconda3/etc/profile.d/conda.sh
+conda activate eqtl_to_twas
 
-/users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/compute_weights_V2.R \
+# Use software and PGS method reference data downloaded for GenoPred v2.2.0
+
+ID=$(awk -v var="$SLURM_ARRAY_TASK_ID" 'NR == var {print $1}' /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/eQTL/todo.txt)
+
+# Use 1kg reference data from GenoPred v2.0.0
+Rscript /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/compute_weights.R \
 	--id ${ID} \
 	--extract /users/k1806347/oliverpainfel/Data/ldsc/w_hm3.snplist \
 	--sumstats /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/YFS_eQTL_from_fusion.txt \
@@ -1701,11 +1721,10 @@ ID=$(awk -v var="$SLURM_ARRAY_TASK_ID" 'NR == var {print $1}' /users/k1806347/ol
   --PRScs_path /users/k1806347/oliverpainfel/Software/PRScs.sh \
   --PRScs_ref_path /users/k1806347/oliverpainfel/Software/PRScs/ldblk_1kg_eur \
 	--ldpred2_ref_dir /scratch/prj/ukbiobank/usr/ollie_pain/GenoPredPipe/GenoPred/pipeline/resources/data/ldpred2_ref \
-  --output /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFSall_300722/YFS.eQTL
-
+  --output /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/eQTL/YFS.eQTL
 EOF
 
-sbatch --array 1-$(wc -l /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFSall_300722/todo.txt | cut -d' ' -f1)%400 /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFSall_300722/sbatch.sh
+sbatch --array 1-$(wc -l /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/eQTL/todo.txt | cut -d' ' -f1)%400 /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/eQTL/sbatch.sh
 
 ```
 
@@ -1714,7 +1733,7 @@ sbatch --array 1-$(wc -l /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/dat
 library(data.table)
 
 # Read in list of RDat files
-rdat_list<-list.files(path='/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFSall_300722/YFS.eQTL', pattern='.RDat')
+rdat_list<-list.files(path='/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/eQTL/YFS.eQTL', pattern='.RDat')
 
 # Start making pos file
 pos<-data.frame(PANEL='YFS.eQTL',
@@ -1743,96 +1762,14 @@ pos<-pos[!duplicated(pos$WGT),]
 
 # Read in each RDat file to retrieve N
 for(i in 1:nrow(pos)){
-  load(paste0('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFSall_300722/',pos$WGT[i]))
+  load(paste0('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/eQTL/',pos$WGT[i]))
   pos$N[i]<-N.tot
   pos$CHR_pos[i]<-snps$V1[1]
 }
 
 pos<-pos[,c('PANEL','WGT','ID','CHR','P0','P1','N')]
 
-write.table(pos, '/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFSall_300722/YFS.eQTL.pos', col.names=T, row.names=F, quote=F)
-
-```
-
-</details>
-
-***
-
-### Predict expression in 1KG
-
-***
-
-#### eQTLGen models
-
-<details><summary>Show code</summary>
-
-```{bash, eval=F, echo=T}
-sbatch -p neurohack_cpu,cpu --mem 30G -n 5 -t 20 /users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/Predicting-TWAS-features/FeaturePred.V2.0.R \
-	--PLINK_prefix_chr /users/k1806347/oliverpainfel/Data/1KG/FUSION/1000G.EUR. \
-	--weights /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGenall_140324/eQTLGen.eQTL.pos \
-	--weights_dir /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGenall_140324 \
-	--ref_ld_chr /users/k1806347/oliverpainfel/Data/1KG/FUSION/1000G.EUR. \
-	--plink /users/k1806347/oliverpainfel/Software/plink1.9.sh \
-	--n_cores 5 \
-	--save_score T \
-	--save_ref_expr T \
-	--memory 10000 \
-	--all_mod T \
-	--pigz /users/k1806347/oliverpainfel/Software/pigz \
-	--ref_maf /users/k1806347/oliverpainfel/Data/1KG/FUSION/1000G.EUR. \
-	--output /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/1kg_pred_exp/eQTLGen.eQTL
-```
-
-</details>
-
-***
-
-#### YFS FUSION models
-
-<details><summary>Show code</summary>
-
-```{bash, eval=F, echo=T}
-sbatch -p cpu --mem 10G -n 1 /users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/Predicting-TWAS-features/FeaturePred.V2.0.R \
-	--PLINK_prefix_chr /users/k1806347/oliverpainfel/Data/1KG/FUSION//1000G.EUR. \
-	--weights /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/FUSION/YFS.BLOOD.RNAARR.pos \
-	--weights_dir /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/FUSION \
-	--ref_ld_chr /users/k1806347/oliverpainfel/Data/1KG/FUSION//1000G.EUR. \
-	--plink /users/k1806347/oliverpainfel/Software/plink1.9.sh \
-	--n_cores 1 \
-	--save_score T \
-	--save_ref_expr T \
-	--memory 10000 \
-	--all_mod T \
-	--pigz /users/k1806347/oliverpainfel/Software/pigz \
-	--ref_maf /users/k1806347/oliverpainfel/Data/1KG/FUSION//1000G.EUR. \
-	--output /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/1kg_pred_exp/YFS.BLOOD.RNAARR
-
-```
-
-</details>
-
-***
-
-#### YFS eQTL models
-
-<details><summary>Show code</summary>
-
-```{bash, eval=F, echo=T}
-
-sbatch -p cpu --mem 10G -n 1 /users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/Predicting-TWAS-features/FeaturePred.V2.0.R \
-	--PLINK_prefix_chr /users/k1806347/oliverpainfel/Data/1KG/FUSION//1000G.EUR. \
-	--weights /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/YFS.eQTL.pos \
-	--weights_dir /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS \
-	--ref_ld_chr /users/k1806347/oliverpainfel/Data/1KG/FUSION//1000G.EUR. \
-	--plink /users/k1806347/oliverpainfel/Software/plink1.9.sh \
-	--n_cores 1 \
-	--save_score T \
-	--save_ref_expr T \
-	--memory 10000 \
-	--all_mod T \
-	--pigz /users/k1806347/oliverpainfel/Software/pigz \
-	--ref_maf /users/k1806347/oliverpainfel/Data/1KG/FUSION//1000G.EUR. \
-	--output /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/1kg_pred_exp/YFS.eQTL
+write.table(pos, '/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/eQTL/YFS.eQTL.pos', col.names=T, row.names=F, quote=F)
 
 ```
 
@@ -1842,42 +1779,179 @@ sbatch -p cpu --mem 10G -n 1 /users/k1806347/oliverpainfel/Software/Rscript.sh /
 
 ### Check correlation between predicted expression for YFS models
 
+This is just a sanity check that the models are correlating as expected.
+
+***
+
+#### Predict expression in 1KG
+
+***
+
+##### YFS FUSION models
+
+<details><summary>Show code</summary>
+
+```{bash, eval=F, echo=T} 
+
+sbatch -p neurohack_cpu,cpu --mem 30G -n 5 -t 200 --wrap="
+source ~/miniconda3/etc/profile.d/conda.sh
+conda activate feature_pred
+
+Rscript /users/k1806347/oliverpainfel/Software/MyGit/Predicting-TWAS-features/FeaturePred.V2.0.R \
+	--PLINK_prefix_chr /users/k1806347/oliverpainfel/Data/1KG/FUSION/1000G.EUR. \
+	--ref_ld_chr /users/k1806347/oliverpainfel/Data/1KG/FUSION/1000G.EUR. \
+	--ref_maf /users/k1806347/oliverpainfel/Data/1KG/FUSION/1000G.EUR. \
+	--weights /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/FUSION/YFS.BLOOD.RNAARR.pos \
+	--weights_dir /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/FUSION \
+	--plink /users/k1806347/oliverpainfel/Software/plink1.9.sh \
+	--n_cores 5 \
+	--save_score T \
+	--save_ref_expr T \
+	--memory 10000 \
+	--all_mod T \
+	--pigz /users/k1806347/oliverpainfel/Software/pigz \
+	--output /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/1kg_pred_exp/YFS.BLOOD.RNAARR"
+
+```
+
+</details>
+
+***
+
+##### YFS eQTL models
+
+<details><summary>Show code</summary>
+
+```{bash, eval=F, echo=T}
+
+sbatch -p neurohack_cpu,cpu --mem 30G -n 5 -t 100 --wrap="
+source ~/miniconda3/etc/profile.d/conda.sh
+conda activate feature_pred
+
+Rscript /users/k1806347/oliverpainfel/Software/MyGit/Predicting-TWAS-features/FeaturePred.V2.0.R \
+	--PLINK_prefix_chr /users/k1806347/oliverpainfel/Data/1KG/FUSION/1000G.EUR. \
+	--ref_ld_chr /users/k1806347/oliverpainfel/Data/1KG/FUSION/1000G.EUR. \
+	--ref_maf /users/k1806347/oliverpainfel/Data/1KG/FUSION/1000G.EUR. \
+	--weights /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/eQTL/YFS.eQTL.pos \
+	--weights_dir /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/eQTL \
+	--plink /users/k1806347/oliverpainfel/Software/plink1.9.sh \
+	--n_cores 5 \
+	--save_score T \
+	--save_ref_expr T \
+	--memory 10000 \
+	--all_mod T \
+	--pigz /users/k1806347/oliverpainfel/Software/pigz \
+	--output /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/1kg_pred_exp/YFS.eQTL"
+
+```
+
+</details>
+
+***
+
+#### Check correlation
+
 <details><summary>Show code</summary>
 
 ```{R, eval=F, echo=T}
 
 library(data.table)
 fusion<-fread('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/1kg_pred_exp/YFS.BLOOD.RNAARR/FeaturePredictions_YFS.BLOOD.RNAARR.txt.gz')
-eqtl<-fread('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/1kg_pred_exp/YFS2.eQTL/FeaturePredictions_YFS.eQTL.txt.gz')
+eqtl<-fread('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/1kg_pred_exp/YFS.eQTL/FeaturePredictions_YFS.eQTL.txt.gz')
 
 genes<-unique(gsub('\\..*','',gsub('YFS.eQTL.','',names(eqtl)[-1:-2])))
 
-fusion<-fusion[,grepl(paste0('FID|IID|',paste(genes,collapse='|')),names(fusion)), with=F]
 both<-merge(fusion, eqtl, by=c('FID','IID'))
 
 cor_res<-list()
 for(i in genes){
+  print(which(genes == i))
   tmp<-both[,grepl(paste0('\\.',i,'\\.'), names(both)), with=F]
   names(tmp)<-gsub('YFS.eQTL.RDat.','eqtl.',gsub('YFS.BLOOD.RNAARR.YFS.','twas.',gsub(paste0(i,'.'),'', names(tmp))))
   cor_res[[i]]<-cor(tmp, use='p')
 }
 
 # Check SNP-weight correlations
+library(reshape2)
 cor_res_melt<-melt(cor_res)
 cor_res_melt$test<-paste0(cor_res_melt$Var1,'_',cor_res_melt$Var2)
 
-cor_res_average<-NULL
-for(i in unique(cor_res_melt$test)){
-  cor_res_average<-rbind(cor_res_average, data.frame(test=i,
-                                                     Mean=mean(cor_res_melt$value[cor_res_melt$test == i])))
+saveRDS(cor_res_melt, '/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/1kg_pred_exp/YFS_cor.rds')
+
+cor_res_average <- NULL
+for (i in unique(cor_res_melt$test)) {
+  cor_res_average <- rbind(cor_res_average, 
+                           data.frame(
+                             test = i,
+                             Mean = mean(cor_res_melt$value[cor_res_melt$test == i])))
 }
 
+
 library(ggplot2)
-png('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/1kg_pred_exp/YFS2_cor_plot.png', units='px', width=3000, height=4000, res=300)
-ggplot(cor_res_melt, aes(x=paste0(Var1,' vs. ',Var2), y=value)) +
+png('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/1kg_pred_exp/YFS_cor_plot_fusion.png', units='px', width=3000, height=5000, res=300)
+ggplot(cor_res_melt[grepl('^twas', cor_res_melt$Var1),], aes(x=paste0(Var1,' vs. ',Var2), y=value)) +
   geom_boxplot() +
-  coord_flip()
+  coord_flip() +
+  facet_grid(rows='Var1', scales = 'free_y')
 dev.off()
+
+library(ggplot2)
+png('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/1kg_pred_exp/YFS_cor_plot_eqtl.png', units='px', width=3000, height=5000, res=300)
+ggplot(cor_res_melt[grepl('^eqtl', cor_res_melt$Var1),], aes(x=paste0(Var1,' vs. ',Var2), y=value)) +
+  geom_boxplot() +
+  coord_flip() +
+  facet_grid(rows='Var1', scales = 'free_y')
+dev.off()
+
+# Some of the correlation between the TWAS models and eQTL based models are strongly negative.
+# Negative correlations are only present for sbayesr, sbayesr_robust, ldpred2, and lassosum. Perhaps I am doing something wrong?
+# Filter genes by those with signal
+eqtl_pos<-fread('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/eQTL/YFS.eQTL.pos')
+w_dir<-'/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/eQTL/'
+eqtl_sig<-NULL
+for(i in 1:nrow(eqtl_pos)){
+  load(paste0(w_dir, eqtl_pos$WGT[i]))
+  eqtl_sig<-rbind(eqtl_sig,
+                  data.frame(ID=eqtl_pos$ID[i],
+                             hsq=hsq[1],
+                             hsq.p=hsq.pv,
+                             TopSNP_Pvalue=signal$TopSNP_Pvalue,
+                             P_mBATcombo=signal$P_mBATcombo))
+}
+
+eqtl_sig_true<-eqtl_sig[eqtl_sig$TopSNP_Pvalue < 5e-8 | eqtl_sig$P_mBATcombo < 0.01,]
+cor_res_melt_sig<-cor_res_melt[cor_res_melt$L1 %in% eqtl_sig_true$ID,]
+cor_res_melt_enet<-cor_res_melt[cor_res_melt$Var1 == 'twas.enet',]
+cor_res_melt_enet_neg<-cor_res_melt_enet[cor_res_melt_enet$value < -0.1, ]
+
+data.frame(table(cor_res_melt_enet_neg$Var2))
+
+#                   Var1 Freq
+# 1            twas.blup    0
+# 2           twas.bslmm    0
+# 3           twas.lasso    0
+# 4            twas.top1    0
+# 5            twas.enet    0
+# 6            eqtl.top1    0
+# 7           eqtl.prscs    0
+# 8         eqtl.sbayesr    8
+# 9  eqtl.sbayesr_robust    2
+# 10          eqtl.susie    0
+# 11         eqtl.susie1    0
+# 12         eqtl.dbslmm    0
+# 13       eqtl.lassosum    9
+# 14        eqtl.ldpred2   76
+
+cor_res_melt_enet_neg[cor_res_melt_enet_neg$L1 %in% cor_res_melt_enet_neg$L1[duplicated(cor_res_melt_enet_neg$L1)],]
+
+# COPS6 is negative for both lassosum and sbayesr
+# Most are negative for ldpred2
+# GRK6 is the most negative for ldpred2
+# Nothing odd is going on. They are just getting it wrong sometimes
+# Do a final check of the LDpred2 stuff
+# Could filter models to r
+
+# Maybe there is some weird LD structure or LD mismatch with the reference in that area (could use DENTIST to check)
 
 ```
 
@@ -2880,107 +2954,70 @@ dev.off()
 
 ***
 
-## Evaluation of FUSION pseudovalidation
+# Pseudovalidation
 
-<details><summary>Show code</summary>
+## FUSION
 
-```{r, eval=F, echo=T}
-# Prepare the eQTL summary statistics for each gene as if they were GWAS summary statistics
-library(data.table)
+### YFS FUSION
 
-# Read in eQTL sumstats
-eqtl_sumstats<-fread('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGen/eQTLGen_sumstats_exclGTeX.txt')
-
-# Create list of genes
-genes<-unique(eqtl_sumstats$GENE)
-
-# For each gene
-for(i in 1:length(genes)){
-  # Subset sumstats for gene i
-  eqtl_sumstats_i<-eqtl_sumstats[eqtl_sumstats$GENE == genes[i],]
-  
-  # Munge for FUSION
-  eqtl_sumstats_i<-eqtl_sumstats_i[,c('SNP','A1','A2','Z','N'),with=F]
-  eqtl_sumstats_i<-eqtl_sumstats_i[complete.cases(eqtl_sumstats_i),]
-  eqtl_sumstats_i<-eqtl_sumstats_i[eqtl_sumstats_i$N >= 0.8*max(eqtl_sumstats_i$N),]
-
-  # Write out results
-  fwrite(eqtl_sumstats_i, paste0('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/pseudo/per_gene_eqtl/',genes[i],'.gz'), quote=F, sep='\t')
-}
-
+```{bash, echo=T, eval=F}
+mkdir /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/fusion_pseudo
+conda activate eqtl_to_twas
+for chr in $(seq 1 22); do
+  sbatch -p neurohack_cpu,cpu -t 10 --mem 10G --wrap="
+  Rscript /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/fusion_pseudoval.R \
+    --sumstats /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/YFS_eQTL_from_fusion.txt \
+    --weights /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/FUSION/YFS.BLOOD.RNAARR.pos \
+    --weights_dir /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/FUSION \
+    --ref_ld_chr /users/k1806347/oliverpainfel/Data/1KG/FUSION//1000G.EUR. \
+    --out /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/fusion_pseudo/yfs.${chr} \
+    --chr ${chr} \
+    --all_mod T"
+done
 ```
 
-Adapt FUSION.assoc_test.R to run TWAS for specific SNP-weight. We will force it to use each model. If this approach works well we can streamline this process substantially.
+***
 
 ```{r, eval=F, echo=T}
-# Now run TWAS for each gene using all models.
-
 library(data.table)
 
-# Read in list of eQTLGen SNP-weights
-pos<-fread('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGen/eQTLGen.eQTL.pos')
-
-# For each gene
-for(i in 1:nrow(pos)){
-  for(mod in c('top1','sbayesr','sbayesr_robust','dbslmm','prscs','susie')){
-    if(!file.exists(paste0('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/pseudo/pseudo_res/', pos$ID[i],'.',mod))){
-      system(paste0('/users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/FUSION.assoc_test.pseudo.R --sumstats /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/pseudo/per_gene_eqtl/',pos$ID[i],'.gz --extract_weight ',pos$ID[i],' --weights /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGen/eQTLGen.eQTL.pos --weights_dir /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGen --ref_ld_chr /users/k1806347/oliverpainfel/Data/1KG/FUSION//1000G.EUR. --out /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/pseudo/pseudo_res/', pos$ID[i],'.',mod,' --chr ',pos$CHR[i],' --force_model ',mod))
-    }
-  }
-}
-
-# Read in the TWAS.Z results
+# Read in pseudoval results
 pseudo_res<-NULL
-for(i in 1:nrow(pos)){
-  for(mod in c('top1','sbayesr','sbayesr_robust','dbslmm','prscs','susie')){
-    res_i_mod<-fread(paste0('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/pseudo/pseudo_res/', pos$ID[i],'.',mod))
-    
-    pseudo_res<-rbind(pseudo_res, data.frame(ID=pos$ID[i],
-                                             Model=mod,
-                                             TWAS.Z=res_i_mod$TWAS.Z))
-  }
+for(i in 1:22){
+  pseudo_res<-rbind(pseudo_res, fread(paste0('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/fusion_pseudo/yfs.',i)))
 }
-
-# Read in the correlation between predicted and observed expression in GTEx v8.
-cor_res_melt_obs<-fread('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor.txt')
-
-cor_res_melt_obs<-cor_res_melt_obs[,c('L1','Var2','value'),with=F]
-names(cor_res_melt_obs)<-c('ID','Model','R')
-cor_res_melt_obs$Model<-gsub('eQTL.','',cor_res_melt_obs$Model)
-
-obs_pseudo<-merge(pseudo_res, cor_res_melt_obs, by=c('ID','Model'))
 
 # Determine the best model based on TWAS.Z and observed cor, and rank methods by TWAS.Z and observed cor for each gene.
-genes<-unique(obs_pseudo$ID)
+genes<-unique(pseudo_res$ID)
 obs_pseudo_rank<-NULL
 rank_diff<-NULL
 n_top<-NULL
 for(i in 1:length(genes)){
-  obs_pseudo_i<-obs_pseudo[obs_pseudo$ID == genes[i],]
+  obs_pseudo_i<-pseudo_res[pseudo_res$ID == genes[i],]
   obs_pseudo_i$pseudo_rank<-rank(-obs_pseudo_i$TWAS.Z)
-  obs_pseudo_i$obs_rank<-rank(-obs_pseudo_i$R)
+  obs_pseudo_i$obs_rank<-rank(-obs_pseudo_i$MODELCV.R2)
   obs_pseudo_rank<-rbind(obs_pseudo_rank, obs_pseudo_i)
   
   rank_diff<-rbind(rank_diff, data.frame(ID=genes[i],
-                                         pseudo_top_mod=obs_pseudo_i$Model[obs_pseudo_i$pseudo_rank == min(obs_pseudo_i$pseudo_rank)][1],
-                                         pseudo_R = obs_pseudo_i$R[obs_pseudo_i$pseudo_rank == min(obs_pseudo_i$pseudo_rank)][1],
-                                         obs_top_mod=obs_pseudo_i$Model[obs_pseudo_i$obs_rank == min(obs_pseudo_i$obs_rank)][1],
-                                         top_R = obs_pseudo_i$R[obs_pseudo_i$obs_rank == min(obs_pseudo_i$obs_rank)][1]))
+                                         pseudo_top_mod=obs_pseudo_i$MODEL[obs_pseudo_i$pseudo_rank == min(obs_pseudo_i$pseudo_rank)][1],
+                                         pseudo_R = sqrt(obs_pseudo_i$MODELCV.R2[obs_pseudo_i$pseudo_rank == min(obs_pseudo_i$pseudo_rank)][1]),
+                                         obs_top_mod=obs_pseudo_i$MODEL[obs_pseudo_i$obs_rank == min(obs_pseudo_i$obs_rank)][1],
+                                         top_R = sqrt(obs_pseudo_i$MODELCV.R2[obs_pseudo_i$obs_rank == min(obs_pseudo_i$obs_rank)][1])))
   
 }
 
 # Calculate correlation between model rank for each gene
-cor(obs_pseudo_rank$pseudo_rank, obs_pseudo_rank$obs_rank) # 0.6105157
+cor(obs_pseudo_rank$pseudo_rank, obs_pseudo_rank$obs_rank) # 0.06539382
 
 # Calculate the mean difference in R between the best model and the model selected by TWAS.Z
 rank_diff$diff<-rank_diff$pseudo_R-rank_diff$top_R
-mean(rank_diff$diff) # -0.006272514
+mean(rank_diff$diff, na.rm=T) # -0.02387192
 
 # Calculate the percentage of genes where pseuodoval did not select the correct model
-nrow(rank_diff[rank_diff$diff != 0,])/nrow(rank_diff) # 0.4155844
+nrow(rank_diff[rank_diff$diff != 0,])/nrow(rank_diff) # 0.8240206
 
 # Crosstab the selected observed and pseudoval-selected best model
-saveRDS(table(rank_diff$pseudo_top_mod, rank_diff$obs_top_mod),'/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/pseudo/best_pseudo_comp.rds')
+saveRDS(table(rank_diff$pseudo_top_mod, rank_diff$obs_top_mod),'/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/fusion_pseudo/best_pseudo_comp.rds')
 table(rank_diff$pseudo_top_mod, rank_diff$obs_top_mod)
 table(rank_diff$pseudo_top_mod)
 table(rank_diff$obs_top_mod)
@@ -2990,70 +3027,132 @@ rank_diff<-rank_diff[order(rank_diff$diff),]
 library(ggplot2)
 library(cowplot)
 
-png('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/pseudo/best_pseudo_comp.png', res=300, units='px', width=1000, height=1000)
+bitmap('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/fusion_pseudo/best_pseudo_comp.png', res=300, units='px', width=1000, height=1000)
 ggplot(rank_diff, aes(x=top_R, y=pseudo_R)) +
-  geom_abline(intercept = 0, slope = 1, colour='red') +
   geom_point() +
+  geom_abline(intercept = 0, slope = 1, colour='red') +
   coord_fixed() +
   theme_half_open() +
-  xlim(c(0,NA)) +
-  ylim(c(0,NA)) +
   background_grid() +
   labs(x="R (Best)", y="R (Pseudovalidated)")
 dev.off()
 
+bitmap('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/fusion_pseudo/best_pseudo_comp_hist.png', res=300, units='px', width=1500, height=1000)
+ggplot(rank_diff, aes(x=diff)) +
+  geom_histogram() +
+  theme_half_open() +
+  background_grid() +
+  labs(x="Difference in R")
+dev.off()
 
-##########
-# Identify genes with abnormally low correlation with observed when using SuSiE
-##########
-
-cor_res_melt_obs_susie<-cor_res_melt_obs[cor_res_melt_obs$Model == 'susie',]
-# They have already been removed, probably due to zero standard deviation in predicted epxression. I am guessing there is a BETA of 0 for all variants in these cases.
-
-genes[!(genes %in% cor_res_melt_obs_susie$ID)]
-
-# Load the Rdat file for genes without SusiE predicted observed correlation
+png('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/ldak_pseudo/pseudo_ldak_model_comp.png', res=300, units='px', width=3000, height=2000)ggplot(obs_pseudo_rank, aes(x=MODELCV.R2, y=TWAS.Z)) +
+      geom_point() +
+      geom_abline(intercept = 0, slope = 1, colour='red') +
+      theme_half_open() +
+      background_grid() +
+      labs(x="R2 (Observed)", y="TWAS.Z") +
+      facet_wrap(.~ MODEL)
+dev.off()
 
 ```
 
 </details>
 
-<details><summary>Comparison of model that performed best in GTEx to model that was selected by pseudovalidation</summary>
+<details><summary>Comparison of model that performed best in YFS to model that was selected by pseudovalidation</summary>
 
-![](/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/pseudo/best_pseudo_comp.png){width=50%}
+![](/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/fusion_pseudo/best_pseudo_comp.png){width=50%}
+
+![](/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/fusion_pseudo/best_pseudo_comp_hist.png){width=50%}
 
 ```{r, eval=T, echo=F}
 
-tmp<-readRDS('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/pseudo/best_pseudo_comp.rds')
-dimnames(tmp)<-list(paste0(dimnames(tmp)[[1]],'_obs'), paste0(dimnames(tmp)[[2]],'_pseudo'))
+tmp<-readRDS('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/fusion_pseudo/best_pseudo_comp.rds')
 
-tmp
+tmp<-tmp[dimnames(tmp)[[1]], dimnames(tmp)[[1]]]
+
+library(caret) 
+confusionMatrix(tmp)
+
 
 ```
 
-These results are really encouraging. There is very little difference between the observed-predicted expression correlation for the best performing model and the model selected by pseudovalidation. There is some overfitting in the GTEx data as well since there is the best model is being selected in the GTEx sample. I am not sure there is any need to try testing MegaPRS pseudovalidation.
+The variance explained by the best model identified by pseudovalidation is very similar to the best model identified by cross validation, however the pseudoval model is often not the model identified by cross validation.
 
 </details>
 
-***
-
-### Streamline FUSION pseudovalidation
+### YFS eQTL
 
 ```{bash, echo=T, eval=F}
 
-mkdir /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/pseudo2
-for chr in $(seq 1 22);do
-  sbatch -p cpu --mem 10G /users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/FUSION.assoc_test.pseudo_V2.R \
-    --sumstats /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGen/eQTLGen_sumstats_exclGTeX.txt \
-    --weights /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGenall_300722/eQTLGen.eQTL.pos \
-    --weights_dir /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGenall_300722 \
+conda activate eqtl_to_twas
+for chr in $(seq 1 22); do
+  sbatch -p neurohack_cpu,cpu -t 10 --mem 10G --wrap="
+  Rscript /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/fusion_pseudoval.R \
+    --sumstats /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/YFS_eQTL_from_fusion.txt \
+  	--weights /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/eQTL/YFS.eQTL.pos \
+  	--weights_dir /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/eQTL \
     --ref_ld_chr /users/k1806347/oliverpainfel/Data/1KG/FUSION//1000G.EUR. \
-    --out /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/pseudo2/pseudo_res_chr${chr} \
+    --out /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/fusion_pseudo/yfs.eqtl.${chr} \
     --chr ${chr} \
-    --all_mod T
+    --all_mod T"
 done
 
 ```
+
+```{r, eval=F, echo=T}
+library(data.table)
+
+# Read in pseudoval results
+pseudo_res <- NULL
+for (i in 1:22) {
+  pseudo_res <-
+    rbind(
+      pseudo_res,
+      fread(
+        paste0(
+          '/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/fusion_pseudo/yfs.eqtl.', i
+        )
+      )
+    )
+}
+
+cor_res_melt<-readRDS('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/1kg_pred_exp/YFS_cor.rds')
+
+eqtl_pos<-fread('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/eQTL/YFS.eQTL.pos')
+w_dir<-'/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/eQTL/'
+eqtl_sig<-NULL
+for(i in 1:nrow(eqtl_pos)){
+  load(paste0(w_dir, eqtl_pos$WGT[i]))
+  eqtl_sig<-rbind(eqtl_sig,
+                  data.frame(ID=eqtl_pos$ID[i],
+                             hsq=hsq[1],
+                             hsq.p=hsq.pv,
+                             TopSNP_Pvalue=signal$TopSNP_Pvalue,
+                             P_mBATcombo=signal$P_mBATcombo))
+}
+
+eqtl_sig_true<-eqtl_sig[eqtl_sig$TopSNP_Pvalue < 5e-8 | eqtl_sig$P_mBATcombo < 0.01,]
+cor_res_melt_sig<-cor_res_melt[cor_res_melt$L1 %in% eqtl_sig_true$ID,]
+cor_res_melt_enet<-cor_res_melt[cor_res_melt$Var1 == 'twas.enet',]
+cor_res_melt_enet_neg<-cor_res_melt_enet[cor_res_melt_enet$value < -0.1, ]
+cor_res_melt_enet_neg<-data.table(ID=cor_res_melt_enet_neg$L1,
+                                  MODEL=gsub('eqtl.','',cor_res_melt_enet_neg$Var2),
+                                  BAD = T)
+
+pseudo_res_neg_all<-pseudo_res[pseudo_res$ID %in% cor_res_melt_enet_neg$ID,]
+pseudo_res_neg_all<-merge(pseudo_res_neg_all, cor_res_melt_enet_neg, by=c('ID','MODEL'), all.x=T)
+
+ggplot(pseudo_res_neg_all, aes(x=MODEL, y=TWAS.Z, colour=BAD)) +
+  geom_point() +
+  facet_wrap('ID') + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
+
+# This indicates that fusion pseudoval does distinguish the models that don't correlated well with other models.
+# Check this again when we have observed correlations in GTEx. 
+# Removing models with a low correlation with other models might also be a good solution.
+  
+```
+
 
 ```{r, eval=F, echo=T}
 library(data.table)
@@ -3188,65 +3287,92 @@ confusionMatrix(tmp)
 
 ***
 
-### Evaluate TWAS-based pseudovalidation using all FUSION YFS models
+## LDAK
+
+***
+
+### YFS FUSION
 
 ```{bash, echo=T, eval=F}
-
-mkdir /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/pseudo_fusion_yfs
-
-for chr in $(seq 1 22);do
-  sbatch -p cpu --exclude=nodeb11,nodeb16,nodeb09,nodeb18 --mem 10G /users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/FUSION.assoc_test.pseudo_V2.R \
+conda activate eqtl_to_twas
+for chr in $(seq 1 22); do
+  sbatch -p neurohack_cpu,cpu -t 10 --mem 10G --wrap="
+  Rscript /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/ldak_pseudoval.R \
     --sumstats /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/YFS_eQTL_from_fusion.txt \
-  	--weights /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/FUSION/YFS.BLOOD.RNAARR.pos \
-  	--weights_dir /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/FUSION \
-    --ref_ld_chr /users/k1806347/oliverpainfel/Data/1KG/FUSION//1000G.EUR. \
-    --out /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/pseudo_fusion_yfs/pseudo_res_chr${chr} \
+    --weights /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/FUSION/YFS.BLOOD.RNAARR.pos \
+    --weights_dir /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/FUSION \
+    --ref_ld_chr /users/k1806347/oliverpainfel/Data/1KG/FUSION/1000G.EUR. \
+    --out /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/ldak_pseudo/yfs.${chr} \
     --chr ${chr} \
-    --all_mod T
+    --ldak /users/k1806347/oliverpainfel/Software/ldak5.1.linux"
 done
-
 ```
 
 ```{r, eval=F, echo=T}
 library(data.table)
 
 # Read in pseudoval results
-pseudo_res_2<-NULL
-for(i in 1:22){
-  pseudo_res_2<-rbind(pseudo_res_2, fread(paste0('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/pseudo_fusion_yfs/pseudo_res_chr',i)))
+pseudo_res <- NULL
+for (i in 1:22) {
+  pseudo_res <-
+    rbind(
+      pseudo_res,
+      fread(
+        paste0(
+          '/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/ldak_pseudo/yfs.',i,'.pseudo_cor.txt'
+        )
+      )
+    )
 }
 
-# Determine the best model based on TWAS.Z and observed cor, and rank methods by TWAS.Z and observed cor for each gene.
-genes<-unique(pseudo_res_2$ID)
+# Read in reported correlation
+obs_res <- NULL
+for (i in 1:22) {
+  obs_res <-
+    rbind(
+      obs_res,
+      fread(
+        paste0(
+          '/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/ldak_pseudo/yfs.',i,'.obs_cor.txt'
+        )
+      )
+    )
+}
+
+pseudo_res<-merge(pseudo_res, obs_res, by=c('MODEL','ID'))
+pseudo_res<-pseudo_res[complete.cases(pseudo_res),]
+
+# Determine the best model based on pseudoval cor and observed cor, and rank methods by pseudoval and observed cor for each gene.
+genes<-unique(pseudo_res$ID)
 obs_pseudo_rank<-NULL
 rank_diff<-NULL
 n_top<-NULL
 for(i in 1:length(genes)){
-  obs_pseudo_i<-pseudo_res_2[pseudo_res_2$ID == genes[i],]
-  obs_pseudo_i$pseudo_rank<-rank(-obs_pseudo_i$TWAS.Z)
-  obs_pseudo_i$obs_rank<-rank(-obs_pseudo_i$MODELCV.R2)
+  obs_pseudo_i<-pseudo_res[pseudo_res$ID == genes[i],]
+  obs_pseudo_i$pseudo_rank<-rank(-obs_pseudo_i$R.x)
+  obs_pseudo_i$obs_rank<-rank(-obs_pseudo_i$R.y)
   obs_pseudo_rank<-rbind(obs_pseudo_rank, obs_pseudo_i)
   
   rank_diff<-rbind(rank_diff, data.frame(ID=genes[i],
                                          pseudo_top_mod=obs_pseudo_i$MODEL[obs_pseudo_i$pseudo_rank == min(obs_pseudo_i$pseudo_rank)][1],
-                                         pseudo_R = sqrt(obs_pseudo_i$MODELCV.R2[obs_pseudo_i$pseudo_rank == min(obs_pseudo_i$pseudo_rank)][1]),
+                                         pseudo_R = obs_pseudo_i$R.y[obs_pseudo_i$pseudo_rank == min(obs_pseudo_i$pseudo_rank)][1],
                                          obs_top_mod=obs_pseudo_i$MODEL[obs_pseudo_i$obs_rank == min(obs_pseudo_i$obs_rank)][1],
-                                         top_R = sqrt(obs_pseudo_i$MODELCV.R2[obs_pseudo_i$obs_rank == min(obs_pseudo_i$obs_rank)][1])))
+                                         top_R = obs_pseudo_i$R.y[obs_pseudo_i$obs_rank == min(obs_pseudo_i$obs_rank)][1]))
   
 }
 
 # Calculate correlation between model rank for each gene
-cor(obs_pseudo_rank$pseudo_rank, obs_pseudo_rank$obs_rank) # 0.06232803
+cor(obs_pseudo_rank$pseudo_rank, obs_pseudo_rank$obs_rank) # 0.02060233
 
 # Calculate the mean difference in R between the best model and the model selected by TWAS.Z
 rank_diff$diff<-rank_diff$pseudo_R-rank_diff$top_R
-mean(rank_diff$diff, na.rm=T) # -0.02396207
+mean(rank_diff$diff, na.rm=T) # -0.02445525
 
 # Calculate the percentage of genes where pseuodoval did not select the correct model
-nrow(rank_diff[rank_diff$diff != 0,])/nrow(rank_diff) # 0.8272432
+nrow(rank_diff[rank_diff$diff != 0,])/nrow(rank_diff) # 0.8957225
 
 # Crosstab the selected observed and pseudoval-selected best model
-saveRDS(table(rank_diff$pseudo_top_mod, rank_diff$obs_top_mod),'/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/pseudo_fusion_yfs/best_pseudo_comp.rds')
+saveRDS(table(rank_diff$pseudo_top_mod, rank_diff$obs_top_mod),'/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/ldak_pseudo/best_pseudo_ldak_comp.rds')
 table(rank_diff$pseudo_top_mod, rank_diff$obs_top_mod)
 table(rank_diff$pseudo_top_mod)
 table(rank_diff$obs_top_mod)
@@ -3256,7 +3382,7 @@ rank_diff<-rank_diff[order(rank_diff$diff),]
 library(ggplot2)
 library(cowplot)
 
-bitmap('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/pseudo_fusion_yfs/best_pseudo_comp.png', res=300, units='px', width=1000, height=1000)
+png('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/ldak_pseudo/best_pseudo_ldak_comp.png', res=300, units='px', width=1000, height=1000)
 ggplot(rank_diff, aes(x=top_R, y=pseudo_R)) +
   geom_point() +
   geom_abline(intercept = 0, slope = 1, colour='red') +
@@ -3266,218 +3392,7 @@ ggplot(rank_diff, aes(x=top_R, y=pseudo_R)) +
   labs(x="R (Best)", y="R (Pseudovalidated)")
 dev.off()
 
-bitmap('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/pseudo_fusion_yfs/best_pseudo_comp_hist.png', res=300, units='px', width=1500, height=1000)
-ggplot(rank_diff, aes(x=diff)) +
-  geom_histogram() +
-  theme_half_open() +
-  background_grid() +
-  labs(x="Difference in R")
-dev.off()
-
-        blup bslmm enet lasso top1
-  blup   215  1184  590   803  457
-  bslmm  206   223  130    94  153
-  enet   103   155  186    65   56
-  lasso    0     1    1     2    1
-   top1    0     0    0     0    0
-
-```
-
-</details>
-
-<details><summary>Comparison of model that performed best in YFS to model that was selected by pseudovalidation</summary>
-
-![](/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/pseudo_fusion_yfs/best_pseudo_comp.png){width=50%}
-
-![](/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/pseudo_fusion_yfs/best_pseudo_comp_hist.png){width=50%}
-
-```{r, eval=T, echo=F}
-
-tmp<-readRDS('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/pseudo_fusion_yfs/best_pseudo_comp.rds')
-
-tmp<-tmp[dimnames(tmp)[[1]], dimnames(tmp)[[1]]]
-
-library(caret) 
-confusionMatrix(tmp)
-
-
-```
-
-The variance explained by the best model identified by pseudovalidation is very similar to the best model identified by cross validation, however the pseudoval model is often not the model identified by cross validation.
-
-</details>
-
-***
-
-# Pseudovalidate eQTL YFS models
-
-```{bash, echo=T, eval=F}
-
-mkdir /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/pseudo_eqtl_yfs
-
-for chr in $(seq 1 22);do
-  sbatch -p cpu --mem 10G /users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/FUSION.assoc_test.pseudo_V2.R \
-    --sumstats /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/YFS_eQTL_from_fusion.txt \
-  	--weights /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFSall_300722/YFS.eQTL.pos \
-  	--weights_dir /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFSall_300722 \
-    --ref_ld_chr /users/k1806347/oliverpainfel/Data/1KG/FUSION//1000G.EUR. \
-    --out /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/pseudo_eqtl_yfs/pseudo_res_chr${chr} \
-    --chr ${chr} \
-    --all_mod T
-done
-
-```
-
-***
-
-# Run mbat_combo on YFS eQTL sumstats
-
-```{bash, eval=F, echo=T}
-# Run fastbat to see whether this could work as an inclusion criteria
-
-for chr in $(seq 1 22); do
-sbatch -p cpu --mem 10G -n 1 --nodes 1 /users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/eQTL_mbat_combo.R \
-	--chr ${chr} \
-	--extract /users/k1806347/oliverpainfel/Data/ldsc/w_hm3.snplist \
-	--sumstats /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/YFS_eQTL_from_fusion.txt \
-	--plink_ref_chr /users/k1806347/oliverpainfel/Data/1KG/GenoPred/v2.0.0/ref.chr \
-	--plink_ref_keep /users/k1806347/oliverpainfel/Data/1KG/GenoPred/v2.0.0/keep_files/EUR.keep \
-	--gcta /users/k1806347/oliverpainfel/Software/gcta_1.94.sh \
-  --output /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/YFS.mbat.combo.chr${chr}
-done
-
-```
-
-***
-
-# Run mbat_combo on eQTLGen (excl. GTEx v8)
-
-```{bash, eval=F, echo=T}
-# Run mBAT to see whether this could work as an inclusion criteria
-
-for chr in $(seq 1 22); do
-sbatch -p cpu --exclude erc-hpc-comp025 --mem 10G -n 1 --nodes 1 /users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/private/eQTL_mbat_combo.R \
-	--chr ${chr} \
-	--extract /users/k1806347/oliverpainfel/Data/ldsc/w_hm3.snplist \
-	--sumstats /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGen/eQTLGen_sumstats_exclGTeX.txt \
-	--plink_ref_chr /users/k1806347/oliverpainfel/Data/1KG/GenoPred/v2.0.0/ref.chr \
-	--plink_ref_keep /users/k1806347/oliverpainfel/Data/1KG/GenoPred/v2.0.0/keep_files/EUR.keep \
-	--gcta /users/k1806347/oliverpainfel/Software/gcta_1.94.sh \
-  --output /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGen/eQTLGen_exclGTEx.mbat.combo.chr${chr}
-done
-
-```
-
-***
-
-# Evaluate LDAK-based pseudovalidation using all FUSION YFS models
-
-```{bash, echo=T, eval=F}
-
-mkdir /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/pseudo_fusion_yfs
-
-for chr in $(seq 1 22);do
-  sbatch -p cpu --mem 10G /users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/FUSION.assoc_test.pseudo_LDAK_V2.R \
-    --sumstats /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/YFS_eQTL_from_fusion.txt \
-  	--weights /scratch/prj/brc_mh/TWAS_resource/FUSION/SNP-weights/YFS.BLOOD.RNAARR/YFS.BLOOD.RNAARR.pos \
-  	--weights_dir /scratch/prj/brc_mh/TWAS_resource/FUSION/SNP-weights/YFS.BLOOD.RNAARR \
-    --ref_ld_chr /scratch/prj/brc_mh/TWAS_resource/FUSION/LDREF/1000G.EUR. \
-    --out /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/pseudo_ldak_yfs/pseudo_ldak_res_chr${chr} \
-    --chr ${chr} \
-    --ldak /users/k1806347/oliverpainfel/Software/ldak5.1.linux \
-    --ldak_map /users/k1806347/oliverpainfel/Data/LDAK/genetic_map_b37 \
-    --plink1 /users/k1806347/oliverpainfel/Software/plink1.9.sh
-
-done
-
-opt$sumstats<-'/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/YFS_eQTL_from_fusion.txt'
-opt$weights<-'/scratch/prj/brc_mh/TWAS_resource/FUSION/SNP-weights/YFS.BLOOD.RNAARR/YFS.BLOOD.RNAARR.pos'
-opt$weights_dir<-'/scratch/prj/brc_mh/TWAS_resource/FUSION/SNP-weights/YFS.BLOOD.RNAARR'
-opt$ref_ld_chr<-'/scratch/prj/brc_mh/TWAS_resource/FUSION/LDREF/1000G.EUR.'
-opt$out<-'/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/pseudo_ldak_yfs/pseudo_ldak_res_chr11'
-opt$chr<-11
-opt$ldak<-'/users/k1806347/oliverpainfel/Software/ldak5.1.linux'
-opt$ldak_map<-'/users/k1806347/oliverpainfel/Data/LDAK/genetic_map_b37'
-opt$plink1<-'/users/k1806347/oliverpainfel/Software/plink1.9.sh'
-
-
-```
-
-```{r, eval=F, echo=T}
-library(data.table)
-
-# Read in pseudoval results
-pseudo_res_2<-NULL
-for(i in 1:22){
-  pseudo_res_2<-rbind(pseudo_res_2, fread(paste0('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/pseudo_ldak_yfs/pseudo_ldak_res_chr',i,'.ldak.pseudo.txt')))
-}
-
-# Read in reported CV.R2
-yfs_pos<-fread('/scratch/prj/brc_mh/TWAS_resource/FUSION/SNP-weights/YFS.BLOOD.RNAARR/YFS.BLOOD.RNAARR.pos')
-yfs_pos<-yfs_pos[yfs_pos$CHR %in% c(14:16),]
-obs_r2<-NULL
-for(i in 1:nrow(yfs_pos)){
-  wgt<-load(paste0('/scratch/prj/brc_mh/TWAS_resource/FUSION/SNP-weights/YFS.BLOOD.RNAARR/',yfs_pos$WGT[i]))
-  obs_r2_i<-data.table(ID=yfs_pos$ID[i],
-                       MODEL= colnames(cv.performance),
-                       R2=cv.performance[1,])
-  obs_r2<-rbind(obs_r2, obs_r2_i)
-  
-}
-
-pseudo_res_2<-merge(pseudo_res_2, obs_r2, by=c('MODEL','ID'))
-
-# Determine the best model based on TWAS.Z and observed cor, and rank methods by TWAS.Z and observed cor for each gene.
-genes<-unique(pseudo_res_2$ID)
-obs_pseudo_rank<-NULL
-rank_diff<-NULL
-n_top<-NULL
-for(i in 1:length(genes)){
-  obs_pseudo_i<-pseudo_res_2[pseudo_res_2$ID == genes[i],]
-  obs_pseudo_i$pseudo_rank<-rank(-obs_pseudo_i$R)
-  obs_pseudo_i$obs_rank<-rank(-obs_pseudo_i$R2)
-  obs_pseudo_rank<-rbind(obs_pseudo_rank, obs_pseudo_i)
-  
-  rank_diff<-rbind(rank_diff, data.frame(ID=genes[i],
-                                         pseudo_top_mod=obs_pseudo_i$MODEL[obs_pseudo_i$pseudo_rank == min(obs_pseudo_i$pseudo_rank)][1],
-                                         pseudo_R = sqrt(obs_pseudo_i$R2[obs_pseudo_i$pseudo_rank == min(obs_pseudo_i$pseudo_rank)][1]),
-                                         obs_top_mod=obs_pseudo_i$MODEL[obs_pseudo_i$obs_rank == min(obs_pseudo_i$obs_rank)][1],
-                                         top_R = sqrt(obs_pseudo_i$R2[obs_pseudo_i$obs_rank == min(obs_pseudo_i$obs_rank)][1])))
-  
-}
-
-# Calculate correlation between model rank for each gene
-cor(obs_pseudo_rank$pseudo_rank, obs_pseudo_rank$obs_rank) # 0.0630276
-
-# Calculate the mean difference in R between the best model and the model selected by TWAS.Z
-rank_diff$diff<-rank_diff$pseudo_R-rank_diff$top_R
-mean(rank_diff$diff, na.rm=T) # -0.02343579
-
-# Calculate the percentage of genes where pseuodoval did not select the correct model
-nrow(rank_diff[rank_diff$diff != 0,])/nrow(rank_diff) # 0.8624535
-
-# Crosstab the selected observed and pseudoval-selected best model
-saveRDS(table(rank_diff$pseudo_top_mod, rank_diff$obs_top_mod),'/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/pseudo_ldak_yfs/best_pseudo_ldak_comp.rds')
-table(rank_diff$pseudo_top_mod, rank_diff$obs_top_mod)
-table(rank_diff$pseudo_top_mod)
-table(rank_diff$obs_top_mod)
-
-rank_diff<-rank_diff[order(rank_diff$diff),]
-
-library(ggplot2)
-library(cowplot)
-
-png('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/pseudo_ldak_yfs/best_pseudo_ldak_comp.png', res=300, units='px', width=1000, height=1000)
-ggplot(rank_diff, aes(x=top_R, y=pseudo_R)) +
-  geom_point() +
-  geom_abline(intercept = 0, slope = 1, colour='red') +
-  coord_fixed() +
-  theme_half_open() +
-  background_grid() +
-  labs(x="R (Best)", y="R (Pseudovalidated)")
-dev.off()
-
-png('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/pseudo_ldak_yfs/best_pseudo_ldak_comp_hist.png', res=300, units='px', width=1500, height=1000)
+png('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/ldak_pseudo/best_pseudo_ldak_comp_hist.png', res=300, units='px', width=1500, height=1000)
 ggplot(rank_diff, aes(x=diff)) +
   geom_histogram() +
   theme_half_open() +
@@ -3486,13 +3401,13 @@ ggplot(rank_diff, aes(x=diff)) +
 dev.off()
 
 lim<-c(
-  min(c(sign(obs_pseudo_rank$R2)*sqrt(abs(obs_pseudo_rank$R2)), obs_pseudo_rank$R), na.rm=T),
-  max(c(sign(obs_pseudo_rank$R2)*sqrt(abs(obs_pseudo_rank$R2)), obs_pseudo_rank$R), na.rm=T)
+  min(c(sign(obs_pseudo_rank$R.x)*abs(obs_pseudo_rank$R.y), obs_pseudo_rank$R), na.rm=T),
+  max(c(sign(obs_pseudo_rank$R.x)*abs(obs_pseudo_rank$R.y), obs_pseudo_rank$R), na.rm=T)
 )
 
 plot_list<-list()
 for(i in unique(obs_pseudo_rank$MODEL)){
-  plot_list[[i]]<-ggplot(obs_pseudo_rank[obs_pseudo_rank$MODEL == i], aes(x=sign(R2)*sqrt(abs(R2)), y=R)) +
+  plot_list[[i]]<-ggplot(obs_pseudo_rank[obs_pseudo_rank$MODEL == i], aes(x=R.y, y=R.x)) +
       geom_point() +
       geom_abline(intercept = 0, slope = 1, colour='red') +
       theme_half_open() +
@@ -3503,74 +3418,622 @@ for(i in unique(obs_pseudo_rank$MODEL)){
       labs(x="R (Observed)", y="R (Pseudovalidated)", title=i)
 }
 
-png('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/pseudo_ldak_yfs/pseudo_ldak_model_comp.png', res=300, units='px', width=2000, height=2000)
+png('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/ldak_pseudo/pseudo_ldak_model_comp.png', res=300, units='px', width=3000, height=2000)
 plot_grid(plotlist = plot_list)
 dev.off()
 
-# The correlation within each method is quite good, but there seems to be bias towards some models.
+# Pseudoval results are biased towards certain methods, and it seems to over estimate poor models, and underestimate good models
+
 # Can we account for the bias?
-summary(lm(obs_pseudo_rank$R ~ obs_pseudo_rank$MODEL)) # Big differences in average R
-summary(lm(obs_pseudo_rank$R2 ~ obs_pseudo_rank$MODEL)) # No significant differences in average R2
-# Support notion that we can adjust pseudo R by model bias
+summary(lm(obs_pseudo_rank$R.x - obs_pseudo_rank$R.y ~ obs_pseudo_rank$MODEL)) # Big differences in average R
+obs_pseudo_rank$R_resid<-as.numeric(resid(lm(obs_pseudo_rank$R.x ~ obs_pseudo_rank$MODEL)))
 
-obs_pseudo_rank$R_resid<-as.numeric(resid(lm(obs_pseudo_rank$R ~ obs_pseudo_rank$MODEL, na.action=na.exclude)))
-
-genes<-unique(pseudo_res_2$ID)
+genes<-unique(pseudo_res$ID)
 obs_pseudo_resid_rank<-NULL
 rank_diff_resid<-NULL
 n_top<-NULL
 for(i in 1:length(genes)){
   obs_pseudo_i<-obs_pseudo_rank[obs_pseudo_rank$ID == genes[i],]
   obs_pseudo_i$pseudo_rank<-rank(-obs_pseudo_i$R_resid)
-  obs_pseudo_i$obs_rank<-rank(-obs_pseudo_i$R2)
+  obs_pseudo_i$obs_rank<-rank(-obs_pseudo_i$R.y)
   obs_pseudo_resid_rank<-rbind(obs_pseudo_resid_rank, obs_pseudo_i)
   
   rank_diff_resid<-rbind(rank_diff_resid, data.frame(ID=genes[i],
                                          pseudo_top_mod=obs_pseudo_i$MODEL[obs_pseudo_i$pseudo_rank == min(obs_pseudo_i$pseudo_rank,na.rm=T)][1],
-                                         pseudo_R = sqrt(obs_pseudo_i$R2[obs_pseudo_i$pseudo_rank == min(obs_pseudo_i$pseudo_rank,na.rm=T)][1]),
+                                         pseudo_R = obs_pseudo_i$R.y[obs_pseudo_i$pseudo_rank == min(obs_pseudo_i$pseudo_rank,na.rm=T)][1],
                                          obs_top_mod=obs_pseudo_i$MODEL[obs_pseudo_i$obs_rank == min(obs_pseudo_i$obs_rank,na.rm=T)][1],
-                                         top_R = sqrt(obs_pseudo_i$R2[obs_pseudo_i$obs_rank == min(obs_pseudo_i$obs_rank,na.rm=T)][1])))
+                                         top_R = obs_pseudo_i$R.y[obs_pseudo_i$obs_rank == min(obs_pseudo_i$obs_rank,na.rm=T)][1]))
   
 }
 
 # Calculate correlation between model rank for each gene
-cor(obs_pseudo_resid_rank$pseudo_rank, obs_pseudo_resid_rank$obs_rank) # 0.1163093
+cor(obs_pseudo_resid_rank$pseudo_rank, obs_pseudo_resid_rank$obs_rank) # 0.183464
 
-# Calculate the mean difference in R between the best model and the model selected by TWAS.Z
+# Calculate the mean difference in R between the best model and the model selected by pseudoval
 rank_diff_resid$diff<-rank_diff_resid$pseudo_R-rank_diff_resid$top_R
-mean(rank_diff_resid$diff, na.rm=T) # -0.02231715
+mean(rank_diff_resid$diff, na.rm=T) # -0.01549056
 
 # Calculate the percentage of genes where pseuodoval did not select the correct model
-nrow(rank_diff_resid[rank_diff_resid$diff != 0,])/nrow(rank_diff_resid) # 0.7620818
+nrow(rank_diff_resid[rank_diff_resid$diff != 0,])/nrow(rank_diff_resid) # 0.7265376
 
-# Although there is some consistent bias across genes, this one size fits all correction can make it worse for some genes
-# On average there is a slight improvement though.
+# Crosstab the selected observed and pseudoval-selected best model
+saveRDS(table(rank_diff_resid$pseudo_top_mod, rank_diff_resid$obs_top_mod),'/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/ldak_pseudo/best_pseudo_ldak_comp_resid.rds')
+table(rank_diff_resid$pseudo_top_mod, rank_diff_resid$obs_top_mod)
+table(rank_diff_resid$pseudo_top_mod)
+table(rank_diff_resid$obs_top_mod)
+
+rank_diff_resid<-rank_diff_resid[order(rank_diff_resid$diff),]
+
+library(ggplot2)
+library(cowplot)
+
+png('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/ldak_pseudo/best_pseudo_ldak_comp_resid.png', res=300, units='px', width=1000, height=1000)
+ggplot(rank_diff_resid, aes(x=top_R, y=pseudo_R)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1, colour='red') +
+  coord_fixed() +
+  theme_half_open() +
+  background_grid() +
+  labs(x="R (Best)", y="R (Pseudovalidated)")
+dev.off()
+
+png('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/ldak_pseudo/best_pseudo_ldak_comp_resid_hist.png', res=300, units='px', width=1500, height=1000)
+ggplot(rank_diff_resid, aes(x=diff)) +
+  geom_histogram() +
+  theme_half_open() +
+  background_grid() +
+  labs(x="Difference in R")
+dev.off()
+
+lim<-c(
+  min(c(sign(obs_pseudo_rank$R_resid)*abs(obs_pseudo_rank$R.y), obs_pseudo_rank$R), na.rm=T),
+  max(c(sign(obs_pseudo_rank$R_resid)*abs(obs_pseudo_rank$R.y), obs_pseudo_rank$R), na.rm=T)
+)
+
+plot_list<-list()
+for(i in unique(obs_pseudo_rank$MODEL)){
+  plot_list[[i]]<-ggplot(obs_pseudo_rank[obs_pseudo_rank$MODEL == i], aes(x=R.y, y=R_resid)) +
+      geom_point() +
+      geom_abline(intercept = 0, slope = 1, colour='red') +
+      theme_half_open() +
+      background_grid() +
+      xlim(lim) +
+      ylim(lim) +
+      coord_fixed() +
+      labs(x="R (Observed)", y="R (Pseudovalidated - residual)", title=i)
+}
+
+png('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/ldak_pseudo/pseudo_ldak_model_comp_resid.png', res=300, units='px', width=3000, height=2000)
+plot_grid(plotlist = plot_list)
+dev.off()
+
+# This correction helps a bit, but not much.
 
 ```
-
-</details>
-
-<details><summary>Comparison of model that performed best in YFS to model that was selected by pseudovalidation</summary>
-
-![](/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/pseudo_fusion_yfs/best_pseudo_comp.png){width=50%}
-
-![](/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/pseudo_fusion_yfs/best_pseudo_comp_hist.png){width=50%}
-
-```{r, eval=T, echo=F}
-
-tmp<-readRDS('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/pseudo_fusion_yfs/best_pseudo_comp.rds')
-
-tmp<-tmp[dimnames(tmp)[[1]], dimnames(tmp)[[1]]]
-
-library(caret) 
-confusionMatrix(tmp)
-
-
-```
-
-The variance explained by the best model identified by pseudovalidation is very similar to the best model identified by cross validation, however the pseudoval model is often not the model identified by cross validation.
-
-</details>
 
 ***
+
+### YFS eQTL
+
+```{bash, echo=T, eval=F}
+conda activate eqtl_to_twas
+for chr in $(seq 1 22); do
+  sbatch -p neurohack_cpu,cpu -t 10 --mem 10G --wrap="
+  Rscript /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/ldak_pseudoval.R \
+    --sumstats /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/YFS_eQTL_from_fusion.txt \
+  	--weights /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/eQTL/YFS.eQTL.pos \
+  	--weights_dir /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/eQTL \
+  	--ref_ld_chr /users/k1806347/oliverpainfel/Data/1KG/FUSION/1000G.EUR. \
+    --out /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/ldak_pseudo/yfs.eqtl.${chr} \
+    --chr ${chr} \
+    --ldak /users/k1806347/oliverpainfel/Software/ldak5.1.linux"
+done
+
+mkdir /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/ldak_pseudo/eqtl
+
+```
+
+```{r, eval=F, echo=T}
+library(data.table)
+
+# Read in pseudoval results
+pseudo_res <- NULL
+for (i in 1:22) {
+  pseudo_res <-
+    rbind(
+      pseudo_res,
+      fread(
+        paste0(
+          '/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/ldak_pseudo/yfs.eqtl.',i,'.pseudo_cor.txt'
+        )
+      )
+    )
+}
+
+cor_res_melt<-readRDS('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/1kg_pred_exp/YFS_cor.rds')
+
+eqtl_pos<-fread('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/eQTL/YFS.eQTL.pos')
+w_dir<-'/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/eQTL/'
+eqtl_sig<-NULL
+for(i in 1:nrow(eqtl_pos)){
+  load(paste0(w_dir, eqtl_pos$WGT[i]))
+  eqtl_sig<-rbind(eqtl_sig,
+                  data.frame(ID=eqtl_pos$ID[i],
+                             hsq=hsq[1],
+                             hsq.p=hsq.pv,
+                             TopSNP_Pvalue=signal$TopSNP_Pvalue,
+                             P_mBATcombo=signal$P_mBATcombo))
+}
+
+eqtl_sig_true<-eqtl_sig[eqtl_sig$TopSNP_Pvalue < 5e-8 | eqtl_sig$P_mBATcombo < 0.01,]
+cor_res_melt_sig<-cor_res_melt[cor_res_melt$L1 %in% eqtl_sig_true$ID,]
+cor_res_melt_enet<-cor_res_melt[cor_res_melt$Var1 == 'twas.enet',]
+cor_res_melt_enet_neg<-cor_res_melt_enet[cor_res_melt_enet$value < -0.1, ]
+cor_res_melt_enet_neg<-data.table(ID=cor_res_melt_enet_neg$L1,
+                                  MODEL=gsub('eqtl.','',cor_res_melt_enet_neg$Var2),
+                                  BAD = T)
+
+pseudo_res_neg_all<-pseudo_res[pseudo_res$ID %in% cor_res_melt_enet_neg$ID,]
+pseudo_res_neg_all<-merge(pseudo_res_neg_all, cor_res_melt_enet_neg, by=c('ID','MODEL'), all.x=T)
+
+ggplot(pseudo_res_neg_all, aes(x=MODEL, y=R, colour=BAD)) +
+  geom_point() +
+  facet_wrap('ID') + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
+
+# This indicates that ldak pseudoval does distinguish the models that don't correlated well with other models.
+# Check this again when we have observed correlations in GTEx. 
+# Removing models with a low correlation with other models might also be a good solution.
+  
+```
+
+***
+
+# OTTERS
+
+## Install
+
+```{bash}
+# Install OTTERS v1.0.0
+cd /users/k1806347/oliverpainfel/Software
+git clone https://github.com/daiqile96/OTTERS.git 
+cd OTTERS
+git checkout v1.0.0
+
+# Install tabix and bgzip
+cd /users/k1806347/oliverpainfel/Software
+wget https://sourceforge.net/projects/samtools/files/tabix/tabix-0.2.6.tar.bz2
+tar jxvf tabix-0.2.6.tar.bz2
+cd tabix-0.2.6
+make
+
+# copy the binary bgzip and tabix bin folder so can be called from PATH
+mkdir /users/k1806347/oliverpainfel/Software/bin
+cp bgzip tabix /users/k1806347/oliverpainfel/Software/bin
+
+# copy the plink1.9 binary and add to PATH
+cp /users/k1806347/oliverpainfel/Software/plink1.9/plink /users/k1806347/oliverpainfel/Software/bin/
+export PATH=/users/k1806347/oliverpainfel/Software/bin:$PATH 
+
+# Create a conda environment to run otters
+cd /users/k1806347/oliverpainfel/Software/OTTERS
+mamba env create --file otters_env.yaml
+conda activate otters
+
+# Install lassosum
+Rscript -e 'remotes::install_github("tshmak/lassosum@v0.4.5")'
+
+# Install SDPR
+cd /users/k1806347/oliverpainfel/Software/bin
+git clone https://github.com/eldronzhou/SDPR.git
+cd SDPR
+git checkout v0.9.1
+```
+
+***
+
+## Run test data
+
+```{bash}
+# Run using test data
+conda activate otters
+
+# set number of threads to be used
+N_THREADS=1
+
+# set up my OTTERS directory and SDPR directory
+OTTERS_DIR=/users/k1806347/oliverpainfel/Software/OTTERS
+SDPR_DIR=/users/k1806347/oliverpainfel/Software/bin/SDPR
+
+# make sure the dynamic libraries of SDPR are not changed (For SDPR)
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${SDPR_DIR}/MKL/lib
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${SDPR_DIR}/gsl/lib
+
+# prevent automatically using  all available cores on a compute node (For SDPR and PRS-CS)
+export MKL_NUM_THREADS=$N_THREADS
+export NUMEXPR_NUM_THREADS=$N_THREADS
+export OMP_NUM_THREADS=$N_THREADS
+
+# Start to run OTTERS
+cd ${OTTERS_DIR}/Example
+
+# Input for OTTERS STAGE I 
+# Annotation File 
+exp_anno=exp_anno.txt
+# Genotype data from LD reference panel
+geno_dir=Exp_geno
+# eQTL summary statistics 
+sst_file=Exp_eQTLSumStats.txt
+# Input for OTTERS STAGE II
+# GWAS summary statistics 
+gwas_sst_file=Exp_GWASSumStats.txt
+
+# Set chromosome number (The example is for chromosome 4)
+chr=4
+# Set LD-clumping threshold in STAGE I
+clump_r2=0.99
+# Set output directory for STAGE I
+out_dir=Results
+
+# STAGE I
+# train eQTL weights using P+T, lassosum, SDPR and PRS-CS. 
+# It may take several minutes to complete.
+python3 ${OTTERS_DIR}/training.py \
+--OTTERS_dir=${OTTERS_DIR} \
+--SDPR_dir=${SDPR_DIR} \
+--anno_dir=${exp_anno} \
+--geno_dir=${geno_dir} \
+--sst_file=${sst_file} \
+--out_dir=${out_dir} \
+--chrom=${chr} \
+--r2=${clump_r2} \
+--models=PT,lassosum,SDPR,PRScs \
+--thread=$N_THREADS
+
+# It has completed with the test data
+# Do a speed and memory benchmark for 100 genes from YFS eQTL data
+```
+
+***
+
+## Replicate paper
+
+***
+
+### Download eQTLGen weights
+
+```{bash}
+# Download the eQTLGen weights and results in the OTTERS paper: https://www.synapse.org/#!Synapse:syn51009573/files/
+mkdir -p /users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen
+cd /users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen
+```
+
+```{python}
+import shutil
+import os
+from synapseclient import Synapse
+
+# Read in auth_token
+with open('/users/k1806347/oliverpainfel/Data/synapse/auth_token.txt', 'r') as file:
+    content = file.read()
+
+# Initialize the Synapse client and log in
+syn = Synapse()
+syn.login(authToken=content)
+
+# List of Synapse IDs you want to download and move
+syn_ids = [
+    'syn51015448',
+    'syn51015449',
+    'syn51015450',
+    'syn51015456',
+    'syn51015458',
+    'syn51015464'
+]
+
+# Define the new directory where you want to store the files
+new_directory = '/users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen'
+
+for syn_id in syn_ids:
+    # Download the file from Synapse
+    entity = syn.get(entity=syn_id, version=1)
+    
+    # Get the original path and filename
+    original_path = entity.path
+    filename = os.path.basename(original_path)
+    
+    # Construct the new path in the desired directory with the same filename
+    new_path = os.path.join(new_directory, filename)
+    
+    # Move the file
+    shutil.move(original_path, new_path)
+    
+    print(f"Moved {filename} to {new_path}")
+    
+    
+```
+
+```{bash}
+# Decompress the eQTLGen weights
+cd /users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen 
+
+gunzip lassosum.txt.gz
+gunzip OTTERS_TWAS_SumStat_CARDIOVASCULAR_UKBB.txt
+gunzip P0.001.txt.gz
+gunzip P0.05.txt.gz
+gunzip PRScs.txt.gz
+gunzip SDPR.txt.gz
+
+# Note the weights appear to be GRCh38
+# We need to liftover the reference genotype data and GWAS sumstats
+```
+
+***
+
+## Prepare input files
+
+```{r}
+# Create annotation file using re
+library(data.table)
+res<-fread('/users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen/OTTERS_TWAS_SumStat_CARDIOVASCULAR_UKBB.txt')
+annot<-res[, c('CHROM','GeneStart','GeneEnd','TargetID'), with=F]
+fwrite(annot, '/users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen/annot.txt', sep='\t', quote=F, na='NA')
+```
+
+```{bash}
+# Download and format the GWAS sumstats
+cd /users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen
+wget https://ftp.ebi.ac.uk/pub/databases/gwas/summary_statistics/GCST90029001-GCST90030000/GCST90029019/GCST90029019_buildGRCh37.tsv
+```
+
+```{r}
+library(data.table)
+library(GenoUtils)
+ss<-fread('/users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen/GCST90029019_buildGRCh37.tsv')
+ss<-ss[, c('chromosome','base_pair_location','effect_allele','other_allele','beta','standard_error'), with=F]
+names(ss)<-c('CHROM','POS','A1','A2','BETA','SE')
+
+ss_matched<-NULL
+target_build<-'GRCh38'
+for(i in 1:22){
+  ss_i<-ss[ss$CHROM == i,]
+  ref_i<-readRDS(paste0('/users/k1806347/oliverpainfel/Software/MyGit/GenoDisc/pipeline/resources/data/1kg/1KG.Phase3.EUR.MAF_001.chr',i,'.rds'))
+  names(ref_i)<-paste0('REF.',names(ref_i))
+  ss_i$IUPAC<-snp_iupac(ss_i$A1, ss_i$A2)
+
+  # Merge target and reference by BP
+  ref_target<-merge(ss_i, ref_i, by.x='POS', by.y='REF.BP_GRCh37')
+  
+  # Identify targ-ref strand flips, and flip target
+  flip_logical<-detect_strand_flip(targ = ref_target$IUPAC, ref = ref_target$REF.IUPAC)
+
+  flipped<-ref_target[flip_logical,]
+  flipped$A1<-snp_allele_comp(flipped$A1)
+  flipped$A2<-snp_allele_comp(flipped$A2)      
+  flipped$IUPAC<-snp_iupac(flipped$A1, flipped$A2)
+  
+  # Identify SNPs that have matched IUPAC
+  matched<-ref_target[ref_target$IUPAC == ref_target$REF.IUPAC,]
+  matched<-rbind(matched, flipped)
+  
+  matched<-matched[, c('CHROM','REF.BP_GRCh38','A1','A2','BETA','SE'), with=F]
+  names(matched)<-c('CHROM','POS','A1','A2','BETA','SE')
+  ss_matched<-rbind(ss_matched, matched)
+}
+
+ss_matched$Zscore<-ss_matched$BETA/ss_matched$SE
+ss_matched<-ss_matched[, c('CHROM','POS','A1','A2','Zscore'), with=F]
+ss_matched<-ss_matched[complete.cases(ss_matched),]
+fwrite(ss_matched, '/users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen/GCST90029019_buildGRCh38.reformat.tsv', quote=F, sep='\t', na='NA')
+```
+
+```{bash}
+mkdir -p /users/k1806347/oliverpainfel/Data/1KG/GenoDisc/GRCh37
+cd /users/k1806347/oliverpainfel/Data/1KG/GenoDisc/GRCh37
+for chr in $(seq 1 22);do
+for file in $(echo bim bed fam rds); do
+cp /users/k1806347/oliverpainfel/Software/MyGit/GenoDisc/pipeline/resources/data/1kg/1KG.Phase3.EUR.MAF_001.chr${chr}.${file} ./
+done
+done
+```
+
+```{r}
+# Create version of reference data in GRCh38
+for(i in 1:22){
+  bim<-fread(paste0('/users/k1806347/oliverpainfel/Software/MyGit/GenoDisc/pipeline/resources/data/1kg/1KG.Phase3.EUR.MAF_001.chr', i,'.bim'))
+  names(bim)<-c('CHR','SNP','POS','BP','A1','A2')
+  snp_ref<-readRDS(paste0('/users/k1806347/oliverpainfel/Software/MyGit/GenoDisc/pipeline/resources/data/1kg/1KG.Phase3.EUR.MAF_001.chr',i,'.rds'))
+  names(snp_ref)<-paste0('REF.',names(snp_ref))
+  bim_new<-merge(bim, snp_ref, by.x='SNP', by.y='REF.SNP')
+  bim_new<-bim_new[!is.na(bim_new$REF.BP_GRCh38),]
+  bim_new<-bim_new[order(bim_new$REF.BP_GRCh38),]
+  
+  write.table(bim_new$SNP, paste0('/users/k1806347/oliverpainfel/Data/1KG/GenoDisc/GRCh38/chr',i,'.extract'), col.names=F, row.names=F, quote=F)
+  
+  write.table(bim_new[, c('SNP', 'REF.BP_GRCh38'), with=F], paste0('/users/k1806347/oliverpainfel/Data/1KG/GenoDisc/GRCh38/chr',i,'.remap'), col.names=F, row.names=F, quote=F)
+
+  system(paste0('/users/k1806347/oliverpainfel/Software/plink2 --bfile /users/k1806347/oliverpainfel/Software/MyGit/GenoDisc/pipeline/resources/data/1kg/1KG.Phase3.EUR.MAF_001.chr',i,' --extract /users/k1806347/oliverpainfel/Data/1KG/GenoDisc/GRCh38/chr',i,'.extract --update-map /users/k1806347/oliverpainfel/Data/1KG/GenoDisc/GRCh38/chr',i,'.remap --sort-vars --make-pgen --out /users/k1806347/oliverpainfel/Data/1KG/GenoDisc/GRCh38/1KG.Phase3.EUR.MAF_001.chr',i))
+  system(paste0('/users/k1806347/oliverpainfel/Software/plink2 --pfile /users/k1806347/oliverpainfel/Data/1KG/GenoDisc/GRCh38/1KG.Phase3.EUR.MAF_001.chr',i,' --make-bed --out /users/k1806347/oliverpainfel/Data/1KG/GenoDisc/GRCh38/1KG.Phase3.EUR.MAF_001.chr',i))
+}
+```
+
+***
+
+### Run OTTERS
+
+```{bash}
+conda activate otters
+# set number of threads to be used
+N_THREADS=1
+
+# set up my OTTERS directory and SDPR directory
+OTTERS_DIR=/users/k1806347/oliverpainfel/Software/OTTERS
+SDPR_DIR=/users/k1806347/oliverpainfel/Software/bin/SDPR
+
+# Input for OTTERS STAGE I 
+# Annotation File 
+exp_anno=/users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen/annot.txt
+
+# Input for OTTERS STAGE II
+# GWAS summary statistics 
+gwas_sst_file=/users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen/GCST90029019_buildGRCh38.reformat.tsv
+
+for model in $(echo P0.001 P0.05 lassosum SDPR PRScs); do
+for chr in $(seq 1 21); do
+  sbatch -p neurohack_cpu,cpu -t120 --mem 10G --wrap="
+
+# make sure the dynamic libraries of SDPR are not changed (For SDPR)
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${SDPR_DIR}/MKL/lib
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${SDPR_DIR}/gsl/lib
+export PATH=/users/k1806347/oliverpainfel/Software/bin:$PATH 
+
+# prevent automatically using  all available cores on a compute node (For SDPR and PRS-CS)
+export MKL_NUM_THREADS=$N_THREADS
+export NUMEXPR_NUM_THREADS=$N_THREADS
+export OMP_NUM_THREADS=$N_THREADS
+
+# STAGE II
+# gene-based association test using eQTL-weight trained from P+T, lassosum, SDPR and PRS-CS.
+mkdir -p /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/OTTERS/chr${chr}/${model}
+python3 ${OTTERS_DIR}/testing.py \
+  --OTTERS_dir=${OTTERS_DIR} \
+  --weight_dir=/users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen \
+  --models=${model} \
+  --anno_dir=${exp_anno} \
+  --geno_dir=/users/k1806347/oliverpainfel/Data/1KG/GenoDisc/GRCh38/1KG.Phase3.EUR.MAF_001.chr${chr} \
+  --out_dir=/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/OTTERS/chr${chr}/${model} \
+  --gwas_file=${gwas_sst_file} \
+  --chrom=${chr} \
+  --thread=$N_THREADS
+"
+done
+done
+
+```
+
+***
+
+### Compare with original results
+
+```{r}
+library(data.table)
+
+# Read in results
+res <- NULL
+for (j in c('P0.001', 'P0.05', 'lassosum', 'SDPR', 'PRScs')) {
+  for (i in 22:22) {
+    tmp <- fread(
+        paste0(
+          '/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/OTTERS/chr',
+          i,
+          '/',
+          j,
+          '/',
+          j,
+          '.txt'
+        )
+      )
+  }
+  tmp$MODEL<-j
+  tmp <- tmp[, c('TargetID', 'MODEL', 'FUSION_PVAL'), with = F]
+  res <- rbind(res, tmp)
+}
+
+# Perform ACAT.O analysis
+ACATO <- function(p){
+    if (all(is.na(p))) return(NA)
+    p <- p[!is.na(p)]
+    p[p == 1] <- 1 - 1e-16
+#### check if there are very small non-zero p values
+    is.small <- (p < 1e-16)
+    if (sum(is.small) == 0) {
+        cct.stat <- sum(tan((0.5 - p) * pi))/length(p)
+    } else {
+        cct.stat <- sum((1 / p[is.small]) / pi)
+        cct.stat <- cct.stat + sum(tan((0.5 - p[!is.small]) * pi))
+        cct.stat <- cct.stat/length(p)
+    }
+    #### check if the test statistic is very large.
+    if (cct.stat > 1e+15){
+        pval <- (1 / cct.stat) / pi
+    } else {
+        pval <- 1 - pcauchy(cct.stat)
+    }
+    pval
+}
+
+res_acat<-data.table(aggregate(res$FUSION_PVAL, list(res$TargetID), FUN=ACATO))
+names(res_acat)<-c('TargetID', 'OTTERS')
+
+library(reshape2)
+res_wide <- dcast(res, TargetID ~ MODEL, value.var = "FUSION_PVAL")
+res_wide<-merge(res_wide, res_acat, by = 'TargetID')
+
+# Read in original results
+orig<-fread('/users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen/OTTERS_TWAS_SumStat_CARDIOVASCULAR_UKBB.txt')
+orig<-orig[, names(res_wide), with=F]
+both<-merge(orig, res_wide, by='TargetID')
+
+# Convert to Z scores, and check correlations between each test
+both_z<-apply(both[,-1], 2, function(x) qnorm(x))
+cor(both_z, use='p')
+table(is.na(both_z))
+
+# There are missing values in the original results which are not missing in the replication
+# For those that are present, the correlation is <1, probably due to missing SNPs and different LD reference.
+```
+
+Limitations of OTTERS:
+- Slow
+- Requires consistent builds across files (not RSID based)
+- Not restricted to HapMap3
+- Format doesn't integrate well with existing downstream TWAS methodology
+
+***
+
+### Compare to eQTL_to_TWAS
+
+Run TWAS using eQTLGen weights I generated and the same sumstats as the OTTERS paper.
+
+```{bash}
+# Download eQTLGen weights
+cd /users/k1806347/oliverpainfel/Data/eQTLGen/eQTL_to_TWAS
+wget -O eQTLGen.eQTL.tar.gz https://zenodo.org/records/7068381/files/eQTLGen.eQTL.tar.gz?download=1
+wget -O eQTLGen.eQTL.pos https://zenodo.org/records/7068381/files/eQTLGen.eQTL.pos?download=1
+
+tar -xvzf eQTLGen.eQTL.tar.gz
+rm eQTLGen.eQTL.tar.gz
+```
+
+```{r}
+library(data.table)
+
+# Munge the sumstats
+ss<-fread('/users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen/GCST90029019_buildGRCh37.tsv')
+ss$z_score<-ss$beta/ss$standard_error
+ss<-ss[, c('variant_id','effect_allele','other_allele','z_score'), with=F]
+names(ss)<-c('SNP','A1','A2','Z')
+fwrite(ss, '/users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen/GCST90029019_buildGRCh37.munged.tsv.gz', quote=F, sep='\t', na='NA')
+```
+
+```{bash}
+# Run FUSION
+mkdir /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/OTTERS/eQTL_to_TWAS
+conda activate eqtl_to_twas
+for chr in $(seq 22 22); do
+    sbatch -p neurohack_cpu,cpu -t120 --mem 10G --wrap="
+    Rscript /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/FUSION.assoc_test.edit.R \
+    --sumstats /users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen/GCST90029019_buildGRCh37.munged.tsv.gz \
+    --weights /users/k1806347/oliverpainfel/Data/eQTLGen/eQTL_to_TWAS/eQTLGen.eQTL.pos \
+    --weights_dir /users/k1806347/oliverpainfel/Data/eQTLGen/eQTL_to_TWAS \
+    --ref_ld_chr /users/k1806347/oliverpainfel/Data/1KG/FUSION/1000G.EUR. \
+    --out /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/OTTERS/eQTL_to_TWAS/GCST90029019.eQTLGen.chr${chr} \
+    --chr ${chr} \
+    --GWASN 459324
+    "
+done
+
+load('/users/k1806347/oliverpainfel/Data/eQTLGen/eQTL_to_TWAS/eQTLGen.eQTL/ENSG00000244486.RDat')
+```
+```
 

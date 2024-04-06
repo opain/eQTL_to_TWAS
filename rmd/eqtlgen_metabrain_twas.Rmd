@@ -842,10 +842,10 @@ cor(both$z_SMR, both$TWAS.Z) # 0.9285636
 # - The correlation between SMR and TWAS top1 model is very high and nearly all significant SMR genes present in the TWAS are identified as significant in TWAS
 
 ######
-# Test aggreagation approaches
+# Test aggregation approaches
 ######
 
-# Write ACAT-O funcion
+# Write ACAT-O function
 ACATO <- function(p){
     if (all(is.na(p))) return(NA)
     p <- p[!is.na(p)]

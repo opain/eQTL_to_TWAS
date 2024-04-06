@@ -728,20 +728,20 @@ for(gene_i in genes){
           # Filter bad chains: `range` should be between 0 and 2
           range <- sapply(multi_auto, function(auto) diff(range(auto$corr_est)))
           keep <- which(range > (0.95 * quantile(range, 0.95, na.rm = TRUE)))
-          
+
           if(length(keep) > 0){
             # Get the final effects using chains that pass this filter
             beta_auto <- rowMeans(sapply(multi_auto[keep], function(auto) auto$beta_est))
-  
+
             # Flip beta_auto effects to match the plink reference
             names(ref$map)<-c('chr','rsid','dist','pos','a0','a1')
             tmp<-data.frame(ss_gene_i_ldpred2[,c('chr','pos','a0','a1')], beta=-1)
             info_snp_2 <- snp_match(tmp, ref$map)
             beta_auto <- beta_auto*info_snp_2$beta
-  
+
             # compute predictions for test set
             ldpred2_score <- data.table(SNP=ss_gene_i_ldpred2$rsid, A1=ss_gene_i_ldpred2$a1, A2=ss_gene_i_ldpred2$a0, BETA = beta_auto)
-  
+
             # Sort score file according ss_gene_i
             ldpred2_score<-ldpred2_score[match(ss_gene_i$SNP, ldpred2_score$SNP),]
             wgt.matrix[,colnames(wgt.matrix) == 'ldpred2']<-ldpred2_score$BETA
