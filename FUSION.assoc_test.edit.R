@@ -105,7 +105,9 @@ if(!is.na(opt$extract_weight)){
 
 # Subset SNP-weights in opt$chr
 if(!is.na(opt$chr)){
-  sumstat<-sumstat[sumstat$CHR == opt$chr,]
+  if(any(names(sumstat) == 'CHR')){
+    sumstat<-sumstat[sumstat$CHR == opt$chr,]
+  }
   wgtlist<-wgtlist[wgtlist$CHR == opt$chr,]
 }
 
@@ -176,7 +178,7 @@ for ( w in 1:nrow(wgtlist)){
 	wgt.matrix = wgt.matrix[m.keep,,drop=F]
 	cur.genos_w = scale(genos_w$bed[,m[m.keep]])
 	cur.bim = genos_w$bim[m[m.keep],]
-	print(head(cur.bim))
+
 	# Flip WEIGHTS for mismatching alleles
 	qc = allele.qc( snps[,5] , snps[,6] , cur.bim[,5] , cur.bim[,6] )
 	wgt.matrix[qc$flip,] = -1 * wgt.matrix[qc$flip,]
@@ -331,7 +333,7 @@ cat("Analysis completed.\n")
 cat("NOTE:",FAIL.ctr,"genes-model pairs were skipped\n")
 
 # WRITE MHC TO SEPARATE FILE
-mhc = out.tbl.all.all$CHR == 6 & out.tbl.all.all$P0 > 26e6 & out.tbl.all.all$P1 < 34e6
+mhc = as.numeric(out.tbl$CHR) == 6 & as.numeric(out.tbl$P0) > 26e6 & as.numeric(out.tbl$P1) < 34e6
 
 out.tbl.all.all$P0 = apply( as.matrix(out.tbl.all.all$P0) , 1 , toString )
 out.tbl.all.all$P1 = apply( as.matrix(out.tbl.all.all$P1) , 1 , toString )
