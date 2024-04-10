@@ -260,19 +260,22 @@ fwrite(ss, '/users/k1806347/oliverpainfel/Data/GWAS_sumstats/GenoFuncPipe_paper/
 
 ```{bash, eval=F, echo=T}
 
-mkdir /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ
+mkdir /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/SCZ
 
-/users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/GenoFunc/GenoFuncPipe/scripts/sumstat_cleaner.R \
+# Use GenoPred analysis conda environment for running R
+# conda activate /scratch/prj/oliverpainfel/Software/MyGit/GenoPred/pipeline/.snakemake/conda/aea4ef260655c3bcc12fec8909f5f6dd_
+
+Rscript /users/k1806347/oliverpainfel/Software/MyGit/GenoFunc/GenoFuncPipe/scripts/sumstat_cleaner.R \
   --sumstats /users/k1806347/oliverpainfel/Data/GWAS_sumstats/GenoFuncPipe_paper/SCZ/SCZ.reformat.gz \
   --ref_chr /users/k1806347/oliverpainfel/Software/MyGit/GenoFunc/GenoFuncPipe/resources/data/1kg/1KG.Phase3.EUR.MAF_001.chr \
-  --output /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned
+  --output /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/SCZ/SCZ.cleaned
 
-focus munge /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.gz \
-  --output /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.munged
+focus munge /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.gz \
+  --output /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.munged
 
 /users/k1806347/oliverpainfel/Software/Rscript.sh /users/k1806347/oliverpainfel/Software/MyGit/GenoFunc/GenoFuncPipe/scripts/median_n.R \
-  --munged /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.munged.sumstats.gz \
-  --out /users/k1806347/oliverpainfel/biomarkers-brc-mh/TWAS_resource/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.munged.median_N.txt
+  --munged /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.munged.sumstats.gz \
+  --out /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/SCZ/SCZ.cleaned.munged.median_N.txt
 
 ```
 

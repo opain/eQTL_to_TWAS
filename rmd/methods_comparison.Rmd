@@ -1490,6 +1490,8 @@ conda activate eqtl_to_twas
 Rscript -e 'remotes::install_github("tshmak/lassosum@v0.4.5")'
 Rscript -e 'remotes::install_github("opain/GenoUtils@4beb75620f3291b633598acd06febb22298418c8")'
 Rscript -e 'remotes::install_github("gabraham/plink2R@d74be015e8f54d662b96c6c2a52a614746f9030d", subdir="plink2R")'
+Rscript -e 'remotes::install_github("yaowuliu/ACAT@e737d7d188ba6731800c5e6971539ca6a3888405")'
+
 ```
 
 ```{bash, eval=F, echo=T}
@@ -1971,81 +1973,68 @@ This is looking good. Everything is working as it should.
 
 ***
 
-This will be run by Zac. I will send him the score files and reference expression, and fusion LD reference data. I don't know the file paths so I have just put file names.
+This was originally run by Zac Gerring, but I have since obtained access to GTEx v8 WGS sequence data via a dbGAP application with Alan Hodgkinson.
 
 ***
 
-#### For Zac
+#### Convert WGS data into PLINK1 binary format
 
-***
-
-#### Prepare files for testing
+We are doing this for running both OTTERS (to replicate their original analysis), and for our use later for evaluating gene expression models.
 
 <details><summary>Show code</summary>
 
-```{bash, eval=F, echo=T}
-mkdir -p /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/for_zac
-cd /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/for_zac
+```{bash}
+# Split the vcf by chromosome, convert to plink1 and retain only SNPs with MAF > 0.001
+mkdir -p /users/k1806347/oliverpainfel/Data/dbGAP/GTEx/processed
+for chr in $(seq 1 22); do
+  sbatch -p neurohack_cpu,cpu -t 600 --mem 20G --wrap="
+    /users/k1806347/oliverpainfel/Software/plink2 \
+      --vcf /users/k1806347/oliverpainfel/Data/dbGAP/GTEx/GTEx_Analysis_2017-06-05_v8_WholeGenomeSeq_866Indiv.vcf.gz \
+      --chr ${chr} \
+      --make-bed \
+      --snps-only \
+      --maf 0.001 \
+      --threads 1 \
+      --out /users/k1806347/oliverpainfel/Data/dbGAP/GTEx/processed/gtex_v8.snp.maf001.chr${chr}
+    "
+done
+```
 
-# Copy FUSION reference with allele frequency files
-cp -r /users/k1806347/oliverpainfel/Data/1KG/FUSION/ ./
+</details>
 
-# Copy FUSION .pos, .Rdat files, score files, and reference expression
-cd /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/for_zac
-mkdir FUSION.YFS
-cd FUSION.YFS
+***
 
-cp /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/FUSION/YFS.BLOOD.RNAARR.pos ./
-cp -r /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/FUSION/YFS.BLOOD.RNAARR ./
+#### Extract HapMap3 SNPs and insert RSIDs
 
-# Copy eQTL-based .pos, .Rdat files, score files, and reference expression
-cd /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/for_zac
-mkdir eQTL.YFS
-cd eQTL.YFS
+Use GenoPred format_target.R for this.
 
-cp /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/YFS.eQTL.pos ./
-cp -r /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/YFS.eQTL ./
+<details><summary>Show code</summary>
 
-# Copy pigz binary
-cd /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/for_zac
-cp /users/k1806347/oliverpainfel/Software/pigz ./
+```{bash}
 
-# Copy plink binary
-cd /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/for_zac
-cp /users/k1806347/oliverpainfel/Software/plink1.9/plink ./
+cd /users/k1806347/oliverpainfel/Software/MyGit/GenoPred/pipeline
+conda activate .snakemake/conda/aea4ef260655c3bcc12fec8909f5f6dd_
 
-# Copy FeaturePred.V2.0.R
-cd /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/for_zac
-cp /users/k1806347/oliverpainfel/Software/MyGit/Predicting-TWAS-features/FeaturePred.V2.0.R ./
+for chr in $(seq 1 22); do
+  sbatch -p neurohack_cpu,cpu -t 20 --mem 10G --wrap="
+    Rscript ../Scripts/format_target/format_target.R \
+            --target /users/k1806347/oliverpainfel/Data/dbGAP/GTEx/processed/gtex_v8.snp.maf001.chr${chr} \
+            --format plink1 \
+            --ref resources/data/ref/ref.chr${chr} \
+            --output /users/k1806347/oliverpainfel/Data/dbGAP/GTEx/processed/gtex_v8.snp.maf001.hm3.chr${chr}
+    "
+done
 
-cd /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS
-tar -zcvf for_zac.tar.gz for_zac
-
-##########
-# Make a new folder containing updated YFS and eQTLGen TWAS weights
-##########
-
-mkdir -p /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/for_zac_26042022
-
-# Copy YFS eQTL-based .pos, .Rdat files, score files, and reference expression
-cd /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/for_zac_26042022
-mkdir eQTL.YFS
-cd eQTL.YFS
-
-cp /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/YFS.eQTL.pos ./
-cp -r /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/YFS.eQTL ./
-
-# Copy eQTL-Gen eQTL-based .pos, .Rdat files, score files, and reference expression
-cd /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/for_zac_26042022
-mkdir eQTL.eQTLGen
-cd eQTL.eQTLGen
-
-cp /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGen/eQTLGen.eQTL.pos ./
-cp -r /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGen/eQTLGen.eQTL ./
-
-cd /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS
-tar -zcvf for_zac_26042022.tar.gz for_zac_26042022
-
+# Convert the output files from plink2 to plink1 format
+for chr in $(seq 1 22); do
+  sbatch -p neurohack_cpu,cpu -t 20 --mem 10G --wrap="
+    /users/k1806347/oliverpainfel/Software/plink2 \
+      --pfile /users/k1806347/oliverpainfel/Data/dbGAP/GTEx/processed/gtex_v8.snp.maf001.hm3.chr${chr} \
+      --make-bed \
+      --threads 1 \
+      --out /users/k1806347/oliverpainfel/Data/dbGAP/GTEx/processed/gtex_v8.snp.maf001.hm3.chr${chr}
+    "
+done
 
 ```
 
@@ -2053,36 +2042,78 @@ tar -zcvf for_zac_26042022.tar.gz for_zac_26042022
 
 ***
 
-#### Prepare files for all genes
+#### Idenitify EUR
+
+```{bash}
+cd /users/k1806347/oliverpainfel/Software/MyGit/GenoPred/pipeline
+conda activate .snakemake/conda/aea4ef260655c3bcc12fec8909f5f6dd_
+
+Rscript ../Scripts/Ancestry_identifier/Ancestry_identifier.R \
+      --target_plink_chr /users/k1806347/oliverpainfel/Data/dbGAP/GTEx/processed/gtex_v8.snp.maf001.hm3.chr \
+      --ref_plink_chr resources/data/ref/ref.chr \
+      --output /users/k1806347/oliverpainfel/Data/dbGAP/GTEx/ancestry/gtex_v8.ancestry \
+      --pop_data resources/data/ref/ref.pop.txt \
+      --prob_thresh 0.95
+```
+
+***
+
+#### Predict expression levels
+
+***
+
+##### YFS FUSION
+
+<details><summary>Show code</summary>
+
+```{bash}
+mkdir -p /scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp
+conda activate feature_pred
+sbatch -p neurohack_cpu,cpu --mem 30G -n 5 -t 200 --wrap="
+  Rscript /users/k1806347/oliverpainfel/Software/MyGit/Predicting-TWAS-features/FeaturePred.V2.0.R \
+  	--PLINK_prefix_chr /users/k1806347/oliverpainfel/Data/dbGAP/GTEx/processed/gtex_v8.snp.maf001.hm3.chr \
+  	--ref_ld_chr /users/k1806347/oliverpainfel/Data/1KG/FUSION/1000G.EUR. \
+  	--ref_maf /users/k1806347/oliverpainfel/Data/1KG/FUSION/1000G.EUR. \
+  	--weights /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/FUSION/YFS.BLOOD.RNAARR.pos \
+  	--weights_dir /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/FUSION \
+  	--plink /users/k1806347/oliverpainfel/Software/plink1.9.sh \
+  	--n_cores 5 \
+  	--save_score T \
+  	--save_ref_expr T \
+  	--memory 10000 \
+  	--all_mod T \
+  	--pigz /users/k1806347/oliverpainfel/Software/pigz \
+  	--output /scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/YFS.BLOOD.RNAARR
+"
+```
+
+</details>
+
+***
+
+##### YFS eQTL models
 
 <details><summary>Show code</summary>
 
 ```{bash, eval=F, echo=T}
-mkdir -p /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/for_zac_160622
-cd /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/for_zac_160622
 
-# Copy eQTL-based .pos, .Rdat files, score files, and reference expression
-cd /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/for_zac_160622
-mkdir eQTL.YFS
-cd eQTL.YFS
-
-cp /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFSall/YFS.eQTL.pos ./
-cp -r /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFSall/YFS.eQTL ./
-
-rm YFS.eQTL/*.done
-
-# Copy eQTL-Gen eQTL-based .pos, .Rdat files, score files, and reference expression
-cd /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/for_zac_160622
-mkdir eQTL.eQTLGen
-cd eQTL.eQTLGen
-
-cp /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGenall/eQTLGen.eQTL.pos ./
-cp -r /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGenall/eQTLGen.eQTL ./
-
-rm eQTLGen.eQTL/*.done
-
-cd /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS
-tar -zcvf for_zac_160622.tar.gz for_zac_160622
+conda activate feature_pred
+sbatch -p neurohack_cpu,cpu --mem 30G -n 5 -t 200 --wrap="
+  Rscript /users/k1806347/oliverpainfel/Software/MyGit/Predicting-TWAS-features/FeaturePred.V2.0.R \
+  	--PLINK_prefix_chr /users/k1806347/oliverpainfel/Data/dbGAP/GTEx/processed/gtex_v8.snp.maf001.hm3.chr \
+  	--ref_ld_chr /users/k1806347/oliverpainfel/Data/1KG/FUSION/1000G.EUR. \
+  	--ref_maf /users/k1806347/oliverpainfel/Data/1KG/FUSION/1000G.EUR. \
+  	--weights /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/eQTL/YFS.eQTL.pos \
+  	--weights_dir /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/eQTL \
+  	--plink /users/k1806347/oliverpainfel/Software/plink1.9.sh \
+  	--n_cores 5 \
+  	--save_score T \
+  	--save_ref_expr T \
+  	--memory 10000 \
+  	--all_mod T \
+  	--pigz /users/k1806347/oliverpainfel/Software/pigz \
+  	--output /scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/YFS.eQTL
+"
 
 ```
 
@@ -2090,126 +2121,29 @@ tar -zcvf for_zac_160622.tar.gz for_zac_160622
 
 ***
 
-#### Prepare files for all genes (update 300722)
-
-<details><summary>Show code</summary>
-
-```{bash, eval=F, echo=T}
-mkdir -p /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/for_zac_300722
-cd /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/for_zac_300722
-
-# Copy eQTL-based .pos, .Rdat files, score files, and reference expression
-cd /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/for_zac_300722
-mkdir eQTL.YFS
-cd eQTL.YFS
-
-cp /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFSall_300722/YFS.eQTL.pos ./
-cp -r /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFSall_300722/YFS.eQTL ./
-
-rm YFS.eQTL/*.done
-
-# Copy eQTL-Gen eQTL-based .pos, .Rdat files, score files, and reference expression
-cd /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/for_zac_300722
-mkdir eQTL.eQTLGen
-cd eQTL.eQTLGen
-
-cp /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGenall_300722/eQTLGen.eQTL.pos ./
-cp -r /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGenall_300722/eQTLGen.eQTL ./
-
-rm eQTLGen.eQTL/*.done
-
-cd /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS
-tar -zcvf for_zac_300722.tar.gz for_zac_300722
-
-```
-
-</details>
-
-***
-
-#### Prepare files for SuSiE test
-
-<details><summary>Show code</summary>
-
-```{bash, eval=F, echo=T}
-mkdir -p /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/for_zac_300922
-cd /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/for_zac_300922
-
-# Copy eQTL-based .pos, .Rdat files, score files, and reference expression
-cd /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/for_zac_300922
-mkdir eQTL.YFS
-cd eQTL.YFS
-
-cp /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFSall_SuSiE/YFS.eQTL.pos ./
-cp -r /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFSall_SuSiE/YFS.eQTL ./
-
-rm YFS.eQTL/*.done
-
-# Copy eQTL-Gen eQTL-based .pos, .Rdat files, score files, and reference expression
-cd /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/for_zac_300922
-mkdir eQTL.eQTLGen
-cd eQTL.eQTLGen
-
-cp /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGenall_SuSiE/eQTLGen.eQTL.pos ./
-cp -r /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGenall_SuSiE/eQTLGen.eQTL ./
-
-rm eQTLGen.eQTL/*.done
-
-cd /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS
-tar -zcvf for_zac_300922.tar.gz for_zac_300922
-
-```
-
-</details>
-
-***
-
-#### FUSION YFS models
-
-<details><summary>Show code</summary>
-
-```{bash, eval=F, echo=T}
-cd /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/for_zac
-
-Rscript FeaturePred.V2.0.R \
-	--PLINK_prefix_chr LDREF/1000G.EUR. \
-	--weights FUSION.YFS/YFS.BLOOD.RNAARR.pos \
-	--weights_dir FUSION.YFS \
-	--ref_ld_chr LDREF/1000G.EUR. \
-	--plink ./plink \
-	--n_cores 1 \
-	--memory 10000 \
-	--all_mod T \
-	--pigz ./pigz \
-	--ref_maf LDREF/1000G.EUR. \
-	--output test/FUSION.YFS
-
-```
-
-</details>
-
-***
-
-#### YFS eQTL-based models
+##### eQTLGen (excl. GTEx v8)
 
 <details><summary>Show code</summary>
 
 ```{bash, eval=F, echo=T}
 
-cd /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/for_zac
-
-/users/k1806347/oliverpainfel/Software/Rscript.sh FeaturePred.V2.0.nodel2.R \
-	--PLINK_prefix_chr LDREF/1000G.EUR. \
-	--weights eQTL.YFS/YFS.eQTL.pos \
-	--weights_dir eQTL.YFS \
-	--ref_ld_chr LDREF/1000G.EUR. \
-	--plink ./plink \
-	--n_cores 1 \
-	--memory 10000 \
-	--all_mod T \
-	--pigz ./pigz \
-	--ref_maf LDREF/1000G.EUR. \
-	--output test/eQTL.YFS
+conda activate feature_pred
+sbatch -p neurohack_cpu,cpu --mem 30G -n 5 -t 200 --wrap="
+  Rscript /users/k1806347/oliverpainfel/Software/MyGit/Predicting-TWAS-features/FeaturePred.V2.0.R \
+  	--PLINK_prefix_chr /users/k1806347/oliverpainfel/Data/dbGAP/GTEx/processed/gtex_v8.snp.maf001.hm3.chr \
+  	--ref_ld_chr /users/k1806347/oliverpainfel/Data/1KG/FUSION/1000G.EUR. \
+  	--ref_maf /users/k1806347/oliverpainfel/Data/1KG/FUSION/1000G.EUR. \
+  	--weights /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGen/weights/eQTLGen.eQTL.pos \
+  	--weights_dir /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGen/weights \
+  	--plink /users/k1806347/oliverpainfel/Software/plink1.9.sh \
+  	--n_cores 5 \
+  	--save_score T \
+  	--save_ref_expr T \
+  	--memory 10000 \
+  	--all_mod T \
+  	--pigz /users/k1806347/oliverpainfel/Software/pigz \
+  	--output /scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/eQTLGen
+"
 
 ```
 
@@ -2218,8 +2152,6 @@ cd /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/for_zac
 ***
 
 ### Compare predicted and observed expression in GTEx v8
-
-Zac now sends me the predicted expression data for GTEx v8 so I can compare predicted and observed expression. Observed expression in GTEx is publicly available. 
 
 Here I am reading in observed and predicted expression values, testing their correlation, and then summarising the results across gene expression imputation methods. I am using the processed and normalised observed expression in GTEx. First I covary observed expression for covariates used in the original eQTL analysis by GTEx.
 
@@ -2230,10 +2162,18 @@ Here I am reading in observed and predicted expression values, testing their cor
 <details><summary>Show code</summary>
 
 ```{r, eval=F, echo=T}
+#conda activate eqtl_to_twas
+
 library(data.table)
 
 # Read in the observed expression
 obs<-fread('/users/k1806347/oliverpainfel/Data/GTeX/v8/GTEx_Analysis_v8_eQTL_expression_matrices/Whole_Blood.v8.normalized_expression.bed.gz')
+
+# Restrict the data to EUR
+# Use threshold of 0.9, as it returns number similar to original GTEx paper
+pop_prep<-fread('/users/k1806347/oliverpainfel/Data/dbGAP/GTEx/ancestry/gtex_v8.ancestry.model_pred', header=T)
+pop_prep_eur<-pop_prep[pop_prep$EUR > 0.9]
+obs<-obs[,names(obs) %in% c(names(obs)[1:4], pop_prep_eur$FID), with=F]
 
 # Insert external_gene_name
 obs<-obs[,-1:-3]
@@ -2241,6 +2181,8 @@ obs$gene_id<-gsub('\\..*','',obs$gene_id)
 
 library(biomaRt)
 ensembl = useEnsembl(biomart="ensembl", dataset="hsapiens_gene_ensembl", GRCh=37)
+ensembl <- useEnsembl(biomart="ensembl", dataset="hsapiens_gene_ensembl", GRCh=37 , host="useast.ensembl.org")
+
 Genes<-getBM(attributes=c('ensembl_gene_id_version','external_gene_name'), mart = ensembl)
 Genes$ensembl_gene_id_version<-gsub('\\..*','',Genes$ensembl_gene_id_version)
 
@@ -2269,10 +2211,11 @@ obs<-obs[,!duplicated(names(obs)),with=F]
 obs_covs<-merge(obs, covs, by='ID')
 
 # Read in predicted expression
-eqtl<-fread('/users/k1806347/oliverpainfel/Data/GTeX/v8/Zac/030822/FeaturePredictions_YFS.eQTL.txt.gz')
+eqtl<-fread('/scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/YFS.eQTL/FeaturePredictions_YFS.eQTL.txt.gz')
+
 names(eqtl)<-gsub('.RDat','',gsub('YFS.','', names(eqtl)))
 
-fusion<-fread('/users/k1806347/oliverpainfel/Data/GTeX/v8/Zac/FUSION.YFS/FeaturePredictions_YFS.BLOOD.RNAARR.txt.gz')
+fusion<-fread('/scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/YFS.BLOOD.RNAARR/FeaturePredictions_YFS.BLOOD.RNAARR.txt.gz')
 names(fusion)<-gsub('YFS.BLOOD.RNAARR.YFS.','fusion.', names(fusion))
 
 # Identify genes available in fusion and eqtl based models
@@ -2281,6 +2224,7 @@ eqtl_genes<-unique(gsub('\\..*','',gsub('eQTL.','',names(eqtl)[-1:-2])))
 fusion_genes<-unique(gsub('\\..*','',gsub('fusion.','',names(fusion)[-1:-2])))
 both_genes<-intersect(obs_genes, eqtl_genes)
 both_genes<-intersect(both_genes, fusion_genes)
+both_genes<-both_genes[1:500]
 
 # Residualise the covariates
 obs_resid<-data.frame(ID=obs_covs$ID, stringsAsFactors=F)
@@ -2312,7 +2256,7 @@ for(i in both_genes){
   cor_res[[i]]<-cor(both_exp_tmp[,-1:-2,with=F], use='p')
 }
 
-saveRDS(cor_res, '/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_YFS_full.RDS')
+saveRDS(cor_res, '/scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/pred_obs_cor_YFS_full.RDS')
 
 # melt and combine all the results
 cor_res_melt<-reshape2::melt(cor_res)
@@ -2320,11 +2264,11 @@ cor_res_melt_obs<-cor_res_melt[cor_res_melt$Var1 == 'obs',]
 cor_res_melt_obs<-cor_res_melt_obs[cor_res_melt_obs$Var1 != cor_res_melt_obs$Var2,]
 cor_res_melt_obs$test<-paste0(cor_res_melt_obs$Var1,'_',cor_res_melt_obs$Var2)
 
-fwrite(cor_res_melt, '/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_YFS_full.txt', quote=F, sep=' ', na='NA')
-write.table(cor_res_melt_obs, '/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_YFS.txt', row.names=F, quote=F)
+fwrite(cor_res_melt, '/scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/pred_obs_cor_YFS_full.txt', quote=F, sep=' ', na='NA')
+write.table(cor_res_melt_obs, '/scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/pred_obs_cor_YFS.txt', row.names=F, quote=F)
 
-# cor_res_melt<-fread('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_YFS_full.txt')
-# cor_res_melt_obs<-fread('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_YFS.txt')
+# cor_res_melt<-fread('/scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/pred_obs_cor_YFS_full.txt')
+# cor_res_melt_obs<-fread('/scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/pred_obs_cor_YFS.txt')
 
 cor_res_average<-NULL
 for(i in unique(cor_res_melt_obs$test)){
@@ -2333,7 +2277,7 @@ for(i in unique(cor_res_melt_obs$test)){
 }
 
 library(ggplot2)
-bitmap('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_boxplot.png', units='px', width=1500, height=1000, res=300)
+bitmap('/scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/pred_obs_cor_boxplot.png', units='px', width=1500, height=1000, res=300)
 ggplot(cor_res_melt_obs, aes(x=paste0(Var1,' vs. ',Var2), y=value)) +
   geom_boxplot() +
   labs(x='Test', y='Correlation') +
@@ -2365,7 +2309,7 @@ diagfun <- function(data,mapping){
     xlim(c(min(cor_res_melt_obs$value),max(cor_res_melt_obs$value)))
 }  
 
-bitmap('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_pairsplot.png', units='px', width=5000, height=5000, res=300)
+bitmap('/scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/pred_obs_cor_pairsplot.png', units='px', width=5000, height=5000, res=300)
 ggpairs(cor_res_melt_obs_unmelt[,-1], lower = list(continuous = wrap(lowerfun)), diag = list(continuous = wrap(diagfun)))
 dev.off()
 
@@ -2423,7 +2367,7 @@ for(i in n_valid$Method){
 
 n_valid$Prop_top_top1<-n_valid$N_top_top1/sum(n_valid$N_top_top1)
 
-write.csv(n_valid, '/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8_pred_exp/n_valid.csv', row.names=F)
+write.csv(n_valid, '/scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/n_valid.csv', row.names=F)
 
 # Read in reported R2 by weights
 yfs.profile<-fread('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/FUSION/YFS.BLOOD.RNAARR.profile')
@@ -2479,7 +2423,7 @@ for(i in unique(cor_res_melt_eqtl_i_obs_diff_all$z)){
 cor_res_melt_eqtl_i_obs_diff_all_count_tab<-Reduce(function(dtf1, dtf2) merge(dtf1, dtf2, by = "Ref", all.x = TRUE),
         cor_res_melt_eqtl_i_obs_diff_all_count)
 
-fwrite(cor_res_melt_eqtl_i_obs_diff_all_count_tab, '/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8_pred_exp/yfs_method_better_than_other.csv', quote=T, na='NA')
+fwrite(cor_res_melt_eqtl_i_obs_diff_all_count_tab, '/scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/yfs_method_better_than_other.csv', quote=T, na='NA')
 
 # Count the number of times a z does better than all other models for a given gene
 cor_res_melt_eqtl_i_obs_diff_all_eqtl<-cor_res_melt_eqtl_i_obs_diff_all[grepl('eQTL',cor_res_melt_eqtl_i_obs_diff_all$z) & grepl('eQTL',cor_res_melt_eqtl_i_obs_diff_all$y),]
@@ -2502,7 +2446,7 @@ for(i in unique(cor_res_melt_eqtl_i_obs_diff_all_eqtl$z)){
   cor_res_melt_eqtl_i_obs_diff_all_sig_best<-rbind(cor_res_melt_eqtl_i_obs_diff_all_sig_best, tmp_count)
 }
 
-fwrite(cor_res_melt_eqtl_i_obs_diff_all_sig_best, '/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8_pred_exp/yfs_method_better_than_all.csv', quote=T, na='NA')
+fwrite(cor_res_melt_eqtl_i_obs_diff_all_sig_best, '/scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/yfs_method_better_than_all.csv', quote=T, na='NA')
 
 # Count the number of times the top1 model is significantly worse
 cor_res_melt_eqtl_i_obs_diff_all_eqtl<-cor_res_melt_eqtl_i_obs_diff_all[grepl('eQTL',cor_res_melt_eqtl_i_obs_diff_all$z) & grepl('eQTL',cor_res_melt_eqtl_i_obs_diff_all$y),]
@@ -2525,7 +2469,7 @@ for(i in 'eQTL.top1'){
   cor_res_melt_eqtl_i_obs_diff_all_sig_eqtl_worse<-rbind(cor_res_melt_eqtl_i_obs_diff_all_sig_eqtl_worse, tmp_count)
 }
 
-fwrite(cor_res_melt_eqtl_i_obs_diff_all_sig_eqtl_worse, '/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8_pred_exp/yfs_eqtl_worst_than_best.csv', quote=T, na='NA')
+fwrite(cor_res_melt_eqtl_i_obs_diff_all_sig_eqtl_worse, '/scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/yfs_eqtl_worst_than_best.csv', quote=T, na='NA')
 
 ```
 
@@ -2533,12 +2477,12 @@ fwrite(cor_res_melt_eqtl_i_obs_diff_all_sig_eqtl_worse, '/users/k1806347/oliverp
 
 <details><summary>Show correlation between observed and predicted expression</summary>
 
-![](/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_boxplot.png)
+![](/scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/pred_obs_cor_boxplot.png)
 
-![](/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_pairsplot.png)
+![](/scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/pred_obs_cor_pairsplot.png)
 
 ```{r, eval=T, echo=F}
-n_valid<-fread('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8_pred_exp/n_valid.csv')
+n_valid<-fread('/scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/n_valid.csv')
 kable(n_valid, rownames = FALSE)
 
 ```
@@ -2558,6 +2502,12 @@ library(data.table)
 
 # Read in the observed expression
 obs<-fread('/users/k1806347/oliverpainfel/Data/GTeX/v8/GTEx_Analysis_v8_eQTL_expression_matrices/Whole_Blood.v8.normalized_expression.bed.gz')
+
+# Restrict the data to EUR
+# Use threshold of 0.9, as it returns number (714) similar to original GTEx paper
+pop_prep<-fread('/users/k1806347/oliverpainfel/Data/dbGAP/GTEx/ancestry/gtex_v8.ancestry.model_pred', header=T)
+pop_prep_eur<-pop_prep[pop_prep$EUR > 0.9]
+obs<-obs[,names(obs) %in% c(names(obs)[1:4], pop_prep_eur$FID), with=F]
 
 # Insert external_gene_name
 obs<-obs[,-1:-3]
@@ -2586,7 +2536,7 @@ obs<-obs[,!duplicated(names(obs)),with=F]
 obs_covs<-merge(obs, covs, by='ID')
 
 # Read in predicted expression
-eqtl<-fread('/users/k1806347/oliverpainfel/Data/GTeX/v8/Zac/030822/FeaturePredictions_eQTLGen.eQTL.txt.gz')
+eqtl<-fread('/scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/eQTLGen/FeaturePredictions_eQTLGen.eQTL.txt.gz')
 names(eqtl)<-gsub('.RDat','',gsub('eQTLGen.','', names(eqtl)))
 
 # Identify genes available in fusion and eqtl based models
@@ -2626,13 +2576,12 @@ cor_res_melt_obs<-cor_res_melt[cor_res_melt$Var1 == 'obs',]
 cor_res_melt_obs<-cor_res_melt_obs[cor_res_melt_obs$Var1 != cor_res_melt_obs$Var2,]
 cor_res_melt_obs$test<-paste0(cor_res_melt_obs$Var1,'_',cor_res_melt_obs$Var2)
 
-fwrite(cor_res_melt, '/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_full.txt', sep=' ', quote=F, na='NA')
+fwrite(cor_res_melt, '/scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/pred_obs_cor_full.txt', sep=' ', quote=F, na='NA')
 
-write.table(cor_res_melt_obs, '/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor.txt', row.names=F, quote=F)
+write.table(cor_res_melt_obs, '/scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/pred_obs_cor.txt', row.names=F, quote=F)
 
-# cor_res_melt<-fread('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_full.txt')
-# cor_res_melt_obs<-fread('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor.txt')
-
+# cor_res_melt<-fread('/scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/pred_obs_cor_full.txt')
+# cor_res_melt_obs<-fread('/scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/pred_obs_cor.txt')
 
 cor_res_average<-NULL
 for(i in unique(cor_res_melt_obs$test)){
@@ -2642,7 +2591,7 @@ for(i in unique(cor_res_melt_obs$test)){
 }
 
 library(ggplot2)
-bitmap('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_boxplot_eQTLGen.png', units='px', width=1500, height=1000, res=300)
+bitmap('/scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/pred_obs_cor_boxplot_eQTLGen.png', units='px', width=1500, height=1000, res=300)
 ggplot(cor_res_melt_obs, aes(x=paste0(Var1,' vs. ',Var2), y=value)) +
   geom_boxplot() +
   labs(x='Test', y='Correlation') +
@@ -2675,7 +2624,7 @@ diagfun <- function(data,mapping){
     xlim(c(min(cor_res_melt_obs$value),max(cor_res_melt_obs$value)))
 }  
 
-bitmap('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_pairsplot_eQTLGen.png', units='px', width=3000, height=3000, res=300)
+bitmap('/scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/pred_obs_cor_pairsplot_eQTLGen.png', units='px', width=3000, height=3000, res=300)
 ggpairs(cor_res_melt_obs_unmelt[,-1], lower = list(continuous = wrap(lowerfun)), diag = list(continuous = wrap(diagfun)))
 dev.off()
 
@@ -2703,7 +2652,7 @@ for(i in n_valid$Method){
 
 n_valid$Prop_top<-n_valid$N_top/sum(n_valid$N_top)
 
-write.csv(n_valid, '/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8_pred_exp/n_valid_eQTLGen.csv', row.names=F)
+write.csv(n_valid, '/scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/n_valid_eQTLGen.csv', row.names=F)
 
 ################
 # Report the number of times each method does significantly better than the next best method across genes
@@ -2753,7 +2702,7 @@ for(i in unique(cor_res_melt_i_obs_diff_all$z)){
 cor_res_melt_i_obs_diff_all_count_tab<-Reduce(function(dtf1, dtf2) merge(dtf1, dtf2, by = "Ref", all.x = TRUE),
         cor_res_melt_i_obs_diff_all_count)
 
-fwrite(cor_res_melt_i_obs_diff_all_count_tab, '/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8_pred_exp/eqtlgen_method_better_than_other.csv', quote=T, na='NA')
+fwrite(cor_res_melt_i_obs_diff_all_count_tab, '/scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/eqtlgen_method_better_than_other.csv', quote=T, na='NA')
 
 # Count the number of times a z does better than all other models for a given gene
 cor_res_melt_i_obs_diff_all_eqtl<-cor_res_melt_i_obs_diff_all[grepl('eQTL',cor_res_melt_i_obs_diff_all$z) & grepl('eQTL',cor_res_melt_i_obs_diff_all$y),]
@@ -2776,7 +2725,7 @@ for(i in unique(cor_res_melt_i_obs_diff_all_eqtl$z)){
   cor_res_melt_i_obs_diff_all_sig_best<-rbind(cor_res_melt_i_obs_diff_all_sig_best, tmp_count)
 }
 
-fwrite(cor_res_melt_i_obs_diff_all_sig_best, '/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8_pred_exp/eqtlgen_method_better_than_all.csv', quote=T, na='NA')
+fwrite(cor_res_melt_i_obs_diff_all_sig_best, '/scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/eqtlgen_method_better_than_all.csv', quote=T, na='NA')
 
 # Count the number of times the top1 model is significantly worse
 cor_res_melt_i_obs_diff_all_eqtl<-cor_res_melt_i_obs_diff_all[grepl('eQTL',cor_res_melt_i_obs_diff_all$z) & grepl('eQTL',cor_res_melt_i_obs_diff_all$y),]
@@ -2799,7 +2748,7 @@ for(i in 'eQTL.top1'){
   cor_res_melt_i_obs_diff_all_sig_eqtl_worse<-rbind(cor_res_melt_i_obs_diff_all_sig_eqtl_worse, tmp_count)
 }
 
-fwrite(cor_res_melt_i_obs_diff_all_sig_eqtl_worse, '/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8_pred_exp/eqtlgen_eqtl_worst_than_best.csv', quote=T, na='NA')
+fwrite(cor_res_melt_i_obs_diff_all_sig_eqtl_worse, '/scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/eqtlgen_eqtl_worst_than_best.csv', quote=T, na='NA')
 
 ```
 
@@ -2807,12 +2756,12 @@ fwrite(cor_res_melt_i_obs_diff_all_sig_eqtl_worse, '/users/k1806347/oliverpainfe
 
 <details><summary>Show correlation between observed and predicted expression</summary>
 
-![](/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_boxplot_eQTLGen.png)
+![](/scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/pred_obs_cor_boxplot_eQTLGen.png)
 
-![](/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_pairsplot_eQTLGen.png)
+![](/scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/pred_obs_cor_pairsplot_eQTLGen.png)
 
 ```{r, eval=T, echo=F}
-n_valid<-fread('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8_pred_exp/n_valid_eQTLGen.csv')
+n_valid<-fread('/scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/n_valid_eQTLGen.csv')
 kable(n_valid, rownames = FALSE)
 
 ```
@@ -2830,8 +2779,8 @@ The predicted-observed correlation is looking better here, with 87% of genes ach
 library(data.table)
 
 # Read in pred_obs_cor for YFS and eQTLGen
-eqtlgen<-fread('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor.txt')
-yfs<-fread('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_YFS.txt')
+eqtlgen<-fread('/scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/pred_obs_cor.txt')
+yfs<-fread('/scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/pred_obs_cor_YFS.txt')
 
 # Subset YFS models from fusion
 yfs<-yfs[grepl('fusion',yfs$Var2),]
@@ -2880,7 +2829,7 @@ cor.test(x=both_best_melt$R, y=as.numeric(both_best_melt$Sample), method="spearm
 library(ggplot2)
 library(cowplot)
 
-png('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_eQTLGen_YFS_comp.png', units='px', width=1500, height=1500, res=300)
+png('/scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/pred_obs_cor_eQTLGen_YFS_comp.png', units='px', width=1500, height=1500, res=300)
 
 ggplot(both_best, aes(x=value.x, y=value.y)) +
   geom_point() +
@@ -2904,7 +2853,7 @@ eqtlgen_subset$YFS<-T
 
 eqtlgen_comp_plot<-rbind(eqtlgen_not_in_yfs, eqtlgen_subset)
 
-png('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8_pred_exp/present_in_YFS_hist.png', units='px', width=1500, height=1000, res=300)
+png('/scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/present_in_YFS_hist.png', units='px', width=1500, height=1000, res=300)
 
 ggplot(eqtlgen_comp_plot, aes(x=value, fill=YFS, colour=YFS)) +
   geom_histogram(position="identity", alpha=0.5) +
@@ -2930,7 +2879,7 @@ nrow(fastbat_res_sig) # 16540
 
 eqtlgen_comp_plot_mbat<-eqtlgen_comp_plot[eqtlgen_comp_plot$L1 %in% fastbat_res_sig$external_gene_name,]
 
-png('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8_pred_exp/present_in_YFS_hist_sigsig.png', units='px', width=1500, height=1000, res=300)
+png('/scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/present_in_YFS_hist_sigsig.png', units='px', width=1500, height=1000, res=300)
 
 ggplot(eqtlgen_comp_plot_mbat, aes(x=value, fill=YFS, colour=YFS)) +
   geom_histogram(position="identity", alpha=0.5) +
@@ -2946,9 +2895,9 @@ dev.off()
 
 <details><summary>Show eQTLGen and FUSION YFS comparison</summary>
 
-![](/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor_eQTLGen_YFS_comp.png)
+![](/scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/pred_obs_cor_eQTLGen_YFS_comp.png)
 
-![](/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8_pred_exp/present_in_YFS_hist.png)
+![](/scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/present_in_YFS_hist.png)
 
 </details>
 
@@ -3184,7 +3133,7 @@ pseudo_comp<-merge(pseudo_res, pseudo_res_2, by=c('ID','Model'))
 # New ad old pseudoval scripts correlate perfectly.
 
 # Read in the correlation between predicted and observed expression in GTEx v8.
-cor_res_melt_obs<-fread('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8_pred_exp/pred_obs_cor.txt')
+cor_res_melt_obs<-fread('/scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/pred_obs_cor.txt')
 
 cor_res_melt_obs<-cor_res_melt_obs[,c('L1','Var2','value'),with=F]
 names(cor_res_melt_obs)<-c('ID','Model','R')
@@ -3782,49 +3731,62 @@ fwrite(annot, '/users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen/annot.txt', sep
 
 ```{bash}
 # Download and format the GWAS sumstats
-cd /users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen
-wget https://ftp.ebi.ac.uk/pub/databases/gwas/summary_statistics/GCST90029001-GCST90030000/GCST90029019/GCST90029019_buildGRCh37.tsv
+# The sumstats were downloaded using gsutils from the Akes Price google cloud: gs://broad-alkesgroup-public-requester-pays/UKBB/disease_CARDIOVASCULAR.sumstats.gz
 ```
 
 ```{r}
+# Liftover to GRCh38
 library(data.table)
-library(GenoUtils)
-ss<-fread('/users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen/GCST90029019_buildGRCh37.tsv')
-ss<-ss[, c('chromosome','base_pair_location','effect_allele','other_allele','beta','standard_error'), with=F]
-names(ss)<-c('CHROM','POS','A1','A2','BETA','SE')
 
-ss_matched<-NULL
-target_build<-'GRCh38'
-for(i in 1:22){
-  ss_i<-ss[ss$CHROM == i,]
-  ref_i<-readRDS(paste0('/users/k1806347/oliverpainfel/Software/MyGit/GenoDisc/pipeline/resources/data/1kg/1KG.Phase3.EUR.MAF_001.chr',i,'.rds'))
-  names(ref_i)<-paste0('REF.',names(ref_i))
-  ss_i$IUPAC<-snp_iupac(ss_i$A1, ss_i$A2)
+ss<-fread('/users/k1806347/oliverpainfel/Data/OTTERS/gwas_sumstats/disease_CARDIOVASCULAR.sumstats.gz')
 
-  # Merge target and reference by BP
-  ref_target<-merge(ss_i, ref_i, by.x='POS', by.y='REF.BP_GRCh37')
-  
-  # Identify targ-ref strand flips, and flip target
-  flip_logical<-detect_strand_flip(targ = ref_target$IUPAC, ref = ref_target$REF.IUPAC)
+# Calculate Z from P value using sign of BETA
+ss$Z<-sign(ss$Beta)*qnorm(ss$P / 2, lower.tail=F)
 
-  flipped<-ref_target[flip_logical,]
-  flipped$A1<-snp_allele_comp(flipped$A1)
-  flipped$A2<-snp_allele_comp(flipped$A2)      
-  flipped$IUPAC<-snp_iupac(flipped$A1, flipped$A2)
-  
-  # Identify SNPs that have matched IUPAC
-  matched<-ref_target[ref_target$IUPAC == ref_target$REF.IUPAC,]
-  matched<-rbind(matched, flipped)
-  
-  matched<-matched[, c('CHROM','REF.BP_GRCh38','A1','A2','BETA','SE'), with=F]
-  names(matched)<-c('CHROM','POS','A1','A2','BETA','SE')
-  ss_matched<-rbind(ss_matched, matched)
+ss<-ss[, c('CHR','POS','A1','A2','Z'), with=F]
+names(ss)<-c('chr','pos','A1','A2','Z')
+
+# Create snp_modifyBuild_offline
+make_executable <- function(exe) {
+  Sys.chmod(exe, mode = (file.info(exe)$mode | "111"))
 }
 
-ss_matched$Zscore<-ss_matched$BETA/ss_matched$SE
-ss_matched<-ss_matched[, c('CHROM','POS','A1','A2','Zscore'), with=F]
-ss_matched<-ss_matched[complete.cases(ss_matched),]
-fwrite(ss_matched, '/users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen/GCST90029019_buildGRCh38.reformat.tsv', quote=F, sep='\t', na='NA')
+snp_modifyBuild_offline<-function (info_snp, liftOver, chain, from = "hg18", to = "hg19"){
+  tmp_folder<-tempdir()
+
+  if (!all(c("chr", "pos") %in% names(info_snp)))
+    stop2("Please use proper names for variables in 'info_snp'. Expected %s.",
+          "'chr' and 'pos'")
+  liftOver <- normalizePath(liftOver)
+  make_executable(liftOver)
+  BED <- tempfile(fileext = ".BED")
+  info_BED <- with(info_snp, data.frame(paste0("chr", chr),
+                                        pos0 = pos - 1L, pos, id = seq_len(nrow(info_snp))))
+  fwrite(info_BED, BED, col.names = FALSE, sep = " ")
+  lifted<-paste0(tmp_folder,'/tmp.lifted')
+  unmapped<-paste0(tmp_folder,'/tmp.unmapped')
+  system(paste(liftOver, BED, chain, lifted, unmapped))
+  new_pos <- fread(lifted)
+  bad <- grep("^#", readLines(unmapped), value = TRUE, invert = TRUE)
+  print(paste0(length(bad)," variants have not been mapped."))
+  info_snp$pos <- NA
+  info_snp$pos[new_pos$V4] <- new_pos$V3
+  info_snp
+}
+
+ss<-snp_modifyBuild_offline(
+  info_snp=ss,
+  liftOver='/users/k1806347/oliverpainfel/Software/liftOver',
+  chain = '/users/k1806347/oliverpainfel/Software/MyGit/GenoDisc/pipeline/resources/data/liftover/hg19ToHg38.over.chain.gz',
+  from = "hg19",
+  to = "hg38"
+)
+
+names(ss)<-c('CHROM','POS','A1','A2','Zscore')
+ss<-ss[, c('CHROM','POS','A1','A2','Zscore'), with=F]
+ss<-ss[complete.cases(ss),]
+
+fwrite(ss, '/users/k1806347/oliverpainfel/Data/OTTERS/gwas_sumstats/disease_CARDIOVASCULAR_buildGRCh38.reformat.sumstats.tsv', quote=F, sep='\t', na='NA')
 ```
 
 ```{bash}
@@ -3859,7 +3821,7 @@ for(i in 1:22){
 
 ***
 
-### Run OTTERS
+### Run OTTERS using 1KG ref
 
 ```{bash}
 conda activate otters
@@ -3876,10 +3838,11 @@ exp_anno=/users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen/annot.txt
 
 # Input for OTTERS STAGE II
 # GWAS summary statistics 
-gwas_sst_file=/users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen/GCST90029019_buildGRCh38.reformat.tsv
+gwas_sst_file=/users/k1806347/oliverpainfel/Data/OTTERS/gwas_sumstats/disease_CARDIOVASCULAR_buildGRCh38.reformat.sumstats.tsv
 
-for model in $(echo P0.001 P0.05 lassosum SDPR PRScs); do
-for chr in $(seq 1 21); do
+#for model in $(echo P0.001 P0.05 lassosum SDPR PRScs); do
+for model in $(echo P0.001); do
+for chr in $(seq 22 22); do
   sbatch -p neurohack_cpu,cpu -t120 --mem 10G --wrap="
 
 # make sure the dynamic libraries of SDPR are not changed (For SDPR)
@@ -3913,14 +3876,74 @@ done
 
 ***
 
+### Run OTTERS using GTEx v8 ref
+
+```{bash}
+conda activate otters
+# set number of threads to be used
+N_THREADS=1
+
+# set up my OTTERS directory and SDPR directory
+OTTERS_DIR=/users/k1806347/oliverpainfel/Software/OTTERS
+SDPR_DIR=/users/k1806347/oliverpainfel/Software/bin/SDPR
+
+# Input for OTTERS STAGE I 
+# Annotation File 
+exp_anno=/users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen/annot.txt
+
+# Input for OTTERS STAGE II
+# GWAS summary statistics 
+gwas_sst_file=/users/k1806347/oliverpainfel/Data/OTTERS/gwas_sumstats/disease_CARDIOVASCULAR_buildGRCh38.reformat.sumstats.tsv
+
+#for model in $(echo P0.001 P0.05 lassosum SDPR PRScs); do
+for model in $(echo P0.001); do
+for chr in $(seq 22 22); do
+  sbatch -p neurohack_cpu,cpu -t120 --mem 10G --wrap="
+
+# make sure the dynamic libraries of SDPR are not changed (For SDPR)
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${SDPR_DIR}/MKL/lib
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${SDPR_DIR}/gsl/lib
+export PATH=/users/k1806347/oliverpainfel/Software/bin:$PATH 
+
+# prevent automatically using  all available cores on a compute node (For SDPR and PRS-CS)
+export MKL_NUM_THREADS=$N_THREADS
+export NUMEXPR_NUM_THREADS=$N_THREADS
+export OMP_NUM_THREADS=$N_THREADS
+
+# STAGE II
+# gene-based association test using eQTL-weight trained from P+T, lassosum, SDPR and PRS-CS.
+mkdir -p /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/OTTERS/gtex_ref/chr${chr}/${model}
+python3 ${OTTERS_DIR}/testing.py \
+  --OTTERS_dir=${OTTERS_DIR} \
+  --weight_dir=/users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen \
+  --models=${model} \
+  --anno_dir=${exp_anno} \
+  --geno_dir=/users/k1806347/oliverpainfel/Data/dbGAP/GTEx/processed/gtex_v8.snp.maf001.chr${chr} \
+  --out_dir=/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/OTTERS/gtex_ref/chr${chr}/${model} \
+  --gwas_file=${gwas_sst_file} \
+  --chrom=${chr} \
+  --thread=$N_THREADS
+"
+done
+done
+
+```
+
+***
+
 ### Compare with original results
 
 ```{r}
 library(data.table)
+library(ACAT)
+
+#########
+# 1KG ref
+#########
 
 # Read in results
-res <- NULL
-for (j in c('P0.001', 'P0.05', 'lassosum', 'SDPR', 'PRScs')) {
+res_1kg <- NULL
+for (j in c('P0.001')) {
   for (i in 22:22) {
     tmp <- fread(
         paste0(
@@ -3936,51 +3959,95 @@ for (j in c('P0.001', 'P0.05', 'lassosum', 'SDPR', 'PRScs')) {
   }
   tmp$MODEL<-j
   tmp <- tmp[, c('TargetID', 'MODEL', 'FUSION_PVAL'), with = F]
-  res <- rbind(res, tmp)
+  res_1kg <- rbind(res_1kg, tmp)
 }
 
 # Perform ACAT.O analysis
-ACATO <- function(p){
-    if (all(is.na(p))) return(NA)
-    p <- p[!is.na(p)]
-    p[p == 1] <- 1 - 1e-16
-#### check if there are very small non-zero p values
-    is.small <- (p < 1e-16)
-    if (sum(is.small) == 0) {
-        cct.stat <- sum(tan((0.5 - p) * pi))/length(p)
-    } else {
-        cct.stat <- sum((1 / p[is.small]) / pi)
-        cct.stat <- cct.stat + sum(tan((0.5 - p[!is.small]) * pi))
-        cct.stat <- cct.stat/length(p)
-    }
-    #### check if the test statistic is very large.
-    if (cct.stat > 1e+15){
-        pval <- (1 / cct.stat) / pi
-    } else {
-        pval <- 1 - pcauchy(cct.stat)
-    }
-    pval
-}
-
-res_acat<-data.table(aggregate(res$FUSION_PVAL, list(res$TargetID), FUN=ACATO))
-names(res_acat)<-c('TargetID', 'OTTERS')
+res_1kg<-res_1kg[complete.cases(res_1kg),]
+res_1kg_acat<-data.table(aggregate(res_1kg$FUSION_PVAL, list(res_1kg$TargetID), FUN=ACAT))
+names(res_1kg_acat)<-c('TargetID', 'OTTERS')
 
 library(reshape2)
-res_wide <- dcast(res, TargetID ~ MODEL, value.var = "FUSION_PVAL")
-res_wide<-merge(res_wide, res_acat, by = 'TargetID')
+res_1kg_wide <- dcast(res_1kg, TargetID ~ MODEL, value.var = "FUSION_PVAL")
+res_1kg_wide<-merge(res_1kg_wide, res_1kg_acat, by = 'TargetID')
+
+write.csv(res_1kg_wide, '/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/OTTERS/rep_res_1kg.csv', row.names=F)
+
+#########
+# GTEx v8 ref
+#########
+
+# Create function performing genomic control
+genomic_control<-function(z){
+  Lambda = median(z^2, na.rm = T)/qchisq(0.5, df = 1)
+  P = pchisq(z^2/Lambda, df = 1, lower.tail = F)
+}
+
+# Read in results
+res_gtex <- NULL
+for (j in c('P0.001')) {
+  for (i in 22:22) {
+    tmp <- fread(
+        paste0(
+          '/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/OTTERS/gtex_ref/chr',
+          i,
+          '/',
+          j,
+          '/',
+          j,
+          '.txt'
+        )
+      )
+  }
+  tmp$MODEL<-j
+  tmp$FUSION_PVAL_GC<-genomic_control(tmp$FUSION_Z)
+  tmp <- tmp[, c('TargetID', 'MODEL', 'FUSION_Z', 'FUSION_PVAL','FUSION_PVAL_GC'), with = F]
+  res_gtex <- rbind(res_gtex, tmp)
+}
+
+# Perform ACAT.O analysis
+res_gtex<-res_gtex[complete.cases(res_gtex),]
+res_gtex_acat<-data.table(aggregate(res_gtex$FUSION_PVAL_GC, list(res_gtex$TargetID), FUN=ACAT))
+names(res_gtex_acat)<-c('TargetID', 'OTTERS')
+
+library(reshape2)
+res_gtex_wide <- dcast(res_gtex, TargetID ~ MODEL, value.var = "FUSION_PVAL_GC")
+res_gtex_wide<-merge(res_gtex_wide, res_gtex_acat, by = 'TargetID')
+
+write.csv(res_gtex_wide, '/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/OTTERS/rep_res_gtex.csv', row.names=F)
+
+###############
 
 # Read in original results
 orig<-fread('/users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen/OTTERS_TWAS_SumStat_CARDIOVASCULAR_UKBB.txt')
-orig<-orig[, names(res_wide), with=F]
-both<-merge(orig, res_wide, by='TargetID')
+
+orig<-orig[, names(res_gtex_wide), with=F]
+
+both<-Reduce(function(dtf1, dtf2) merge(dtf1, dtf2, by = "TargetID"), list(orig,res_1kg_wide,res_gtex_wide))
 
 # Convert to Z scores, and check correlations between each test
 both_z<-apply(both[,-1], 2, function(x) qnorm(x))
 cor(both_z, use='p')
-table(is.na(both_z))
+summary(both_z)
 
 # There are missing values in the original results which are not missing in the replication
 # For those that are present, the correlation is <1, probably due to missing SNPs and different LD reference.
+
+both_z<-data.table(both_z)
+both_z[order(both_z$OTTERS.x),]
+both_z[order(both_z$OTTERS.y),]
+
+# Check I can reproduce the original OTTERS p-value using the ACAT function
+orig_long<-melt(orig)
+names(orig_long)<-c('TargetID','MODEL','FUSION_PVAL')
+orig_long<-orig_long[orig_long$MODEL != 'OTTERS',]
+orig_long<-orig_long[complete.cases(orig_long),]
+orig_long_acat<-data.table(aggregate(orig_long$FUSION_PVAL, list(orig_long$TargetID), FUN=ACAT))
+names(orig_long_acat)<-c('TargetID', 'OTTERS')
+
+merge(orig_long_acat, orig[, c('TargetID','OTTERS'), with=F], by='TargetID')
+# Yes, the OTTERS p-value is identical, so the ACAT function is not the reason for the discrepancy.
+
 ```
 
 Limitations of OTTERS:
@@ -3988,6 +4055,7 @@ Limitations of OTTERS:
 - Requires consistent builds across files (not RSID based)
 - Not restricted to HapMap3
 - Format doesn't integrate well with existing downstream TWAS methodology
+- No direction of effect in ACAT result
 
 ***
 
@@ -4032,8 +4100,87 @@ for chr in $(seq 22 22); do
     --GWASN 459324
     "
 done
+```
 
-load('/users/k1806347/oliverpainfel/Data/eQTLGen/eQTL_to_TWAS/eQTLGen.eQTL/ENSG00000244486.RDat')
+```{r}
+library(data.table)
+
+# Read in the original results
+orig<-fread('/users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen/OTTERS_TWAS_SumStat_CARDIOVASCULAR_UKBB.txt')
+
+# Read in the OTTERS replication results
+rep<-fread('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/OTTERS/rep_res.csv')
+
+# Read in the eQTL_to_TWAS results
+eqt_to_twas<-fread('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/OTTERS/eQTL_to_TWAS/GCST90029019.eQTLGen.chr22')
+eqt_to_twas<-eqt_to_twas[, c('ID','MODEL','TWAS.P'), with=F]
+names(eqt_to_twas)[1]<-'TargetID'
+
+# Retain features present in each set
+common <-
+  intersect(
+    intersect(orig$TargetID, rep$TargetID), 
+    eqt_to_twas$TargetID)
+
+orig<-orig[orig$TargetID %in% common,]
+rep<-rep[rep$TargetID %in% common,]
+eqt_to_twas<-eqt_to_twas[eqt_to_twas$TargetID %in% common,]
+
+# Convert eQTL_to_TWAS to wide format
+# Calculate ACAT result
+# Perform ACAT.O analysis
+ACATO <- function(p){
+    if (all(is.na(p))) return(NA)
+    p <- p[!is.na(p)]
+    p[p == 1] <- 1 - 1e-16
+#### check if there are very small non-zero p values
+    is.small <- (p < 1e-16)
+    if (sum(is.small) == 0) {
+        cct.stat <- sum(tan((0.5 - p) * pi))/length(p)
+    } else {
+        cct.stat <- sum((1 / p[is.small]) / pi)
+        cct.stat <- cct.stat + sum(tan((0.5 - p[!is.small]) * pi))
+        cct.stat <- cct.stat/length(p)
+    }
+    #### check if the test statistic is very large.
+    if (cct.stat > 1e+15){
+        pval <- (1 / cct.stat) / pi
+    } else {
+        pval <- 1 - pcauchy(cct.stat)
+    }
+    pval
+}
+
+eqt_to_twas_acat<-data.table(aggregate(eqt_to_twas$TWAS.P, list(eqt_to_twas$TargetID), FUN=ACATO))
+names(eqt_to_twas_acat)<-c('TargetID', 'OTTERS')
+
+library(reshape2)
+eqt_to_twas_wide <- dcast(eqt_to_twas, TargetID ~ MODEL, value.var = "TWAS.P")
+eqt_to_twas_wide<-merge(eqt_to_twas_wide, eqt_to_twas_acat, by = 'TargetID')
+
+# Compare the ACAT P-value from each set
+names(orig)[names(orig) == 'OTTERS']<-'ACAT_orig'
+names(rep)[names(rep) == 'OTTERS']<-'ACAT_rep'
+names(eqt_to_twas_wide)[names(eqt_to_twas_wide) == 'OTTERS']<-'ACAT_eqtl'
+
+all<-Reduce(function(dtf1, dtf2)
+  merge(dtf1, dtf2, by = "TargetID"),
+  list(orig, rep, eqt_to_twas_wide))
+all<-all[, c('TargetID','ACAT_orig','ACAT_rep','ACAT_eqtl'), with=F]
+
+all_z<-apply(all[,-1], 2, function(x) qnorm(x))
+cor(all_z, use='p')
+summary(all_z)
+
+# Check how many are p<0.001
+sum(all$ACAT_orig < 0.001)
+sum(all$ACAT_rep < 0.001)
+sum(all$ACAT_eqtl < 0.001)
+
+table(all$ACAT_rep < 0.001, all$ACAT_eqtl < 0.001)
+
 ```
-```
+
+
+
 

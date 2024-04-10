@@ -330,7 +330,7 @@ cat("Analysis completed.\n")
 cat("NOTE:",FAIL.ctr,"genes-model pairs were skipped\n")
 
 # WRITE MHC TO SEPARATE FILE
-mhc = out.tbl.all.all$CHR == 6 & out.tbl.all.all$P0 > 26e6 & out.tbl.all.all$P1 < 34e6
+mhc = as.numeric(out.tbl$CHR) == 6 & as.numeric(out.tbl$P0) > 26e6 & as.numeric(out.tbl$P1) < 34e6
 
 out.tbl.all.all$P0 = apply( as.matrix(out.tbl.all.all$P0) , 1 , toString )
 out.tbl.all.all$P1 = apply( as.matrix(out.tbl.all.all$P1) , 1 , toString )
