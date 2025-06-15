@@ -1,0 +1,477 @@
+---
+title: "Comparison with OTTERS"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
+
+library(knitr)
+library(data.table)
+
+```
+
+***
+
+In this document we will make comparisons to the OTTERS software.
+
+***
+
+# Install
+
+```{bash}
+# Install OTTERS v1.0.0
+cd /users/k1806347/oliverpainfel/Software
+git clone https://github.com/daiqile96/OTTERS.git 
+cd OTTERS
+git checkout v1.0.0
+
+# Install tabix and bgzip
+cd /users/k1806347/oliverpainfel/Software
+wget https://sourceforge.net/projects/samtools/files/tabix/tabix-0.2.6.tar.bz2
+tar jxvf tabix-0.2.6.tar.bz2
+cd tabix-0.2.6
+make
+
+# copy the binary bgzip and tabix bin folder so can be called from PATH
+mkdir /users/k1806347/oliverpainfel/Software/bin
+cp bgzip tabix /users/k1806347/oliverpainfel/Software/bin
+
+# copy the plink1.9 binary and add to PATH
+cp /users/k1806347/oliverpainfel/Software/plink1.9/plink /users/k1806347/oliverpainfel/Software/bin/
+export PATH=/users/k1806347/oliverpainfel/Software/bin:$PATH 
+
+# Create a conda environment to run otters
+cd /users/k1806347/oliverpainfel/Software/OTTERS
+mamba env create --file otters_env.yaml
+conda activate otters
+
+# Install lassosum
+Rscript -e 'remotes::install_github("tshmak/lassosum@v0.4.5")'
+
+# Install SDPR
+cd /users/k1806347/oliverpainfel/Software/bin
+git clone https://github.com/eldronzhou/SDPR.git
+cd SDPR
+git checkout v0.9.1
+```
+
+***
+
+# Run test data
+
+```{bash}
+# Run using test data
+conda activate otters
+
+# set number of threads to be used
+N_THREADS=1
+
+# set up my OTTERS directory and SDPR directory
+OTTERS_DIR=/users/k1806347/oliverpainfel/Software/OTTERS
+SDPR_DIR=/users/k1806347/oliverpainfel/Software/bin/SDPR
+
+# make sure the dynamic libraries of SDPR are not changed (For SDPR)
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${SDPR_DIR}/MKL/lib
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${SDPR_DIR}/gsl/lib
+
+# prevent automatically using  all available cores on a compute node (For SDPR and PRS-CS)
+export MKL_NUM_THREADS=$N_THREADS
+export NUMEXPR_NUM_THREADS=$N_THREADS
+export OMP_NUM_THREADS=$N_THREADS
+
+# Start to run OTTERS
+cd ${OTTERS_DIR}/Example
+
+# Input for OTTERS STAGE I 
+# Annotation File 
+exp_anno=exp_anno.txt
+# Genotype data from LD reference panel
+geno_dir=Exp_geno
+# eQTL summary statistics 
+sst_file=Exp_eQTLSumStats.txt
+# Input for OTTERS STAGE II
+# GWAS summary statistics 
+gwas_sst_file=Exp_GWASSumStats.txt
+
+# Set chromosome number (The example is for chromosome 4)
+chr=4
+# Set LD-clumping threshold in STAGE I
+clump_r2=0.99
+# Set output directory for STAGE I
+out_dir=Results
+
+# STAGE I
+# train eQTL weights using P+T, lassosum, SDPR and PRS-CS. 
+# It may take several minutes to complete.
+python3 ${OTTERS_DIR}/training.py \
+--OTTERS_dir=${OTTERS_DIR} \
+--SDPR_dir=${SDPR_DIR} \
+--anno_dir=${exp_anno} \
+--geno_dir=${geno_dir} \
+--sst_file=${sst_file} \
+--out_dir=${out_dir} \
+--chrom=${chr} \
+--r2=${clump_r2} \
+--models=PT,lassosum,SDPR,PRScs \
+--thread=$N_THREADS
+
+# It has completed with the test data
+# Do a speed and memory benchmark for 100 genes from YFS eQTL data
+```
+
+***
+
+# Replicate OTTERS paper
+
+Try to replicate the results provided by OTTERS for cardiovascular disease.
+
+***
+
+## Download eQTLGen weights
+
+```{bash}
+# Download the eQTLGen weights and results in the OTTERS paper: https://www.synapse.org/#!Synapse:syn51009573/files/
+mkdir -p /users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen
+cd /users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen
+```
+
+```{python}
+import shutil
+import os
+from synapseclient import Synapse
+
+# Read in auth_token
+with open('/users/k1806347/oliverpainfel/Data/synapse/auth_token.txt', 'r') as file:
+    content = file.read()
+
+# Initialize the Synapse client and log in
+syn = Synapse()
+syn.login(authToken=content)
+
+# List of Synapse IDs you want to download and move
+syn_ids = [
+    'syn51015448',
+    'syn51015449',
+    'syn51015450',
+    'syn51015456',
+    'syn51015458',
+    'syn51015464'
+]
+
+# Define the new directory where you want to store the files
+new_directory = '/users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen'
+
+for syn_id in syn_ids:
+    # Download the file from Synapse
+    entity = syn.get(entity=syn_id, version=1)
+    
+    # Get the original path and filename
+    original_path = entity.path
+    filename = os.path.basename(original_path)
+    
+    # Construct the new path in the desired directory with the same filename
+    new_path = os.path.join(new_directory, filename)
+    
+    # Move the file
+    shutil.move(original_path, new_path)
+    
+    print(f"Moved {filename} to {new_path}")
+    
+    
+```
+
+```{bash}
+# Decompress the eQTLGen weights
+cd /users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen 
+
+gunzip lassosum.txt.gz
+gunzip OTTERS_TWAS_SumStat_CARDIOVASCULAR_UKBB.txt
+gunzip P0.001.txt.gz
+gunzip P0.05.txt.gz
+gunzip PRScs.txt.gz
+gunzip SDPR.txt.gz
+
+# Note the weights appear to be GRCh38
+# We need to liftover the reference genotype data and GWAS sumstats
+```
+
+***
+
+## Prepare input files
+
+```{r}
+# Create annotation file using re
+library(data.table)
+res<-fread('/users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen/OTTERS_TWAS_SumStat_CARDIOVASCULAR_UKBB.txt')
+annot<-res[, c('CHROM','GeneStart','GeneEnd','TargetID'), with=F]
+fwrite(annot, '/users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen/annot.txt', sep='\t', quote=F, na='NA')
+```
+
+```{bash}
+# Download and format the GWAS sumstats
+# The sumstats were downloaded using gsutils from the Akes Price google cloud: gs://broad-alkesgroup-public-requester-pays/UKBB/disease_CARDIOVASCULAR.sumstats.gz
+```
+
+```{r}
+# Liftover to GRCh38
+library(data.table)
+
+ss<-fread('/users/k1806347/oliverpainfel/Data/OTTERS/gwas_sumstats/disease_CARDIOVASCULAR.sumstats.gz')
+
+# Calculate Z from P value using sign of BETA
+ss$Z<-sign(ss$Beta)*qnorm(ss$P / 2, lower.tail=F)
+
+ss<-ss[, c('CHR','POS','A1','A2','Z'), with=F]
+names(ss)<-c('chr','pos','A1','A2','Z')
+
+# Create snp_modifyBuild_offline
+make_executable <- function(exe) {
+  Sys.chmod(exe, mode = (file.info(exe)$mode | "111"))
+}
+
+snp_modifyBuild_offline<-function (info_snp, liftOver, chain, from = "hg18", to = "hg19"){
+  tmp_folder<-tempdir()
+
+  if (!all(c("chr", "pos") %in% names(info_snp)))
+    stop2("Please use proper names for variables in 'info_snp'. Expected %s.",
+          "'chr' and 'pos'")
+  liftOver <- normalizePath(liftOver)
+  make_executable(liftOver)
+  BED <- tempfile(fileext = ".BED")
+  info_BED <- with(info_snp, data.frame(paste0("chr", chr),
+                                        pos0 = pos - 1L, pos, id = seq_len(nrow(info_snp))))
+  fwrite(info_BED, BED, col.names = FALSE, sep = " ")
+  lifted<-paste0(tmp_folder,'/tmp.lifted')
+  unmapped<-paste0(tmp_folder,'/tmp.unmapped')
+  system(paste(liftOver, BED, chain, lifted, unmapped))
+  new_pos <- fread(lifted)
+  bad <- grep("^#", readLines(unmapped), value = TRUE, invert = TRUE)
+  print(paste0(length(bad)," variants have not been mapped."))
+  info_snp$pos <- NA
+  info_snp$pos[new_pos$V4] <- new_pos$V3
+  info_snp
+}
+
+ss<-snp_modifyBuild_offline(
+  info_snp=ss,
+  liftOver='/users/k1806347/oliverpainfel/Software/liftOver',
+  chain = '/users/k1806347/oliverpainfel/Software/MyGit/GenoDisc/pipeline/resources/data/liftover/hg19ToHg38.over.chain.gz',
+  from = "hg19",
+  to = "hg38"
+)
+
+names(ss)<-c('CHROM','POS','A1','A2','Zscore')
+ss<-ss[, c('CHROM','POS','A1','A2','Zscore'), with=F]
+ss<-ss[complete.cases(ss),]
+
+fwrite(ss, '/users/k1806347/oliverpainfel/Data/OTTERS/gwas_sumstats/disease_CARDIOVASCULAR_buildGRCh38.reformat.sumstats.tsv', quote=F, sep='\t', na='NA')
+```
+
+***
+
+## Run OTTERS
+
+```{bash}
+conda activate otters
+# set number of threads to be used
+N_THREADS=1
+
+# set up my OTTERS directory and SDPR directory
+OTTERS_DIR=/users/k1806347/oliverpainfel/Software/OTTERS
+SDPR_DIR=/users/k1806347/oliverpainfel/Software/bin/SDPR
+
+# Input for OTTERS STAGE I 
+# Annotation File 
+exp_anno=/users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen/annot.txt
+
+# Input for OTTERS STAGE II
+# GWAS summary statistics 
+gwas_sst_file=/users/k1806347/oliverpainfel/Data/OTTERS/gwas_sumstats/disease_CARDIOVASCULAR_buildGRCh38.reformat.sumstats.tsv
+
+for model in $(echo P0.001 P0.05 lassosum SDPR PRScs); do
+for chr in $(seq 1 22); do
+  sbatch -p neurohack_cpu,cpu -t120 --mem 10G --wrap="
+
+# make sure the dynamic libraries of SDPR are not changed (For SDPR)
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${SDPR_DIR}/MKL/lib
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${SDPR_DIR}/gsl/lib
+export PATH=/users/k1806347/oliverpainfel/Software/bin:$PATH 
+
+# prevent automatically using  all available cores on a compute node (For SDPR and PRS-CS)
+export MKL_NUM_THREADS=$N_THREADS
+export NUMEXPR_NUM_THREADS=$N_THREADS
+export OMP_NUM_THREADS=$N_THREADS
+
+# STAGE II
+# gene-based association test using eQTL-weight trained from P+T, lassosum, SDPR and PRS-CS.
+mkdir -p /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/OTTERS/gtex_ref/chr${chr}/${model}
+python3 ${OTTERS_DIR}/testing.py \
+  --OTTERS_dir=${OTTERS_DIR} \
+  --weight_dir=/users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen \
+  --models=${model} \
+  --anno_dir=${exp_anno} \
+  --geno_dir=/users/k1806347/oliverpainfel/Data/dbGAP/GTEx/processed/gtex_v8.snp.maf001.chr${chr} \
+  --out_dir=/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/OTTERS/gtex_ref/chr${chr}/${model} \
+  --gwas_file=${gwas_sst_file} \
+  --chrom=${chr} \
+  --thread=$N_THREADS
+"
+done
+done
+
+```
+
+***
+
+## Compare with original results
+
+```{r}
+library(data.table)
+library(ACAT)
+
+# Create function performing genomic control
+# This is what they did in the OTTERS paper
+genomic_control<-function(z){
+  Lambda = median(z^2, na.rm = T)/qchisq(0.5, df = 1)
+  P = pchisq(z^2/Lambda, df = 1, lower.tail = F)
+}
+
+# Read in results
+res_gtex <- NULL
+for (j in c('P0.001', 'P0.05', 'lassosum', 'SDPR', 'PRScs')) {
+  for (i in 22:22) {
+    tmp <- fread(
+        paste0(
+          '/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/OTTERS/gtex_ref/chr',
+          i,
+          '/',
+          j,
+          '/',
+          j,
+          '.txt'
+        )
+      )
+  }
+  tmp$MODEL<-j
+  tmp$FUSION_PVAL_GC<-genomic_control(tmp$FUSION_Z)
+  res_gtex <- rbind(res_gtex, tmp)
+}
+
+write.csv(res_gtex, '/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/OTTERS/rep_res_gtex_long.csv', row.names=F)
+
+# Perform ACAT.O analysis
+res_gtex<-res_gtex[complete.cases(res_gtex),]
+res_gtex_acat<-data.table(aggregate(res_gtex$FUSION_PVAL_GC, list(res_gtex$TargetID), FUN=ACAT))
+names(res_gtex_acat)<-c('TargetID', 'OTTERS')
+
+library(reshape2)
+res_gtex_wide <- dcast(res_gtex, TargetID ~ MODEL, value.var = "FUSION_PVAL_GC")
+res_gtex_wide<-merge(res_gtex_wide, res_gtex_acat, by = 'TargetID')
+
+write.csv(res_gtex_wide, '/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/OTTERS/rep_res_gtex_wide.csv', row.names=F)
+
+###############
+
+# Read in original results
+orig<-fread('/users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen/OTTERS_TWAS_SumStat_CARDIOVASCULAR_UKBB.txt')
+
+orig<-orig[, names(res_gtex_wide), with=F]
+
+both<-Reduce(function(dtf1, dtf2) merge(dtf1, dtf2, by = "TargetID", all=T), list(orig,res_gtex_wide))
+
+# Convert to Z scores, and check correlations between each test
+both_z<-apply(both[,-1], 2, function(x) qnorm(x))
+cor(both_z, use='p')
+summary(both_z)
+
+# There are missing values in the original results which are not missing in the replication
+# For those that are present, the correlation is <1, probably due to missing SNPs and different LD reference.
+
+```
+
+Limitations of OTTERS:
+- Slow
+- Requires consistent builds across files (not RSID based)
+- Not restricted to HapMap3
+- Format doesn't integrate well with existing downstream TWAS methodology
+- No direction of effect in ACAT result
+
+***
+
+# Compare to eQTL_to_TWAS
+
+OK, now we have replicated the original results in the OTTERS paper, lets compare the results to those generated using our approach.
+
+Run TWAS using eQTLGen weights I generated and the same sumstats as the OTTERS paper.
+
+```{r}
+library(data.table)
+# Munge the sumstats
+ss<-fread('/users/k1806347/oliverpainfel/Data/OTTERS/gwas_sumstats/disease_CARDIOVASCULAR.sumstats.gz')
+# Calculate Z from P value using sign of BETA
+ss$Z<-sign(ss$Beta)*qnorm(ss$P / 2, lower.tail=F)
+ss<-ss[, c('SNP','A1','A2','Z'), with=F]
+fwrite(ss, '/users/k1806347/oliverpainfel/Data/OTTERS/gwas_sumstats/disease_CARDIOVASCULAR.sumstats.munged.tsv.gz', quote=F, sep='\t', na='NA')
+```
+
+```{bash}
+# Run FUSION
+mkdir /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/OTTERS/eQTL_to_TWAS
+conda activate eqtl_to_twas
+for chr in $(seq 22 22); do
+    sbatch -p neurohack_cpu,cpu -t120 --mem 10G --wrap="
+    Rscript /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/FUSION.assoc_test.edit.R \
+    --sumstats /users/k1806347/oliverpainfel/Data/OTTERS/gwas_sumstats/disease_CARDIOVASCULAR.sumstats.munged.tsv.gz \
+    --weights /users/k1806347/oliverpainfel/Data/eQTLGen/eQTL_to_TWAS/eQTLGen.eQTL.pos \
+    --weights_dir /users/k1806347/oliverpainfel/Data/eQTLGen/eQTL_to_TWAS \
+    --ref_ld_chr /users/k1806347/oliverpainfel/Data/1KG/FUSION/1000G.EUR. \
+    --out /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/OTTERS/eQTL_to_TWAS/disease_CARDIOVASCULAR.eQTLGen.chr${chr} \
+    --chr ${chr} \
+    --GWASN 459324
+    "
+done
+```
+
+```{r}
+library(data.table)
+library(ACAT)
+
+# Read in the OTTERS replication results
+otters<-fread('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/OTTERS/rep_res_gtex_long.csv')
+otters<-otters[,c('TargetID','MODEL','FUSION_Z','FUSION_PVAL'), with=F]
+names(otters)<-c('ID','MODEL','TWAS.Z', 'TWAS.P')
+
+# Read in the eQTL_to_TWAS results
+eqt_to_twas<-fread('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/OTTERS/eQTL_to_TWAS/GCST90029019.eQTLGen.chr22')
+eqt_to_twas<-eqt_to_twas[, c('ID','MODEL','TWAS.Z', 'TWAS.P'), with=F]
+
+# Estimate ACAT P value
+otters<-otters[complete.cases(otters),]
+otters_acat<-data.table(aggregate(otters$TWAS.P, list(otters$ID), FUN=ACAT))
+names(otters_acat)<-c('ID', 'ACAT')
+
+eqt_to_twas<-eqt_to_twas[complete.cases(eqt_to_twas),]
+eqt_to_twas_acat<-data.table(aggregate(eqt_to_twas$TWAS.P, list(eqt_to_twas$ID), FUN=ACAT))
+names(eqt_to_twas_acat)<-c('ID', 'ACAT')
+
+# Compare the ACAT P-values between OTTERS and eqtl_to_twas
+all<-Reduce(function(dtf1, dtf2)
+  merge(dtf1, dtf2, by = "ID", all=T),
+  list(otters_acat, eqt_to_twas_acat))
+
+all_z<-apply(all[,-1], 2, function(x) qnorm(x))
+cor(all_z, use='p')
+summary(all_z)
+
+# Check how many are p<0.001
+sum(all$ACAT.x < 0.001, na.rm=T)
+sum(all$ACAT.y < 0.001, na.rm=T)
+
+table(all$ACAT.x < 0.001, all$ACAT.y < 0.001, useNA = 'ifany')
+
+```
+
+
+
+

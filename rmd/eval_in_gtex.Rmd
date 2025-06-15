@@ -1,5 +1,5 @@
 ---
-title: "Comparison of Methods"
+title: "Evaluation in GTEx"
 output: html_document
 ---
 
@@ -13,48 +13,16 @@ library(data.table)
 
 ***
 
-# Introduction
-
-Here, we will evaluate methods for deriving TWAS SNP-weights based on eQTL summary statistics.
-
-There are two stages to this process:
+In this document we explore methods for:
 
 1) Determining which genes to derive TWAS SNP-weights for
 2) Derive SNP-weights predicting gene expression
 
-***
-
-## Determining which genes to derive TWAS SNP-weights for
-
-Existing approaches:
-
-- For SMR this is done by analysing any gene with a genome-wide significant eQTL
-- For FUSION this is done by analysing any gene with cis-SNPh2 p < 0.01
-- For MetaXcan this is done by analysing any gene with significant positive R2 using SNP-weights
-
-The FUSION and MetaXcan approach is better for determining genes to include in a GWAS as it better reflects the power that TWAS would have. We may not always have a target sample to test the variance explained by the SNP-weights, so the MetaXcan approach is less applicable. So, I think we should use the same criteria as FUSION, except we must use a summary statistic based approach to estimate SNP-based heritability. We should compare summary statistic approaches to estimates from GREML as reported in FUSION released SNP-weights. The approach also needs to be fast as it will need to be implemented for each gene seperately.
+We evaluate approaches with comparison to existing TWAS models from FUSION, and observed gene expression in GTEx.
 
 ***
 
-## Derive SNP-weights predicting gene expression
-
-SMR uses single eQTL summary statistics, making it applicable to a wider range of datasets and results from meta-analyses. TWAS based methods are not currently relevent when only eQTL summary statistics are available, as the advantage of these methods over SMR is their ability to incorporate the effects of multiple SNPs on gene expression. Currently, TWAS methods use SNP-weights derived using individual level data, which means TWAS cannot use meta-analysis results for eQTLs, and often TWAS weights are unavailable for the latest eQTL datasets. So, here we will compare a range of summary statistic approaches to derive TWAS weights. Again, the method will need to be fast since it will need to be applied to each genes seperately. Summary statistic based polygenic scoring methods will likely be of use, though given the lack of target samples for validation, a pseudovalidation approach will be necessary, which estimates the optimal parameters without a target sample for validation.
-
-Possible methods for deriving SNP-weights:
-
-- SBayesR
-- DBSLMM
-- PRScs auto
-- Mega-PRS
-- SuSiE
-
-***
-
-# Methods
-
-***
-
-## Preliminary analysis using GTEx v7
+# Preliminary analysis using GTEx v7
 
 Comparison using GTEx v7 eQTL data and FUSION SNP-weights. Comparison to FUSION weights is not ideal as by chance different leads SNP could be selected. Ideally we would compare summary statistic-based and observed TWAS weights to observed expression. However, lets start with this as it will allow comparison of heritability estimates and be a good opportunity to design the study.
 
@@ -62,7 +30,7 @@ We will use whole blood data for the comparison. eQTL summary statistics are dow
 
 ***
 
-### Compare SNP-h2 estimates
+## Compare SNP-h2 estimates
 
 We will compare different version of GCTB Bayes models and LDSC. If LDSC doesn't work, then LDAK model is unlikely to make a difference. To avoid unessecary compuational burden, only estimate hsq for 100 genes on chromosome 22.
 
@@ -448,7 +416,7 @@ Again LDSC is least concordant with other methods.
 
 ***
 
-### Compare methods for generating SNP-weights
+## Compare methods for generating SNP-weights
 
 Now we have decided which genes to create SNP-weights for, we will generate SNP-weights for predicting gene expression using a range of methods. Then we will compare these SNP-weights to those derived by FUSION. Again, to avoid computational burden, start by running for the first 100 genes on chromosome 22.
 
@@ -947,11 +915,11 @@ The low correlation between topSNP results from FUSION and GTEx indicates compar
 
 ***
 
-## SNP-h2 estimation using GTEx v8
+# SNP-h2 estimation using GTEx v8
 
 Compare SNP-h2 estimates using GTEx v8 eQTL sumstats to GREML: Here we will use the top1 model within the FUSION weights to derive eQTL summary statistics. This will provide a direct comparison between SNP-h2 estimates from sumstat and GREML. Only use genes on chromosome 22.
 
-#### Format eQTL sumstats
+### Format eQTL sumstats
 
 <details><summary>Show code</summary>
 
@@ -1034,7 +1002,7 @@ for(i in 1:nrow(pos)){
 
 ***
 
-### Estimate SNP-h2
+## Estimate SNP-h2
 
 ```{r, eval=F, echo=T}
 library(data.table)
@@ -1385,7 +1353,7 @@ Again LDSC is least concordant with other methods.
 
 ***
 
-## Comparing predicted-observed expression in GTEx v8
+# Comparing predicted-observed expression in GTEx v8
 
 Here we will predict gene expression levels in the GTEx v8 sample and then test the correlation with observed expression levels. Initially, we will use FUSION SNP-weights derived using the YFS whole blood sample, and eQTL data from eQTLGen whole blood meta-analysis (excl GTEx).
 
@@ -1395,11 +1363,11 @@ I have already written a script to predicted expression levels from TWAS weights
 
 ***
 
-### Generate SNP-weights from eQTLGen
+## Generate SNP-weights from eQTLGen
 
 ****
 
-#### Format eQTL sumstats
+### Format eQTL sumstats
 
 <details><summary>Show code</summary>
 
@@ -1479,7 +1447,7 @@ for(i in 1:length(genes)){
 
 ***
 
-#### Create TWAS weights
+### Create TWAS weights
 
 <details><summary>Show code</summary>
 
@@ -1591,13 +1559,13 @@ write.table(pos, '/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLG
 
 ***
 
-### Generate SNP-weights from YFS
+## Generate SNP-weights from YFS
 
 FUSION only provide the N of the sample and the Z of each SNP for each gene. We can convert this to the required information using reference MAF, though using these approximations is not ideal. This may not be the best comparison since they are finish and there may therefore be MAF and LD mismatch with target sample. Though I assume FUSION developers restricted the analysis to those os EUR ancestry.
 
 ***
 
-#### Format eQTL sumstats
+### Format eQTL sumstats
 
 <details><summary>Show code</summary>
 
@@ -1670,7 +1638,7 @@ for(i in 1:nrow(pos)){
 </details>
 
 
-#### Create TWAS weights
+### Create TWAS weights
 
 <details><summary>Show code</summary>
 
@@ -1779,17 +1747,17 @@ write.table(pos, '/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/YFS/e
 
 ***
 
-### Check correlation between predicted expression for YFS models
+## Check correlation between predicted expression for YFS models
 
 This is just a sanity check that the models are correlating as expected.
 
 ***
 
-#### Predict expression in 1KG
+### Predict expression in 1KG
 
 ***
 
-##### YFS FUSION models
+#### YFS FUSION models
 
 <details><summary>Show code</summary>
 
@@ -1820,7 +1788,7 @@ Rscript /users/k1806347/oliverpainfel/Software/MyGit/Predicting-TWAS-features/Fe
 
 ***
 
-##### YFS eQTL models
+#### YFS eQTL models
 
 <details><summary>Show code</summary>
 
@@ -1851,7 +1819,7 @@ Rscript /users/k1806347/oliverpainfel/Software/MyGit/Predicting-TWAS-features/Fe
 
 ***
 
-#### Check correlation
+### Check correlation
 
 <details><summary>Show code</summary>
 
@@ -1969,7 +1937,7 @@ This is looking good. Everything is working as it should.
 
 ***
 
-### Predict expression in GTEx v8
+## Predict expression in GTEx v8
 
 ***
 
@@ -1977,7 +1945,7 @@ This was originally run by Zac Gerring, but I have since obtained access to GTEx
 
 ***
 
-#### Convert WGS data into PLINK1 binary format
+### Convert WGS data into PLINK1 binary format
 
 We are doing this for running both OTTERS (to replicate their original analysis), and for our use later for evaluating gene expression models.
 
@@ -2004,7 +1972,7 @@ done
 
 ***
 
-#### Extract HapMap3 SNPs and insert RSIDs
+### Extract HapMap3 SNPs and insert RSIDs
 
 Use GenoPred format_target.R for this.
 
@@ -2042,7 +2010,7 @@ done
 
 ***
 
-#### Idenitify EUR
+### Idenitify EUR
 
 ```{bash}
 cd /users/k1806347/oliverpainfel/Software/MyGit/GenoPred/pipeline
@@ -2058,11 +2026,11 @@ Rscript ../Scripts/Ancestry_identifier/Ancestry_identifier.R \
 
 ***
 
-#### Predict expression levels
+### Predict expression levels
 
 ***
 
-##### YFS FUSION
+#### YFS FUSION
 
 <details><summary>Show code</summary>
 
@@ -2091,7 +2059,7 @@ sbatch -p neurohack_cpu,cpu --mem 30G -n 5 -t 200 --wrap="
 
 ***
 
-##### YFS eQTL models
+#### YFS eQTL models
 
 <details><summary>Show code</summary>
 
@@ -2121,7 +2089,7 @@ sbatch -p neurohack_cpu,cpu --mem 30G -n 5 -t 200 --wrap="
 
 ***
 
-##### eQTLGen (excl. GTEx v8)
+#### eQTLGen (excl. GTEx v8)
 
 <details><summary>Show code</summary>
 
@@ -2151,13 +2119,13 @@ sbatch -p neurohack_cpu,cpu --mem 30G -n 5 -t 200 --wrap="
 
 ***
 
-### Compare predicted and observed expression in GTEx v8
+## Compare predicted and observed expression in GTEx v8
 
 Here I am reading in observed and predicted expression values, testing their correlation, and then summarising the results across gene expression imputation methods. I am using the processed and normalised observed expression in GTEx. First I covary observed expression for covariates used in the original eQTL analysis by GTEx.
 
 ***
 
-#### Evaluate FUSION and eQTL-based YFS models
+### Evaluate FUSION and eQTL-based YFS models
 
 <details><summary>Show code</summary>
 
@@ -2493,7 +2461,7 @@ The correlations are very low compared the R2 reported in the FUSION profile. Th
 
 ***
 
-#### Evaluate eQTLGen derived models
+### Evaluate eQTLGen derived models
 
 <details><summary>Show code</summary>
 
@@ -2772,7 +2740,7 @@ The predicted-observed correlation is looking better here, with 87% of genes ach
 
 ***
 
-#### Comparison of FUSION YFS and eQTLGen models 
+### Comparison of FUSION YFS and eQTLGen models 
 
 ```{r, eval=F, echo=T}
 
@@ -2789,8 +2757,8 @@ yfs<-yfs[grepl('fusion',yfs$Var2),]
 length(unique(eqtlgen$L1)) # 16719
 length(unique(yfs$L1)) # 4633
 
-length(unique(eqtlgen$L1[eqtlgen$value > 0.1])) # 3800
-length(unique(yfs$L1[yfs$value > 0.1])) # 1311
+length(unique(eqtlgen$L1[eqtlgen$value > 0.1])) # 10770
+length(unique(yfs$L1[yfs$value > 0.1])) # 3329
 
 # Subset genes available in both fusion YFS and eQTLGen
 library(biomaRt)
@@ -2811,9 +2779,9 @@ yfs_subset<-yfs_subset[!is.na(yfs_subset$value),]
 yfs_subset<-yfs_subset[!duplicated(yfs_subset$L1),]
 
 both_best<-merge(eqtlgen_subset, yfs_subset, by='L1')
-nrow(both_best) # 4606
-median(both_best$value.x) # 0.07559274
-median(both_best$value.y) # 0.0630884
+nrow(both_best) # 4609
+median(both_best$value.x) # 0.2173572
+median(both_best$value.y) # 0.1879074
 
 both_best_melt<-melt(both_best[,c('L1','value.x','value.y'),with=F])
 names(both_best_melt)<-c('ID','Sample','R')
@@ -2825,6 +2793,8 @@ both_best_melt<-both_best_melt[complete.cases(both_best_melt),]
 
 wilcox.test(R ~ Sample, data=both_best_melt) 
 cor.test(x=both_best_melt$R, y=as.numeric(both_best_melt$Sample), method="spearman")
+# rho = 0.08804388
+# p-value < 2.2e-16
 
 library(ggplot2)
 library(cowplot)
@@ -2864,20 +2834,29 @@ ggplot(eqtlgen_comp_plot, aes(x=value, fill=YFS, colour=YFS)) +
 dev.off()
 
 # Make the same plot but restricted to genes with mBAT-combo or sig eQTL
-mbat_res<-NULL
-for(i in 1:22){
-  mbat_res<-rbind(mbat_res, fread(paste0('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGen/eQTLGen_exclGTEx.mbat.combo.chr',i,'.res.txt')))
+eqtl_pos<-fread('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGen/weights/eQTLGen.eQTL.pos')
+w_dir<-'/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGen/weights/'
+eqtl_sig<-NULL
+for(i in 1:nrow(eqtl_pos)){
+  load(paste0(w_dir, eqtl_pos$WGT[i]))
+  eqtl_sig<-rbind(eqtl_sig,
+                  data.frame(ID=eqtl_pos$ID[i],
+                             hsq=hsq[1],
+                             hsq.p=hsq.pv,
+                             TopSNP_Pvalue=signal$TopSNP_Pvalue,
+                             P_mBATcombo=signal$P_mBATcombo))
 }
 
-# Check results in relation to fastbat
-sum(!(is.na(mbat_res$P_fastBAT) & is.na(mbat_res$TopSNP_Pvalue))) # 19214
-mbat_res$P_fastBAT.FDR<-p.adjust(mbat_res$P_fastBAT, method='fdr')
-# Restrict to genes with either FDR sig gene association or gneome-wide sig eQTL
-mbat_res<-merge(mbat_res, Genes, by.x='Gene', by.y='ensembl_gene_id')
-fastbat_res_sig<-mbat_res[mbat_res$P_fastBAT.FDR < 0.05 | mbat_res$TopSNP_Pvalue < 5e-8,]
-nrow(fastbat_res_sig) # 16540
+fwrite(eqtl_sig, '/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGen/weights/eQTLGen.eQTL.sig_info.csv', quote=F, na='NA')
 
-eqtlgen_comp_plot_mbat<-eqtlgen_comp_plot[eqtlgen_comp_plot$L1 %in% fastbat_res_sig$external_gene_name,]
+# eqtl_sig <-fread('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/eQTLGen/weights/eQTLGen.eQTL.sig_info.csv')
+
+# Restrict to genes with either FDR sig gene association or gneome-wide sig eQTL
+eqtl_sig<-merge(eqtl_sig, Genes, by.x='ID', by.y='ensembl_gene_id')
+eqtl_sig<-eqtl_sig[eqtl_sig$TopSNP_Pvalue < 5e-8 | eqtl_sig$P_mBATcombo < 0.01,]
+nrow(eqtl_sig) # 16009
+
+eqtlgen_comp_plot_mbat<-eqtlgen_comp_plot[eqtlgen_comp_plot$L1 %in% eqtl_sig$external_gene_name,]
 
 png('/scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/present_in_YFS_hist_sigsig.png', units='px', width=1500, height=1000, res=300)
 
@@ -2904,6 +2883,8 @@ dev.off()
 ***
 
 # Pseudovalidation
+
+It would be useful to be able to estimate the performance of each model, without access to individual-level training data. Here we will explore some approaches.
 
 ## FUSION
 
@@ -3064,6 +3045,9 @@ for (i in 1:22) {
       )
     )
 }
+
+# Read in observered correlation in GTEx v8
+
 
 cor_res_melt<-readRDS('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/1kg_pred_exp/YFS_cor.rds')
 
@@ -3537,650 +3521,3 @@ ggplot(pseudo_res_neg_all, aes(x=MODEL, y=R, colour=BAD)) +
 ```
 
 ***
-
-# OTTERS
-
-## Install
-
-```{bash}
-# Install OTTERS v1.0.0
-cd /users/k1806347/oliverpainfel/Software
-git clone https://github.com/daiqile96/OTTERS.git 
-cd OTTERS
-git checkout v1.0.0
-
-# Install tabix and bgzip
-cd /users/k1806347/oliverpainfel/Software
-wget https://sourceforge.net/projects/samtools/files/tabix/tabix-0.2.6.tar.bz2
-tar jxvf tabix-0.2.6.tar.bz2
-cd tabix-0.2.6
-make
-
-# copy the binary bgzip and tabix bin folder so can be called from PATH
-mkdir /users/k1806347/oliverpainfel/Software/bin
-cp bgzip tabix /users/k1806347/oliverpainfel/Software/bin
-
-# copy the plink1.9 binary and add to PATH
-cp /users/k1806347/oliverpainfel/Software/plink1.9/plink /users/k1806347/oliverpainfel/Software/bin/
-export PATH=/users/k1806347/oliverpainfel/Software/bin:$PATH 
-
-# Create a conda environment to run otters
-cd /users/k1806347/oliverpainfel/Software/OTTERS
-mamba env create --file otters_env.yaml
-conda activate otters
-
-# Install lassosum
-Rscript -e 'remotes::install_github("tshmak/lassosum@v0.4.5")'
-
-# Install SDPR
-cd /users/k1806347/oliverpainfel/Software/bin
-git clone https://github.com/eldronzhou/SDPR.git
-cd SDPR
-git checkout v0.9.1
-```
-
-***
-
-## Run test data
-
-```{bash}
-# Run using test data
-conda activate otters
-
-# set number of threads to be used
-N_THREADS=1
-
-# set up my OTTERS directory and SDPR directory
-OTTERS_DIR=/users/k1806347/oliverpainfel/Software/OTTERS
-SDPR_DIR=/users/k1806347/oliverpainfel/Software/bin/SDPR
-
-# make sure the dynamic libraries of SDPR are not changed (For SDPR)
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${SDPR_DIR}/MKL/lib
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${SDPR_DIR}/gsl/lib
-
-# prevent automatically using  all available cores on a compute node (For SDPR and PRS-CS)
-export MKL_NUM_THREADS=$N_THREADS
-export NUMEXPR_NUM_THREADS=$N_THREADS
-export OMP_NUM_THREADS=$N_THREADS
-
-# Start to run OTTERS
-cd ${OTTERS_DIR}/Example
-
-# Input for OTTERS STAGE I 
-# Annotation File 
-exp_anno=exp_anno.txt
-# Genotype data from LD reference panel
-geno_dir=Exp_geno
-# eQTL summary statistics 
-sst_file=Exp_eQTLSumStats.txt
-# Input for OTTERS STAGE II
-# GWAS summary statistics 
-gwas_sst_file=Exp_GWASSumStats.txt
-
-# Set chromosome number (The example is for chromosome 4)
-chr=4
-# Set LD-clumping threshold in STAGE I
-clump_r2=0.99
-# Set output directory for STAGE I
-out_dir=Results
-
-# STAGE I
-# train eQTL weights using P+T, lassosum, SDPR and PRS-CS. 
-# It may take several minutes to complete.
-python3 ${OTTERS_DIR}/training.py \
---OTTERS_dir=${OTTERS_DIR} \
---SDPR_dir=${SDPR_DIR} \
---anno_dir=${exp_anno} \
---geno_dir=${geno_dir} \
---sst_file=${sst_file} \
---out_dir=${out_dir} \
---chrom=${chr} \
---r2=${clump_r2} \
---models=PT,lassosum,SDPR,PRScs \
---thread=$N_THREADS
-
-# It has completed with the test data
-# Do a speed and memory benchmark for 100 genes from YFS eQTL data
-```
-
-***
-
-## Replicate paper
-
-***
-
-### Download eQTLGen weights
-
-```{bash}
-# Download the eQTLGen weights and results in the OTTERS paper: https://www.synapse.org/#!Synapse:syn51009573/files/
-mkdir -p /users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen
-cd /users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen
-```
-
-```{python}
-import shutil
-import os
-from synapseclient import Synapse
-
-# Read in auth_token
-with open('/users/k1806347/oliverpainfel/Data/synapse/auth_token.txt', 'r') as file:
-    content = file.read()
-
-# Initialize the Synapse client and log in
-syn = Synapse()
-syn.login(authToken=content)
-
-# List of Synapse IDs you want to download and move
-syn_ids = [
-    'syn51015448',
-    'syn51015449',
-    'syn51015450',
-    'syn51015456',
-    'syn51015458',
-    'syn51015464'
-]
-
-# Define the new directory where you want to store the files
-new_directory = '/users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen'
-
-for syn_id in syn_ids:
-    # Download the file from Synapse
-    entity = syn.get(entity=syn_id, version=1)
-    
-    # Get the original path and filename
-    original_path = entity.path
-    filename = os.path.basename(original_path)
-    
-    # Construct the new path in the desired directory with the same filename
-    new_path = os.path.join(new_directory, filename)
-    
-    # Move the file
-    shutil.move(original_path, new_path)
-    
-    print(f"Moved {filename} to {new_path}")
-    
-    
-```
-
-```{bash}
-# Decompress the eQTLGen weights
-cd /users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen 
-
-gunzip lassosum.txt.gz
-gunzip OTTERS_TWAS_SumStat_CARDIOVASCULAR_UKBB.txt
-gunzip P0.001.txt.gz
-gunzip P0.05.txt.gz
-gunzip PRScs.txt.gz
-gunzip SDPR.txt.gz
-
-# Note the weights appear to be GRCh38
-# We need to liftover the reference genotype data and GWAS sumstats
-```
-
-***
-
-## Prepare input files
-
-```{r}
-# Create annotation file using re
-library(data.table)
-res<-fread('/users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen/OTTERS_TWAS_SumStat_CARDIOVASCULAR_UKBB.txt')
-annot<-res[, c('CHROM','GeneStart','GeneEnd','TargetID'), with=F]
-fwrite(annot, '/users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen/annot.txt', sep='\t', quote=F, na='NA')
-```
-
-```{bash}
-# Download and format the GWAS sumstats
-# The sumstats were downloaded using gsutils from the Akes Price google cloud: gs://broad-alkesgroup-public-requester-pays/UKBB/disease_CARDIOVASCULAR.sumstats.gz
-```
-
-```{r}
-# Liftover to GRCh38
-library(data.table)
-
-ss<-fread('/users/k1806347/oliverpainfel/Data/OTTERS/gwas_sumstats/disease_CARDIOVASCULAR.sumstats.gz')
-
-# Calculate Z from P value using sign of BETA
-ss$Z<-sign(ss$Beta)*qnorm(ss$P / 2, lower.tail=F)
-
-ss<-ss[, c('CHR','POS','A1','A2','Z'), with=F]
-names(ss)<-c('chr','pos','A1','A2','Z')
-
-# Create snp_modifyBuild_offline
-make_executable <- function(exe) {
-  Sys.chmod(exe, mode = (file.info(exe)$mode | "111"))
-}
-
-snp_modifyBuild_offline<-function (info_snp, liftOver, chain, from = "hg18", to = "hg19"){
-  tmp_folder<-tempdir()
-
-  if (!all(c("chr", "pos") %in% names(info_snp)))
-    stop2("Please use proper names for variables in 'info_snp'. Expected %s.",
-          "'chr' and 'pos'")
-  liftOver <- normalizePath(liftOver)
-  make_executable(liftOver)
-  BED <- tempfile(fileext = ".BED")
-  info_BED <- with(info_snp, data.frame(paste0("chr", chr),
-                                        pos0 = pos - 1L, pos, id = seq_len(nrow(info_snp))))
-  fwrite(info_BED, BED, col.names = FALSE, sep = " ")
-  lifted<-paste0(tmp_folder,'/tmp.lifted')
-  unmapped<-paste0(tmp_folder,'/tmp.unmapped')
-  system(paste(liftOver, BED, chain, lifted, unmapped))
-  new_pos <- fread(lifted)
-  bad <- grep("^#", readLines(unmapped), value = TRUE, invert = TRUE)
-  print(paste0(length(bad)," variants have not been mapped."))
-  info_snp$pos <- NA
-  info_snp$pos[new_pos$V4] <- new_pos$V3
-  info_snp
-}
-
-ss<-snp_modifyBuild_offline(
-  info_snp=ss,
-  liftOver='/users/k1806347/oliverpainfel/Software/liftOver',
-  chain = '/users/k1806347/oliverpainfel/Software/MyGit/GenoDisc/pipeline/resources/data/liftover/hg19ToHg38.over.chain.gz',
-  from = "hg19",
-  to = "hg38"
-)
-
-names(ss)<-c('CHROM','POS','A1','A2','Zscore')
-ss<-ss[, c('CHROM','POS','A1','A2','Zscore'), with=F]
-ss<-ss[complete.cases(ss),]
-
-fwrite(ss, '/users/k1806347/oliverpainfel/Data/OTTERS/gwas_sumstats/disease_CARDIOVASCULAR_buildGRCh38.reformat.sumstats.tsv', quote=F, sep='\t', na='NA')
-```
-
-```{bash}
-mkdir -p /users/k1806347/oliverpainfel/Data/1KG/GenoDisc/GRCh37
-cd /users/k1806347/oliverpainfel/Data/1KG/GenoDisc/GRCh37
-for chr in $(seq 1 22);do
-for file in $(echo bim bed fam rds); do
-cp /users/k1806347/oliverpainfel/Software/MyGit/GenoDisc/pipeline/resources/data/1kg/1KG.Phase3.EUR.MAF_001.chr${chr}.${file} ./
-done
-done
-```
-
-```{r}
-# Create version of reference data in GRCh38
-for(i in 1:22){
-  bim<-fread(paste0('/users/k1806347/oliverpainfel/Software/MyGit/GenoDisc/pipeline/resources/data/1kg/1KG.Phase3.EUR.MAF_001.chr', i,'.bim'))
-  names(bim)<-c('CHR','SNP','POS','BP','A1','A2')
-  snp_ref<-readRDS(paste0('/users/k1806347/oliverpainfel/Software/MyGit/GenoDisc/pipeline/resources/data/1kg/1KG.Phase3.EUR.MAF_001.chr',i,'.rds'))
-  names(snp_ref)<-paste0('REF.',names(snp_ref))
-  bim_new<-merge(bim, snp_ref, by.x='SNP', by.y='REF.SNP')
-  bim_new<-bim_new[!is.na(bim_new$REF.BP_GRCh38),]
-  bim_new<-bim_new[order(bim_new$REF.BP_GRCh38),]
-  
-  write.table(bim_new$SNP, paste0('/users/k1806347/oliverpainfel/Data/1KG/GenoDisc/GRCh38/chr',i,'.extract'), col.names=F, row.names=F, quote=F)
-  
-  write.table(bim_new[, c('SNP', 'REF.BP_GRCh38'), with=F], paste0('/users/k1806347/oliverpainfel/Data/1KG/GenoDisc/GRCh38/chr',i,'.remap'), col.names=F, row.names=F, quote=F)
-
-  system(paste0('/users/k1806347/oliverpainfel/Software/plink2 --bfile /users/k1806347/oliverpainfel/Software/MyGit/GenoDisc/pipeline/resources/data/1kg/1KG.Phase3.EUR.MAF_001.chr',i,' --extract /users/k1806347/oliverpainfel/Data/1KG/GenoDisc/GRCh38/chr',i,'.extract --update-map /users/k1806347/oliverpainfel/Data/1KG/GenoDisc/GRCh38/chr',i,'.remap --sort-vars --make-pgen --out /users/k1806347/oliverpainfel/Data/1KG/GenoDisc/GRCh38/1KG.Phase3.EUR.MAF_001.chr',i))
-  system(paste0('/users/k1806347/oliverpainfel/Software/plink2 --pfile /users/k1806347/oliverpainfel/Data/1KG/GenoDisc/GRCh38/1KG.Phase3.EUR.MAF_001.chr',i,' --make-bed --out /users/k1806347/oliverpainfel/Data/1KG/GenoDisc/GRCh38/1KG.Phase3.EUR.MAF_001.chr',i))
-}
-```
-
-***
-
-### Run OTTERS using 1KG ref
-
-```{bash}
-conda activate otters
-# set number of threads to be used
-N_THREADS=1
-
-# set up my OTTERS directory and SDPR directory
-OTTERS_DIR=/users/k1806347/oliverpainfel/Software/OTTERS
-SDPR_DIR=/users/k1806347/oliverpainfel/Software/bin/SDPR
-
-# Input for OTTERS STAGE I 
-# Annotation File 
-exp_anno=/users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen/annot.txt
-
-# Input for OTTERS STAGE II
-# GWAS summary statistics 
-gwas_sst_file=/users/k1806347/oliverpainfel/Data/OTTERS/gwas_sumstats/disease_CARDIOVASCULAR_buildGRCh38.reformat.sumstats.tsv
-
-#for model in $(echo P0.001 P0.05 lassosum SDPR PRScs); do
-for model in $(echo P0.001); do
-for chr in $(seq 22 22); do
-  sbatch -p neurohack_cpu,cpu -t120 --mem 10G --wrap="
-
-# make sure the dynamic libraries of SDPR are not changed (For SDPR)
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${SDPR_DIR}/MKL/lib
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${SDPR_DIR}/gsl/lib
-export PATH=/users/k1806347/oliverpainfel/Software/bin:$PATH 
-
-# prevent automatically using  all available cores on a compute node (For SDPR and PRS-CS)
-export MKL_NUM_THREADS=$N_THREADS
-export NUMEXPR_NUM_THREADS=$N_THREADS
-export OMP_NUM_THREADS=$N_THREADS
-
-# STAGE II
-# gene-based association test using eQTL-weight trained from P+T, lassosum, SDPR and PRS-CS.
-mkdir -p /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/OTTERS/chr${chr}/${model}
-python3 ${OTTERS_DIR}/testing.py \
-  --OTTERS_dir=${OTTERS_DIR} \
-  --weight_dir=/users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen \
-  --models=${model} \
-  --anno_dir=${exp_anno} \
-  --geno_dir=/users/k1806347/oliverpainfel/Data/1KG/GenoDisc/GRCh38/1KG.Phase3.EUR.MAF_001.chr${chr} \
-  --out_dir=/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/OTTERS/chr${chr}/${model} \
-  --gwas_file=${gwas_sst_file} \
-  --chrom=${chr} \
-  --thread=$N_THREADS
-"
-done
-done
-
-```
-
-***
-
-### Run OTTERS using GTEx v8 ref
-
-```{bash}
-conda activate otters
-# set number of threads to be used
-N_THREADS=1
-
-# set up my OTTERS directory and SDPR directory
-OTTERS_DIR=/users/k1806347/oliverpainfel/Software/OTTERS
-SDPR_DIR=/users/k1806347/oliverpainfel/Software/bin/SDPR
-
-# Input for OTTERS STAGE I 
-# Annotation File 
-exp_anno=/users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen/annot.txt
-
-# Input for OTTERS STAGE II
-# GWAS summary statistics 
-gwas_sst_file=/users/k1806347/oliverpainfel/Data/OTTERS/gwas_sumstats/disease_CARDIOVASCULAR_buildGRCh38.reformat.sumstats.tsv
-
-#for model in $(echo P0.001 P0.05 lassosum SDPR PRScs); do
-for model in $(echo P0.001); do
-for chr in $(seq 22 22); do
-  sbatch -p neurohack_cpu,cpu -t120 --mem 10G --wrap="
-
-# make sure the dynamic libraries of SDPR are not changed (For SDPR)
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${SDPR_DIR}/MKL/lib
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${SDPR_DIR}/gsl/lib
-export PATH=/users/k1806347/oliverpainfel/Software/bin:$PATH 
-
-# prevent automatically using  all available cores on a compute node (For SDPR and PRS-CS)
-export MKL_NUM_THREADS=$N_THREADS
-export NUMEXPR_NUM_THREADS=$N_THREADS
-export OMP_NUM_THREADS=$N_THREADS
-
-# STAGE II
-# gene-based association test using eQTL-weight trained from P+T, lassosum, SDPR and PRS-CS.
-mkdir -p /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/OTTERS/gtex_ref/chr${chr}/${model}
-python3 ${OTTERS_DIR}/testing.py \
-  --OTTERS_dir=${OTTERS_DIR} \
-  --weight_dir=/users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen \
-  --models=${model} \
-  --anno_dir=${exp_anno} \
-  --geno_dir=/users/k1806347/oliverpainfel/Data/dbGAP/GTEx/processed/gtex_v8.snp.maf001.chr${chr} \
-  --out_dir=/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/OTTERS/gtex_ref/chr${chr}/${model} \
-  --gwas_file=${gwas_sst_file} \
-  --chrom=${chr} \
-  --thread=$N_THREADS
-"
-done
-done
-
-```
-
-***
-
-### Compare with original results
-
-```{r}
-library(data.table)
-library(ACAT)
-
-#########
-# 1KG ref
-#########
-
-# Read in results
-res_1kg <- NULL
-for (j in c('P0.001')) {
-  for (i in 22:22) {
-    tmp <- fread(
-        paste0(
-          '/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/OTTERS/chr',
-          i,
-          '/',
-          j,
-          '/',
-          j,
-          '.txt'
-        )
-      )
-  }
-  tmp$MODEL<-j
-  tmp <- tmp[, c('TargetID', 'MODEL', 'FUSION_PVAL'), with = F]
-  res_1kg <- rbind(res_1kg, tmp)
-}
-
-# Perform ACAT.O analysis
-res_1kg<-res_1kg[complete.cases(res_1kg),]
-res_1kg_acat<-data.table(aggregate(res_1kg$FUSION_PVAL, list(res_1kg$TargetID), FUN=ACAT))
-names(res_1kg_acat)<-c('TargetID', 'OTTERS')
-
-library(reshape2)
-res_1kg_wide <- dcast(res_1kg, TargetID ~ MODEL, value.var = "FUSION_PVAL")
-res_1kg_wide<-merge(res_1kg_wide, res_1kg_acat, by = 'TargetID')
-
-write.csv(res_1kg_wide, '/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/OTTERS/rep_res_1kg.csv', row.names=F)
-
-#########
-# GTEx v8 ref
-#########
-
-# Create function performing genomic control
-genomic_control<-function(z){
-  Lambda = median(z^2, na.rm = T)/qchisq(0.5, df = 1)
-  P = pchisq(z^2/Lambda, df = 1, lower.tail = F)
-}
-
-# Read in results
-res_gtex <- NULL
-for (j in c('P0.001')) {
-  for (i in 22:22) {
-    tmp <- fread(
-        paste0(
-          '/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/OTTERS/gtex_ref/chr',
-          i,
-          '/',
-          j,
-          '/',
-          j,
-          '.txt'
-        )
-      )
-  }
-  tmp$MODEL<-j
-  tmp$FUSION_PVAL_GC<-genomic_control(tmp$FUSION_Z)
-  tmp <- tmp[, c('TargetID', 'MODEL', 'FUSION_Z', 'FUSION_PVAL','FUSION_PVAL_GC'), with = F]
-  res_gtex <- rbind(res_gtex, tmp)
-}
-
-# Perform ACAT.O analysis
-res_gtex<-res_gtex[complete.cases(res_gtex),]
-res_gtex_acat<-data.table(aggregate(res_gtex$FUSION_PVAL_GC, list(res_gtex$TargetID), FUN=ACAT))
-names(res_gtex_acat)<-c('TargetID', 'OTTERS')
-
-library(reshape2)
-res_gtex_wide <- dcast(res_gtex, TargetID ~ MODEL, value.var = "FUSION_PVAL_GC")
-res_gtex_wide<-merge(res_gtex_wide, res_gtex_acat, by = 'TargetID')
-
-write.csv(res_gtex_wide, '/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/OTTERS/rep_res_gtex.csv', row.names=F)
-
-###############
-
-# Read in original results
-orig<-fread('/users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen/OTTERS_TWAS_SumStat_CARDIOVASCULAR_UKBB.txt')
-
-orig<-orig[, names(res_gtex_wide), with=F]
-
-both<-Reduce(function(dtf1, dtf2) merge(dtf1, dtf2, by = "TargetID"), list(orig,res_1kg_wide,res_gtex_wide))
-
-# Convert to Z scores, and check correlations between each test
-both_z<-apply(both[,-1], 2, function(x) qnorm(x))
-cor(both_z, use='p')
-summary(both_z)
-
-# There are missing values in the original results which are not missing in the replication
-# For those that are present, the correlation is <1, probably due to missing SNPs and different LD reference.
-
-both_z<-data.table(both_z)
-both_z[order(both_z$OTTERS.x),]
-both_z[order(both_z$OTTERS.y),]
-
-# Check I can reproduce the original OTTERS p-value using the ACAT function
-orig_long<-melt(orig)
-names(orig_long)<-c('TargetID','MODEL','FUSION_PVAL')
-orig_long<-orig_long[orig_long$MODEL != 'OTTERS',]
-orig_long<-orig_long[complete.cases(orig_long),]
-orig_long_acat<-data.table(aggregate(orig_long$FUSION_PVAL, list(orig_long$TargetID), FUN=ACAT))
-names(orig_long_acat)<-c('TargetID', 'OTTERS')
-
-merge(orig_long_acat, orig[, c('TargetID','OTTERS'), with=F], by='TargetID')
-# Yes, the OTTERS p-value is identical, so the ACAT function is not the reason for the discrepancy.
-
-```
-
-Limitations of OTTERS:
-- Slow
-- Requires consistent builds across files (not RSID based)
-- Not restricted to HapMap3
-- Format doesn't integrate well with existing downstream TWAS methodology
-- No direction of effect in ACAT result
-
-***
-
-### Compare to eQTL_to_TWAS
-
-Run TWAS using eQTLGen weights I generated and the same sumstats as the OTTERS paper.
-
-```{bash}
-# Download eQTLGen weights
-cd /users/k1806347/oliverpainfel/Data/eQTLGen/eQTL_to_TWAS
-wget -O eQTLGen.eQTL.tar.gz https://zenodo.org/records/7068381/files/eQTLGen.eQTL.tar.gz?download=1
-wget -O eQTLGen.eQTL.pos https://zenodo.org/records/7068381/files/eQTLGen.eQTL.pos?download=1
-
-tar -xvzf eQTLGen.eQTL.tar.gz
-rm eQTLGen.eQTL.tar.gz
-```
-
-```{r}
-library(data.table)
-
-# Munge the sumstats
-ss<-fread('/users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen/GCST90029019_buildGRCh37.tsv')
-ss$z_score<-ss$beta/ss$standard_error
-ss<-ss[, c('variant_id','effect_allele','other_allele','z_score'), with=F]
-names(ss)<-c('SNP','A1','A2','Z')
-fwrite(ss, '/users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen/GCST90029019_buildGRCh37.munged.tsv.gz', quote=F, sep='\t', na='NA')
-```
-
-```{bash}
-# Run FUSION
-mkdir /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/OTTERS/eQTL_to_TWAS
-conda activate eqtl_to_twas
-for chr in $(seq 22 22); do
-    sbatch -p neurohack_cpu,cpu -t120 --mem 10G --wrap="
-    Rscript /users/k1806347/oliverpainfel/Software/MyGit/eQTL_to_TWAS/FUSION.assoc_test.edit.R \
-    --sumstats /users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen/GCST90029019_buildGRCh37.munged.tsv.gz \
-    --weights /users/k1806347/oliverpainfel/Data/eQTLGen/eQTL_to_TWAS/eQTLGen.eQTL.pos \
-    --weights_dir /users/k1806347/oliverpainfel/Data/eQTLGen/eQTL_to_TWAS \
-    --ref_ld_chr /users/k1806347/oliverpainfel/Data/1KG/FUSION/1000G.EUR. \
-    --out /users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/OTTERS/eQTL_to_TWAS/GCST90029019.eQTLGen.chr${chr} \
-    --chr ${chr} \
-    --GWASN 459324
-    "
-done
-```
-
-```{r}
-library(data.table)
-
-# Read in the original results
-orig<-fread('/users/k1806347/oliverpainfel/Data/OTTERS/eQTLGen/OTTERS_TWAS_SumStat_CARDIOVASCULAR_UKBB.txt')
-
-# Read in the OTTERS replication results
-rep<-fread('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/OTTERS/rep_res.csv')
-
-# Read in the eQTL_to_TWAS results
-eqt_to_twas<-fread('/users/k1806347/oliverpainfel/Analyses/eQTL_to_TWAS/data/OTTERS/eQTL_to_TWAS/GCST90029019.eQTLGen.chr22')
-eqt_to_twas<-eqt_to_twas[, c('ID','MODEL','TWAS.P'), with=F]
-names(eqt_to_twas)[1]<-'TargetID'
-
-# Retain features present in each set
-common <-
-  intersect(
-    intersect(orig$TargetID, rep$TargetID), 
-    eqt_to_twas$TargetID)
-
-orig<-orig[orig$TargetID %in% common,]
-rep<-rep[rep$TargetID %in% common,]
-eqt_to_twas<-eqt_to_twas[eqt_to_twas$TargetID %in% common,]
-
-# Convert eQTL_to_TWAS to wide format
-# Calculate ACAT result
-# Perform ACAT.O analysis
-ACATO <- function(p){
-    if (all(is.na(p))) return(NA)
-    p <- p[!is.na(p)]
-    p[p == 1] <- 1 - 1e-16
-#### check if there are very small non-zero p values
-    is.small <- (p < 1e-16)
-    if (sum(is.small) == 0) {
-        cct.stat <- sum(tan((0.5 - p) * pi))/length(p)
-    } else {
-        cct.stat <- sum((1 / p[is.small]) / pi)
-        cct.stat <- cct.stat + sum(tan((0.5 - p[!is.small]) * pi))
-        cct.stat <- cct.stat/length(p)
-    }
-    #### check if the test statistic is very large.
-    if (cct.stat > 1e+15){
-        pval <- (1 / cct.stat) / pi
-    } else {
-        pval <- 1 - pcauchy(cct.stat)
-    }
-    pval
-}
-
-eqt_to_twas_acat<-data.table(aggregate(eqt_to_twas$TWAS.P, list(eqt_to_twas$TargetID), FUN=ACATO))
-names(eqt_to_twas_acat)<-c('TargetID', 'OTTERS')
-
-library(reshape2)
-eqt_to_twas_wide <- dcast(eqt_to_twas, TargetID ~ MODEL, value.var = "TWAS.P")
-eqt_to_twas_wide<-merge(eqt_to_twas_wide, eqt_to_twas_acat, by = 'TargetID')
-
-# Compare the ACAT P-value from each set
-names(orig)[names(orig) == 'OTTERS']<-'ACAT_orig'
-names(rep)[names(rep) == 'OTTERS']<-'ACAT_rep'
-names(eqt_to_twas_wide)[names(eqt_to_twas_wide) == 'OTTERS']<-'ACAT_eqtl'
-
-all<-Reduce(function(dtf1, dtf2)
-  merge(dtf1, dtf2, by = "TargetID"),
-  list(orig, rep, eqt_to_twas_wide))
-all<-all[, c('TargetID','ACAT_orig','ACAT_rep','ACAT_eqtl'), with=F]
-
-all_z<-apply(all[,-1], 2, function(x) qnorm(x))
-cor(all_z, use='p')
-summary(all_z)
-
-# Check how many are p<0.001
-sum(all$ACAT_orig < 0.001)
-sum(all$ACAT_rep < 0.001)
-sum(all$ACAT_eqtl < 0.001)
-
-table(all$ACAT_rep < 0.001, all$ACAT_eqtl < 0.001)
-
-```
-
-
-
-

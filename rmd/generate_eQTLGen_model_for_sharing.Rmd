@@ -1,5 +1,5 @@
 ---
-title: "Generating eQTLGen TWAS models for sharing"
+title: "Generating TWAS models using full eQTLGen and MetaBrain sumstats"
 output: html_document
 ---
 
@@ -9,14 +9,13 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ***
 
-Documentation for eQTLGen TWAS models.
+Documentation for eQTLGen and MetaBrain TWAS models.
 Contact Oliver Pain for further information (oliver.pain@kcl.ac.uk).
-Please cite: TBC
+Please cite: https://doi.org/10.1101/2022.11.23.517213
 
-Repository contains:
-- TWAS models based on full eQTLGen results with .pos file
-- Psuedovalidation results
-- GTEx v8 validation results
+***
+
+# eQTLGen
 
 ***
 
