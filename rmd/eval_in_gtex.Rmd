@@ -2139,7 +2139,7 @@ obs<-fread('/users/k1806347/oliverpainfel/Data/GTeX/v8/GTEx_Analysis_v8_eQTL_exp
 
 # Restrict the data to EUR
 # Use threshold of 0.9, as it returns number similar to original GTEx paper
-pop_prep<-fread('/users/k1806347/oliverpainfel/Data/dbGAP/GTEx/ancestry/gtex_v8.ancestry.model_pred', header=T)
+pop_prep<-fread('/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/ancestry/gtex_v8.ancestry.model_pred', header=T)
 pop_prep_eur<-pop_prep[pop_prep$EUR > 0.9]
 obs<-obs[,names(obs) %in% c(names(obs)[1:4], pop_prep_eur$FID), with=F]
 
@@ -2243,6 +2243,9 @@ for(i in unique(cor_res_melt_obs$test)){
   cor_res_average<-rbind(cor_res_average, data.frame(test=i,
                                                      Mean=mean(cor_res_melt_obs$value[cor_res_melt_obs$test == i])))
 }
+
+# Remove SuSiE1 model
+cor_res_melt_obs <- cor_res_melt_obs[cor_res_melt_obs$Var2 != 'eQTL.susie1',]
 
 library(ggplot2)
 bitmap('/scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/pred_obs_cor_boxplot.png', units='px', width=1500, height=1000, res=300)
@@ -2473,7 +2476,7 @@ obs<-fread('/users/k1806347/oliverpainfel/Data/GTeX/v8/GTEx_Analysis_v8_eQTL_exp
 
 # Restrict the data to EUR
 # Use threshold of 0.9, as it returns number (714) similar to original GTEx paper
-pop_prep<-fread('/users/k1806347/oliverpainfel/Data/dbGAP/GTEx/ancestry/gtex_v8.ancestry.model_pred', header=T)
+pop_prep<-fread('/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/ancestry/gtex_v8.ancestry.model_pred', header=T)
 pop_prep_eur<-pop_prep[pop_prep$EUR > 0.9]
 obs<-obs[,names(obs) %in% c(names(obs)[1:4], pop_prep_eur$FID), with=F]
 
@@ -2558,6 +2561,9 @@ for(i in unique(cor_res_melt_obs$test)){
                                                      N=sum(cor_res_melt_obs$test == i)))
 }
 
+cor_res_melt <- cor_res_melt[cor_res_melt$Var2 != 'eQTL.susie1',]
+cor_res_melt_obs <- cor_res_melt_obs[cor_res_melt_obs$Var2 != 'eQTL.susie1',]
+
 library(ggplot2)
 bitmap('/scratch/prj/oliverpainfel/Analyses/eQTL_to_TWAS/data/GTEx_v8/pred_exp/pred_obs_cor_boxplot_eQTLGen.png', units='px', width=1500, height=1000, res=300)
 ggplot(cor_res_melt_obs, aes(x=paste0(Var1,' vs. ',Var2), y=value)) +
@@ -2635,7 +2641,7 @@ for(i in unique(cor_res_melt$L1)){
   cor_res_melt_i_noobs<-cor_res_melt_i[cor_res_melt_i$Var1 != 'obs' & cor_res_melt_i$Var2 != 'obs',]
   
   cor_res_melt_i_obs_2<-merge(cor_res_melt_i_obs, cor_res_melt_i_noobs, by=c('L1','Var2'))
-  cor_res_melt_i_obs_3<-merge(cor_res_melt_i_obs_2, cor_res_melt_i_obs_2, by.x=c('L1','Var2'), by.y=c('L1','Var1.y'))
+  cor_res_melt_i_obs_3<-merge(cor_res_melt_i_obs_2, cor_res_melt_i_obs_2, by.x=c('L1','Var2'), by.y=c('L1','Var1.y'), allow.cartesian=TRUE)
   
   cor_res_melt_i_obs_3<-cor_res_melt_i_obs_3[,c('L1','Var2','Var1.x.x','value.x.x','Var2.y','value.x.y','value.y.y')]
   names(cor_res_melt_i_obs_3)<-c('ID','z','x','xz','y','xy','yz')

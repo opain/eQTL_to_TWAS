@@ -1,0 +1,207 @@
+---
+title: "Comparison with OTTERS"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
+
+library(knitr)
+library(data.table)
+
+```
+
+***
+
+This document is an attempt of simplifying the message: See what methods most accurately predicts gene expression. We will using the eQTLGen data (excluding GTEx) as the discovery sample, and GTEx v8 as the target sample.
+
+Methods to include are:
+
+- SUMMIT
+- SUMMIT-FA
+- EXPRESSO
+- OTTERS
+- BGW-TWAS
+
+***
+
+# Literature review
+
+## SUMMIT and SUMMIT-FA
+
+SUMMIT and SUMMIT-FA are not flexible - they requires a specific set of files with required file names and formats. It is going to be hard to implement. They release the models, so perhaps we can compare the R2 in some independent data.
+
+These methods restrict to HapMap3 variants. They also output models in format resembling FUSION format.
+
+They trained the models using the full eQTLGen sumstats, evaluating the 309 independent individuals in GTEx v8.
+
+We can download the model from SUMMIT and SUMMIT-FA can be download from OSF. Do this and predict expression into independent GTEx v8.
+
+***
+
+## EXPRESSO
+
+This software and the manuscript is more impressive. Really comprehensive comparison of methods using sumstats and individual-level data. EXPRESSO appears to be the best method. They also developed a TWAS-based drug repurposing pipeline. They apply their models to multi-ancestry GWAS using TESLA. They don't include SBayesRC or MegaPRS, which are some of the best performing PGS methods.
+
+The authors position EXPRESSO as just one method for generating the models, and that it can be added in combination with the methods in OTTERS for improved power in TWAS, since OTTERS combines across models using Cauchy distribution. 
+
+I could compare SBayesRC to EXPRESSO, and my pipeline to OTTERS. I could also include multi-ancestry eQTL data if there is any.
+
+***
+
+## BGW-TWAS
+
+Develops approach for modelling cis and trans eQTLs. They use ROSMAP to develop the models, and evaluate in MCADGS.
+
+It is novel in its use of trans-eQTL data, but performance is not great.
+
+It would be interesting to see whether we can go beyond this, by applying some of the PGS methods to genome-wide eQTL data - eQTLGen have released this now.
+
+***
+
+# Analysis Phase 1: GenoPred
+
+Try combining the cis- and trans-eQTL sumstats for eQTLGen, splitting by gene, and then using GenoPred to generate the prediction models, and then evaluate in independent GTEx participants
+
+***
+
+## Prepare eQTL sumstats
+
+```{r}
+library(data.table)
+
+cis<-fread('~/oliverpainfel/Data/eQTLGen/full/2019-12-11-cis-eQTLsFDR-ProbeLevel-CohortInfoRemoved-BonferroniAdded.txt.gz')
+cis$GenePos <- NULL
+cis$NrCohorts <- NULL
+cis$FDR <- NULL
+cis$BonferroniP <- NULL
+cis$GeneChr <- NULL
+
+trans<-fread('~/oliverpainfel/Data/eQTLGen/full/2018-09-04-trans-eQTLsFDR-CohortInfoRemoved-BonferroniAdded.txt.gz')
+trans$GenePos <- NULL
+trans$NrCohorts <- NULL
+trans$FDR <- NULL
+trans$BonferroniP <- NULL
+trans$GeneChr <- NULL
+
+# Read in EUR MAF
+frq<-NULL
+for(i in 1:22){
+  frq<-rbind(frq, fread(paste0('/users/k1806347/oliverpainfel/Data/1KG/FUSION//1000G.EUR.',i,'.frq')))
+}
+names(frq)[names(frq) == 'MAF']<-'FREQ'
+
+setkey(cis, Gene)
+setkey(trans, Gene)
+setkey(frq, SNP)
+
+dir.create('~/oliverpainfel/Data/eQTLGen/full/cis_trans_combined')
+genes <- unique(cis$Gene)
+for(i in head(genes)){
+  cis_i<-cis[.(i)]
+  trans_i<-trans[.(i)]
+
+  cis_i <- cis[cis$Gene == i,]
+  trans_i <- trans[trans$Gene == i,]
+  
+  both_i<-rbind(cis_i, trans_i)
+  
+  names(both_i)[names(both_i) == 'AssessedAllele']<-'A1'
+  names(both_i)[names(both_i) == 'OtherAllele']<-'A2'
+  
+  # Insert FREQ from EUR reference
+  # There don't seem to be any strand flips
+  frq_tmp<-frq[.(both_i$SNP)]
+  both_i_match<-merge(both_i, frq_tmp[,c('SNP','A1','A2','FREQ'),with=F], by=c('SNP','A1','A2'))
+  both_i_flip<-merge(both_i, frq_tmp[,c('SNP','A1','A2','FREQ'),with=F], by.x=c('SNP','A1','A2'), by.y=c('SNP','A2','A1'))
+  both_i_flip$FREQ<-1-both_i_flip$FREQ
+  both_i<-rbind(both_i_match, both_i_flip)
+  
+  # Approximate BETA, SE, and P
+  both_i$BETA<-both_i$Z/sqrt((2*both_i$FREQ)*(1-both_i$FREQ)*(both_i$NrSamples+(both_i$Z^2)))
+  both_i$SE<-abs(both_i$BETA)/abs(both_i$Z)
+  
+  both_i <- both_i[, c('SNPChr','SNPPos','SNP','A1','A2','BETA','SE','Pvalue','NrSamples')]
+  names(both_i) <- c('CHR','BP','SNP','A1','A2','BETA','SE','P','N')
+  
+  fwrite(both_i, paste0('~/oliverpainfel/Data/eQTLGen/full/cis_trans_combined/',i,'.gz'), quote = F, sep = ' ', na= 'NA')
+}
+```
+
+***
+
+## Run GenoPred
+
+```{r}
+setwd('/users/k1806347/oliverpainfel/Software/MyGit/GenoPred/pipeline')
+library(data.table)
+
+dir.create('/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config', recursive = T)
+dir.create('/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/output', recursive = T)
+
+# Create config file
+conf <- c(
+  'outdir: /scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/output',
+  'config_file: /scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config/config.yaml',
+  'gwas_list: /scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config/gwas_list.txt',
+  'target_list: /scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config/target_list.txt',
+  "pgs_methods: ['ptclump','sbayesrc','quickprs','lassosum','ldpred2']",
+  "pgs_scaling: ['discrete']",
+  "target_populations: ['EUR']",
+  "cores_prep_pgs: 1",
+  "quickprs_ldref: /users/k1806347/oliverpainfel/Data/hgdp_1kg/quickprs/hm3",
+  "sbayesrc_ldref: /users/k1806347/oliverpainfel/Data/hgdp_1kg/sbayesrc/hm3"
+)
+
+write.table(conf, '/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config/config.yaml', col.names = F, row.names = F, quote = F)
+
+# Create target_list
+target_list <- data.table(name = 'gtex_v8',
+                          path = '/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/processed/gtex_v8.snp.maf001.hm3',
+                          type = 'plink2',
+                          indiv_report = F)
+
+write.table(
+  target_list,
+  '/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config/target_list.txt',
+  col.names = T,
+  row.names = F,
+  quote = F,
+  sep = ' '
+)
+
+# Create gwas_list
+genes <- gsub('.gz', '', list.files('~/oliverpainfel/Data/eQTLGen/full/cis_trans_combined'))
+
+gwas_list <- data.table(
+  name = genes,
+  path = paste0('/users/k1806347/oliverpainfel/Data/eQTLGen/full/cis_trans_combined/', genes,'.gz'),
+  population = 'EUR',
+  n = NA,
+  sampling = NA,
+  prevalence = NA,
+  mean = NA,
+  sd = NA,
+  label = genes)
+
+write.table(gwas_list, '/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config/gwas_list.txt', col.names = T, row.names = F, quote = F, sep = ' ')
+
+```
+
+```{bash}
+snakemake \
+  --profile slurm \
+  --use-conda \
+  --configfile=/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config/config.yaml \
+  target_pgs -n 
+```
+
+This is probably an inefficient way of running these PGS methods. If the sumstats were truly genome-wide then it would be perfect, but eQTLGen trans QTLs are restricted to 10K variants. Several methods do run in a fairly efficient manor (ldpred2, lassosum, quickprs, ptclump). quickprs and sbayesrc will have issues due to poor overlap with the reference. dbslmm and prs-cs are run per chromosome so won't work.
+
+Two options, find truly genome-wide trans-eQTL dataset, or continue with cis-eQTLs only.
+
+For cis-eQTL only analysis, we can make GenoPred more efficient by ensuring only the relevant LD reference data is used. We just need to subset the reference to include eQTL sumstats for given gene, and adjsut CHROMS to relevant chromosome. SBayesRC we can subset the reference to the relevant blocks. The only extra overhead of running in GenoPred would be that there is seperate job for every method, but shouldn't be much of an overhead. It will also track jobs completing better. WuickPRS can't be so easily remedied as the reference data assumes a certain overlap with the sumstats. MegaPRS would be fine though. I can make an R function for packaging models in FUSION format for TWAS.
+
+Note. I am running into an issue regarding reference data for sbayesr and sbayesrc 
+
+***

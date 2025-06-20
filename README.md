@@ -4,8 +4,6 @@ This repo contains code for deriving TWAS models from eQTL summary statistics. T
 
 Please refer to and cite [our paper](https://www.biorxiv.org/content/10.1101/2022.11.23.517213v1) comparing approaches for integration of eQTL summary statistics with GWAS summary statistics.
 
-
-
 ***
 
 ## compute_weights.R
@@ -38,10 +36,12 @@ The essential software and data requirements vary according to the methods selec
 
 - R libraries
 
-  ```{r}
-  install.packages(c('optparse','data.table'))
+  - I have created a conda environment .yaml file to install all required R packages.
+  
+  ```{bash}
+  conda env create -f env.yaml
   ```
-
+  
 - [GCTB software](https://cnsgenomics.com/software/gctb/#Overview) and [GCTB reference data](https://zenodo.org/record/3376628#.Yx4JsXbMKUk)
 - [GCTA software](https://yanglab.westlake.edu.cn/software/gcta/#Overview) 
 
@@ -66,20 +66,10 @@ The essential software and data requirements vary according to the methods selec
 
   - [LDpred2 reference data](https://figshare.com/articles/dataset/European_LD_reference_with_blocks_/19213299)
 
-  - ```{r}
-    install.packages(c('bigsnpr','dplyr')
-    ```
-
 - lassosum
 
   - ```{r}
     install.packages(c('lassosum','fdrtool'))
-    ```
-
-- SuSiE
-
-  - ```{r}
-    install.packages('susieR')
     ```
 
 ***
