@@ -663,12 +663,195 @@ The predicted-observed correlations are highly concordant between GenoPred and e
 
 ***
 
-# Predict expression using EXPRESSO
+# Analysis Phase 4: EXPRESSO
+
+## Published models
 
 ```{bash}
-mkdir ~/
-wget https://github.com/LidaWangPSU/EXPRESSO/blob/main/trained_model/EXPRESSO_Whole_Blood_eQTLGen_weights_hg19.txt.zip
+# Download EXPRESSO repo
+cd /users/k1806347/oliverpainfel/Software
+git clone https://github.com/LidaWangPSU/EXPRESSO.git
+
+# Examine published wieghts from eQTLGen
+cd /users/k1806347/oliverpainfel/Software/EXPRESSO/trained_model
+unzip EXPRESSO_Whole_Blood_eQTLGen_weights_hg19.txt.zip
 ```
+
+```{r}
+library(data.table)
+weights<-fread('/users/k1806347/oliverpainfel/Software/EXPRESSO/trained_model/EXPRESSO_Whole_Blood_eQTLGen_weights_hg19.txt')
+
+length(unique(weights$gene_id))
+# 12280
+
+nrow(weights)
+# 540457
+
+weights$heritable <- NULL
+
+# Split the SNP column into components
+snp_parts <- do.call(rbind, strsplit(weights$snp, "_"))
+weights$chr_name <- snp_parts[,1]
+weights$chr_position <- snp_parts[,2]
+weights$effect_allele <- snp_parts[,3]
+weights$other_allele <- snp_parts[,4]
+
+# Rename 'weight' column to match PGS format
+weights$effect_weight <- weights$weight
+
+dir.create('~/oliverpainfel/Data/EXPRESSO/published_models', recursive = T)
+for(i in unique(weights$gene_id)){
+  # Select and reorder columns
+  pgs_score_i<-weights[weights$gene_id == i,]
+  pgs_score <- pgs_score_i[, c("chr_name", "chr_position", "effect_allele", "other_allele", "effect_weight")]
+
+  # Save to a .score file
+  write.table(
+    pgs_score,
+    file = paste0(
+      "~/oliverpainfel/Data/EXPRESSO/published_models/eQTLGen_",
+      i,
+      ".score"
+    ),
+    sep = "\t",
+    quote = FALSE,
+    row.names = FALSE)
+}
+```
+
+```{r}
+setwd('/users/k1806347/oliverpainfel/Software/MyGit/GenoPred/pipeline')
+library(data.table)
+
+dir.create('/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config', recursive = T)
+dir.create('/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/output', recursive = T)
+
+# Create config file
+conf <- c(
+  'outdir: /scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/output',
+  'config_file: /scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config/config.yaml',
+  'gwas_list: /scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config/gwas_list.txt',
+  'target_list: /scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config/target_list.txt',
+  'score_list: /scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config/score_list.txt',
+  "pgs_methods: ['ptclump','sbayesrc','sbayesr','quickprs','lassosum','ldpred2','prscs','dbslmm','megaprs']",
+  "pgs_scaling: ['discrete']",
+  "target_populations: ['EUR']",
+  "lassosum_pseudo_only: true",
+  "megaprs_pseudo_only: true",
+  "prscs_phi: ['auto']",
+  "dbslmm_h2f: ['1']",
+  "cores_prep_pgs: 1",
+  "quickprs_ldref: /users/k1806347/oliverpainfel/Data/hgdp_1kg/quickprs/hm3",
+  "sbayesrc_ldref: /users/k1806347/oliverpainfel/Data/hgdp_1kg/sbayesrc/hm3"
+)
+
+write.table(conf, '/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config/config.yaml', col.names = F, row.names = F, quote = F)
+
+conf <- c(
+  'outdir: /scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/output',
+  'config_file: /scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config/config_expresso_pub.yaml',
+  'score_list: /scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config/score_list.txt',
+  'target_list: /scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config/target_list.txt',
+  "pgs_scaling: ['discrete']",
+  "target_populations: ['EUR']"
+)
+
+write.table(conf, '/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config/config_expresso_pub.yaml', col.names = F, row.names = F, quote = F)
+
+# Create gwas_list
+genes <- gsub('.gz', '', list.files('~/oliverpainfel/Data/eQTLGen/full/cis_trans_combined'))
+
+score_list <- data.table(
+  name = paste0(genes,'_expresso_pub'),
+  path = paste0(
+      "/users/k1806347/oliverpainfel/Data/EXPRESSO/published_models/eQTLGen_",
+      genes,
+      ".score"),
+  label = paste0(genes,'_expresso_pub'))
+
+write.table(score_list, '/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config/score_list.txt', col.names = T, row.names = F, quote = F, sep = ' ')
+
+```
+
+```{bash}
+snakemake \
+  --profile slurm \
+  --use-conda \
+  --configfile=/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config/config_expresso_pub.yaml \
+  target_pgs -n 
+```
+
+This doesn't work as they did not restrict to HapMap3 variants, so poor overlap with GenoPred reference. Run EXPRESSO to generate weights using data harmonised with the GenoPred reference to improve comparability to other approaches. We should probably consider expanding the SNP-list at some point to see if it makes an improvement.
+
+***
+
+## Generate models
+
+```{r}
+# Install packages and EXPRESSO
+library(devtools)
+devtools::install_github("zhanxw/fast.lasso")
+devtools::install_github("dajiangliu/rareGWAMA")
+devtools::install_github("LidaWangPSU/EXPRESSO/EXPRESSO")
+
+library(EXPRESSO)
+library(fast.lasso)
+library(rareGWAMA)
+library(MASS)
+library(data.table)
+
+setwd('/users/k1806347/oliverpainfel/Software/EXPRESSO/example_data')
+
+refFile <- "gtex_chr22.hm3"
+annoFile <- "Whole_Blood_annotation_chr22.txt"
+sumstatFile<- "Whole_Blood_GTEx_hm3_chr22_sumstat_beta.txt"
+
+##Find gene list##
+gene_subset = unique(read.table(sumstatFile, header = TRUE)$gene) 
+
+windowFile <- c( "Whole_Blood_1mb_chr22.txt",
+                 "Whole_Blood_250kb_chr22.txt",
+                 "Whole_Blood_loop_chr22.txt",
+                 "Whole_Blood_domain_chr22.txt",
+                 "Whole_Blood_tad_chr22.txt",
+                 "Whole_Blood_pchic_chr22.txt")
+
+out_path= "output/EXPRESSO_test"
+
+res.tmp <-
+  EXPRESSO(
+    sumstatFile,
+    annoFile,
+    windowFile,
+    refFile,
+    out_path,
+    minMaf = 0.05,
+    maxIter = 1000,
+    gene.vec = gene_subset,
+    append = F
+  )
+
+# I have posted an issue asking for the annotation and windowfiles for all chromosomes.
+# We could implement this method within GenoPred and include it as another model.
+```
+
+***
+
+# Analysis Phase 5: OTTERS
+
+We will need to run OTTERS ourselves to generate models restricted to HapMap3. Some OTTERS code already in otters_comp.
+
+***
+
+# Analysis Phase 6: SUMMIT
+
+Download published models.
+
+***
+
+# Analysis Phase 7: SUMMIT-FA
+
+Download published models.
 
 ***
 
@@ -676,5 +859,25 @@ To do:
 - Fix SBayesRC reference issue - I think it is fixed but reference data download is slow - 
 - Make SBayesRC more efficient when using locus specific sumstats
 - Compare prediction when using models from SUMMIT, SUMMIT-FA, OTTERS and EXPRESSO
+- Look into AdipoExpress meta-analysis sumstats
+- Look into liver eQTL meta-analysis: https://mohlke.web.unc.edu/data/signal-based-liver-eqtl-meta-analysis-broadaway-et-al-ajhg-2024/
+- Could compare to models from OMICSPRED - They have shared sumstats
+- Brain single cell meta-analysis: https://pmc.ncbi.nlm.nih.gov/articles/PMC11908325/#S22
 
 ***
+
+```{bash}
+mkdir /users/k1806347/oliverpainfel/Data/AdipoExpress
+cd /users/k1806347/oliverpainfel/Data/AdipoExpress
+wget https://zenodo.org/records/13845120/files/marginal_byChr_EURonly.tar.gz?download=1
+mv 'marginal_byChr_EURonly.tar.gz?download=1' marginal_byChr_EURonly.tar.gz
+tar -xvzf marginal_byChr_EURonly.tar.gz
+```
+
+```{r}
+library(data.table)
+ss <- fread('/users/k1806347/oliverpainfel/Data/AdipoExpress/marginal_byChr_EURonly/EURonly_marginal_local_eQTL_meta_chr10.txt')
+
+table(ss$ENSG)
+
+```
