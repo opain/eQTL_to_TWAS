@@ -139,6 +139,8 @@ cis$FDR <- NULL
 cis$BonferroniP <- NULL
 cis$GeneChr <- NULL
 
+cis<-cis[cis$SNPChr == 22,]
+
 # Read in EUR MAF
 frq<-NULL
 for(i in 1:22){
@@ -177,6 +179,7 @@ for(i in genes[1:50]){
   fwrite(cis_i, paste0('~/oliverpainfel/Data/eQTLGen/full/cis_only/',i,'.gz'), quote = F, sep = ' ', na= 'NA')
 }
 
+write.table(genes[1:50], '~/oliverpainfel/Data/eQTLGen/full/cis_only/gene_list.txt', row.names=F, col.names=F, quote=F)
 ```
 
 ***
@@ -280,7 +283,7 @@ conf <- c(
   'config_file: /scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config/config_cis_only.yaml',
   'gwas_list: /scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config/gwas_list_cis_only.txt',
   'target_list: /scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config/target_list.txt',
-  "pgs_methods: ['ptclump','quickprs','lassosum','ldpred2','prscs','dbslmm','megaprs','sbayesr']",
+  "pgs_methods: ['ptclump','quickprs','lassosum','ldpred2','prscs','dbslmm','megaprs','sbayesr','sdpr']",
   "pgs_scaling: ['discrete']",
   "target_populations: ['EUR']",
   "lassosum_pseudo_only: true",
@@ -297,7 +300,7 @@ conf <- c(
 write.table(conf, '/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config/config_cis_only.yaml', col.names = F, row.names = F, quote = F)
 
 # Create gwas_list
-genes <- gsub('.gz', '', list.files('~/oliverpainfel/Data/eQTLGen/full/cis_only'))
+genes <- fread('~/oliverpainfel/Data/eQTLGen/full/cis_only/gene_list.txt', header=F)$V1
 
 gwas_list <- data.table(
   name = genes,
@@ -512,14 +515,15 @@ sbatch -p neurohack_cpu,cpu --mem 30G -n 40 -t 200 --wrap="
 
 ```
 
+***
+
 ## Evaluate PGS
 
 ```{r}
 library(data.table)
 
 # Get the list of genes tested above
-config<-'/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config/config_cis_only.yaml'
-genes <- unique(score_files$name)
+genes <- gsub('.gz', '', list.files('~/oliverpainfel/Data/eQTLGen/full/cis_only'))
 
 # Read in predicted expression by eqtl_to_twas
 pred_exp <- fread('/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/eqtl_to_twas/output/gtex_v8.eqtlgen/FeaturePredictions_eQTLGen.eQTL.txt.gz')
@@ -612,17 +616,6 @@ for(i in genes){
 library(ggplot2)
 library(cowplot)
 
-# Restrict to genes available for all methods
-cor_res <- cor_res[complete.cases(cor_res),]
-cor_res_complete <- NULL
-for(i in names(pgs)){
-    pgs_i <- pgs[[i]]
-    if(all(pgs_methods %in% names(pgs_i))){
-      cor_res_complete <- rbind(cor_res_complete, cor_res[cor_res$gene == i,])
-    }
-}
-cor_res <- cor_res_complete
-
 ggplot(cor_res, aes(x=gene, y=r , fill = pgs_method)) +
     geom_errorbar(aes(ymin = r - se, ymax = r + se),
                   width = 0,
@@ -637,6 +630,17 @@ ggplot(cor_res, aes(x=gene, y=r , fill = pgs_method)) +
           legend.key.spacing.x = unit(1, "cm"),
           legend.justification = "center")
 
+# Restrict to genes available for all methods
+cor_res <- cor_res[complete.cases(cor_res),]
+cor_res_complete <- NULL
+for(i in names(pgs)){
+    pgs_i <- pgs[[i]]
+    if(all(pgs_methods %in% names(pgs_i))){
+      cor_res_complete <- rbind(cor_res_complete, cor_res[cor_res$gene == i,])
+    }
+}
+
+cor_res <- cor_res_complete
 # Compute medians using aggregate()
 medians <- aggregate(r ~ pgs_method, data = cor_res, FUN = median, na.rm = TRUE)
 
@@ -788,51 +792,512 @@ This doesn't work as they did not restrict to HapMap3 variants, so poor overlap 
 ## Generate models
 
 ```{r}
-# Install packages and EXPRESSO
-library(devtools)
-devtools::install_github("zhanxw/fast.lasso")
-devtools::install_github("dajiangliu/rareGWAMA")
-devtools::install_github("LidaWangPSU/EXPRESSO/EXPRESSO")
+# Prepare input
+genes <- fread('~/oliverpainfel/Data/eQTLGen/full/cis_only/gene_list.txt', header=F)$V1
 
+# eQTL sumstats
+library(data.table)
+
+cis<-fread('~/oliverpainfel/Data/eQTLGen/full/2019-12-11-cis-eQTLsFDR-ProbeLevel-CohortInfoRemoved-BonferroniAdded.txt.gz')
+cis$GenePos <- NULL
+cis$NrCohorts <- NULL
+cis$FDR <- NULL
+cis$BonferroniP <- NULL
+cis$GeneChr <- NULL
+
+cis<-cis[cis$SNPChr == 22,]
+
+# Read in EUR MAF
+frq<-NULL
+for(i in 1:22){
+  frq<-rbind(frq, fread(paste0('/users/k1806347/oliverpainfel/Data/1KG/FUSION//1000G.EUR.',i,'.frq')))
+}
+names(frq)[names(frq) == 'MAF']<-'FREQ'
+
+setkey(cis, Gene)
+setkey(frq, SNP)
+
+dir.create('/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/EXPRESSO/input/sumstats/', recursive = T)
+
+genes <- unique(cis$Gene)
+for(i in genes[1:50]){
+  print(i)
+  cis_i<-cis[.(i)]
+  cis_i <- cis[cis$Gene == i,]
+
+  names(cis_i)[names(cis_i) == 'AssessedAllele']<-'A1'
+  names(cis_i)[names(cis_i) == 'OtherAllele']<-'A2'
+  
+  # Insert FREQ from EUR reference
+  # There don't seem to be any strand flips
+  frq_tmp<-frq[.(cis_i$SNP)]
+  cis_i_match<-merge(cis_i, frq_tmp[,c('SNP','A1','A2','FREQ'),with=F], by=c('SNP','A1','A2'))
+  cis_i_flip<-merge(cis_i, frq_tmp[,c('SNP','A1','A2','FREQ'),with=F], by.x=c('SNP','A1','A2'), by.y=c('SNP','A2','A1'))
+  cis_i_flip$FREQ<-1-cis_i_flip$FREQ
+  cis_i<-rbind(cis_i_match, cis_i_flip)
+  
+  # Approximate BETA, SE, and P
+  cis_i$BETA<-cis_i$Z/sqrt((2*cis_i$FREQ)*(1-cis_i$FREQ)*(cis_i$NrSamples+(cis_i$Z^2)))
+  cis_i$SE<-abs(cis_i$BETA)/abs(cis_i$Z)
+  
+  cis_i <- cis_i[, c('SNPChr','SNPPos','SNP','A1','A2','BETA','SE','Pvalue','NrSamples','GeneSymbol','Gene','FREQ')]
+  names(cis_i) <- c('CHR','BP','SNP','A1','A2','BETA','SE','P','N','SYMBOL','GENE','FREQ')
+
+  cis_i<-cis_i[,c('GENE','SYMBOL','CHR','BP','A1','A2','FREQ','BETA','N','SNP'), with=F]
+  names(cis_i)<-c('gene','symbol','chr','pos','ref','alt','af','beta.est','n','snp_id')
+  
+  fwrite(cis_i, paste0('/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/EXPRESSO/input/sumstats/', i,'.txt'), sep='\t', na='NA', quote=F)
+}
+
+# Annotation file
+setwd('~/oliverpainfel/Software/MyGit/GenoPred/pipeline/')
+source('../functions/misc.R')
+source_all('../functions')
+library(data.table)
+
+pvar <- read_pvar('resources/data/ref/ref.chr')
+pvar <- pvar[, c('SNP','CHR','BP','A1','A2'), with=F]
+names(pvar)<-c('snp','chr','pos','ref','alt')
+pvar$overlap<-0
+
+fwrite(pvar, '/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/EXPRESSO/input/annot.txt', sep='\t', na='NA', quote=F)
+
+```
+
+Make an R script to run EXPRESSO for each gene in parallel.
+
+```{r}
+#!/usr/bin/env Rscript
+args <- commandArgs(trailingOnly = TRUE)
+gene <- args[1]
+
+# load libraries & objects
 library(EXPRESSO)
 library(fast.lasso)
 library(rareGWAMA)
 library(MASS)
 library(data.table)
 
-setwd('/users/k1806347/oliverpainfel/Software/EXPRESSO/example_data')
+# assume annoFile, windowFile, refFile are set here or via a config
+refFile <- "/users/k1806347/oliverpainfel/Data/1KG/FUSION/1000G.EUR.22"
+annoFile <- "/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/EXPRESSO/input/annot.txt"
+sumstatFile<- "/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/EXPRESSO/input/eqtl_sumstats.txt"
 
-refFile <- "gtex_chr22.hm3"
-annoFile <- "Whole_Blood_annotation_chr22.txt"
-sumstatFile<- "Whole_Blood_GTEx_hm3_chr22_sumstat_beta.txt"
+windowFile <- c( "/users/k1806347/oliverpainfel/Software/EXPRESSO/example_data/Whole_Blood_1mb_chr22.txt",
+                 "/users/k1806347/oliverpainfel/Software/EXPRESSO/example_data/Whole_Blood_250kb_chr22.txt",
+                 "/users/k1806347/oliverpainfel/Software/EXPRESSO/example_data/Whole_Blood_loop_chr22.txt",
+                 "/users/k1806347/oliverpainfel/Software/EXPRESSO/example_data/Whole_Blood_domain_chr22.txt",
+                 "/users/k1806347/oliverpainfel/Software/EXPRESSO/example_data/Whole_Blood_tad_chr22.txt",
+                 "/users/k1806347/oliverpainfel/Software/EXPRESSO/example_data/Whole_Blood_pchic_chr22.txt")
 
-##Find gene list##
-gene_subset = unique(read.table(sumstatFile, header = TRUE)$gene) 
+indir <- paste0('/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/EXPRESSO/input/sumstats/', gene,'.txt')
+outdir  <- paste0("/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/EXPRESSO/output/", gene)
 
-windowFile <- c( "Whole_Blood_1mb_chr22.txt",
-                 "Whole_Blood_250kb_chr22.txt",
-                 "Whole_Blood_loop_chr22.txt",
-                 "Whole_Blood_domain_chr22.txt",
-                 "Whole_Blood_tad_chr22.txt",
-                 "Whole_Blood_pchic_chr22.txt")
+EXPRESSO(
+  indir,
+  annoFile,
+  windowFile,
+  refFile,
+  outdir,
+  minMaf  = 0.05,
+  maxIter = 1000,
+  append  = FALSE
+)
+```
 
-out_path= "output/EXPRESSO_test"
+```{bash}
+#!/bin/bash
+#SBATCH --job-name=EXPRESSO
+#SBATCH --output=~/logs/expresso_%A_%a.out
+#SBATCH --error=~/logs/expresso_%A_%a.err
+#SBATCH --time=12:00:00
+#SBATCH --mem=10G
+#SBATCH --ntasks=1
+#SBATCH --partition=neurohack_cpu
+#SBATCH --array=1-50%50    # adjust 1–N to your #genes, %50 = max concurrent
 
-res.tmp <-
-  EXPRESSO(
-    sumstatFile,
-    annoFile,
-    windowFile,
-    refFile,
-    out_path,
-    minMaf = 0.05,
-    maxIter = 1000,
-    gene.vec = gene_subset,
-    append = F
+# build the gene list into a Bash array
+mapfile -t GENES < ~/oliverpainfel/Data/eQTLGen/full/cis_only/gene_list.txt
+
+# SLURM_ARRAY_TASK_ID runs from 1..N
+gene=${GENES[$SLURM_ARRAY_TASK_ID-1]}
+
+# call the R wrapper
+./run_expresso.R "$gene"
+```
+
+```{bash}
+cd /scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/EXPRESSO
+chmod a+x /scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/EXPRESSO/run_expresso.R
+chmod a+x /scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/EXPRESSO/run_expresso.sh
+sbatch run_expresso.sh
+```
+
+Format into score files for GenoPred.
+
+```{r}
+library(data.table)
+
+genes <- fread('~/oliverpainfel/Data/eQTLGen/full/cis_only/gene_list.txt', header=F)$V1
+
+dir.create('/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/EXPRESSO/score_files', recursive = T)
+for(model in c('mse','pseudo')){
+  for(i in genes){
+    weights <-
+      fread(
+        paste0(
+          '/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/EXPRESSO/output/',
+          i,
+          '-weight.', model, '.txt'
+        ), fill = T)
+    
+    weights <- weights[, c('snp','weight'), with = F]
+    
+    # Insert A1 and A2 from eqtl sumstats (not the ref)
+    eqtl_ss<-fread(paste0('/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/EXPRESSO/input/sumstats/', i,'.txt'))
+    
+    weights <- merge(weights, eqtl_ss[,c('snp_id','ref','alt'), with = F], by.x = 'snp', by.y = 'snp_id', all.x = T)
+    
+    score_file<-data.table(
+      rsID = weights$snp,
+      effect_allele = weights$ref,
+      other_allele = weights$alt,
+      effect_weight = weights$weight
+    )
+
+    # Save to a .score file
+    write.table(
+      score_file,
+      file = paste0(
+        "/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/EXPRESSO/score_files/",
+        i,
+        '.',
+        model,
+        ".score"
+      ),
+      sep = "\t",
+      quote = FALSE,
+      row.names = FALSE)
+  }
+}
+```
+
+***
+
+## Predict expression
+
+```{r}
+setwd('/users/k1806347/oliverpainfel/Software/MyGit/GenoPred/pipeline')
+library(data.table)
+
+dir.create('/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config', recursive = T)
+dir.create('/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/output', recursive = T)
+
+conf <- c(
+  'outdir: /scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/output',
+  'config_file: /scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config/config_expresso.yaml',
+  'score_list: /scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config/score_list_expresso.txt',
+  'target_list: /scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config/target_list.txt',
+  "pgs_scaling: ['discrete']",
+  "target_populations: ['EUR']"
+)
+
+write.table(conf, '/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config/config_expresso.yaml', col.names = F, row.names = F, quote = F)
+
+# Create gwas_list
+genes <- fread('~/oliverpainfel/Data/eQTLGen/full/cis_only/gene_list.txt', header=F)$V1
+methods <- c("mse","pseudo")
+
+score_list <- data.table(
+  name = paste0(rep(genes, each = length(methods)), "_expresso_", rep(methods, times = length(genes))),
+  path = paste0(
+    "/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/EXPRESSO/score_files/",
+    rep(genes, each = length(methods)),
+    ".",
+    rep(methods, times = length(genes)),
+    ".score"
+  ),
+  label = paste0(rep(genes, each = length(methods)), "_expresso_", rep(methods, times = length(genes)))
+)
+
+write.table(
+  score_list,
+  '/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config/score_list_expresso.txt',
+  col.names = T,
+  row.names = F,
+  quote = F,
+  sep = ' '
+)
+
+```
+
+```{bash}
+snakemake \
+  --profile slurm \
+  --use-conda \
+  --configfile=/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config/config_expresso.yaml \
+  target_pgs -n 
+```
+
+***
+
+## Evaluate PGS
+
+```{r}
+# Compare predictions from GenoPred and EXPRESSO directly
+setwd('~/oliverpainfel/Software/MyGit/GenoPred/pipeline/')
+source('../functions/misc.R')
+source_all('../functions')
+library(data.table)
+
+###
+# GenoPred
+###
+
+setwd('~/oliverpainfel/Software/MyGit/GenoPred/pipeline/')
+source('../functions/misc.R')
+source_all('../functions')
+library(data.table)
+
+config<-'/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config/config_cis_only.yaml'
+pgs_methods <- read_param(config = config, param = 'pgs_methods', return_obj = F)
+outdir <- read_param(config = config, param = 'outdir', return_obj = F)
+
+# Read in PGS
+pgs_genopred <- read_pgs(config = config, pop = 'EUR', pseudo_only = T)$gtex_v8$EUR
+
+# Get a list of genes
+genes <- fread('~/oliverpainfel/Data/eQTLGen/full/cis_only/gene_list.txt', header=F)$V1
+
+###
+# EXPRESSO
+###
+
+config<-'/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config/config_expresso.yaml'
+pgs_methods <- read_param(config = config, param = 'pgs_methods', return_obj = F)
+outdir <- read_param(config = config, param = 'outdir', return_obj = F)
+
+# Read in PGS
+score_files <- list_score_files(config = config)
+pgs_expresso <- read_pgs(config = config, pop = 'EUR')$gtex_v8$EUR
+
+pgs_expresso_new<-list()
+for(i in genes){
+  pgs_expresso_new[[i]] <-
+    lapply(pgs_expresso[which(grepl(i, names(pgs_expresso)))], function(x) {
+      x[[1]]
+    })
+  names(pgs_expresso_new[[i]])<-gsub('.*_','',names(pgs_expresso_new[[i]]))
+}
+pgs_expresso <- pgs_expresso_new
+rm(pgs_expresso_new)
+
+pgs_all <- list()
+pgs_all[['genopred']] <- pgs_genopred
+pgs_all[['expresso']] <- pgs_expresso
+
+###
+# Observed
+###
+
+# Read in observed expression data
+obs<-fread('/users/k1806347/oliverpainfel/Data/GTeX/v8/GTEx_Analysis_v8_eQTL_expression_matrices/Whole_Blood.v8.normalized_expression.bed.gz')
+obs$gene_id<-gsub('\\..*','',obs$gene_id)
+obs<-t(obs[,-1:-3, with = F])
+colnames(obs)<-obs[1,]
+obs<-obs[-1,]
+obs<-cbind(row.names(obs),obs)
+colnames(obs)[1]<-'ID'
+obs<-data.table(obs)
+obs<-cbind(obs[,1],data.frame(lapply(obs[,-1], function(x) as.numeric(as.character(x)))))
+
+both_genes<-intersect(names(obs)[-1], genes)
+
+# Read in covariates
+covs<-fread('/users/k1806347/oliverpainfel/Data/GTeX/v8/GTEx_Analysis_v8_eQTL_covariates/Whole_Blood.v8.covariates.txt')
+covs<-t(covs)
+colnames(covs)<-covs[1,]
+covs<-covs[-1,]
+covs<-cbind(row.names(covs),covs)
+colnames(covs)[1]<-'ID'
+covs<-data.table(covs)
+covs<-cbind(covs[,1],data.frame(lapply(covs[,-1], function(x) as.numeric(as.character(x)))))
+
+# Merge observed expression and covariates
+obs<-obs[,!duplicated(names(obs)),with=F]
+obs_covs<-merge(obs, covs, by='ID')
+
+# Remove GTEx v7 individuals
+gtex_v7 <- fread('/users/k1806347/oliverpainfel/Data/GTeX/GTEx_v7_Annotations_SampleAttributesDS.txt')
+gtex_v7$ID <- sub("^([^-]+-[^-]+)-.*$", "\\1", gtex_v7$SAMPID)
+obs_covs <- obs_covs[!(obs_covs$ID %in% gtex_v7$ID),]
+
+# Residualise the covariates
+obs_resid<-data.frame(ID=obs_covs$ID, stringsAsFactors=F)
+for(i in both_genes){
+  obs_resid[[i]]<-as.numeric(scale(resid(lm(as.formula(paste0(i,' ~ ', paste(names(covs)[-1], collapse=' + '))), data=obs_covs))))
+}
+obs_resid<-data.table(obs_resid)
+
+cor_res<-NULL
+for(i in both_genes){
+  for(j in c('genopred', 'expresso')){
+    pgs_i_j <- pgs_all[[j]][[i]]
+    for(k in names(pgs_i_j)){
+      obs_resid_i <- obs_resid[, c('ID', i), with = F]
+      names(obs_resid_i)<-c('ID','obs')
+    
+      pgs_i_j_k <- pgs_i_j[[k]]
+      pgs_i_j_k$FID<-NULL
+      if(ncol(pgs_i_j_k) == 1){
+        next
+      }
+      names(pgs_i_j_k)<-c('ID','pred')
+      
+      both_i_j <- merge(obs_resid_i, pgs_i_j_k, by = 'ID')
+      both_i_j <- both_i_j[complete.cases(both_i_j),]
+      
+      if(nrow(both_i_j) > 0){
+        mod <- summary(lm(scale(obs) ~ scale(pred), data = both_i_j))
+        
+        cor_res <- rbind(
+          cor_res,
+          data.frame(
+            gene = i,
+            software = j,
+            r = coef(mod)[2,1],
+            se = coef(mod)[2,2],
+            p = coef(mod)[2,4],
+            n = nrow(both_i_j),
+            pgs_method = k
+          ))
+      } else {
+        cor_res <- rbind(
+          cor_res,
+          data.frame(
+            gene = i,
+            software = j,
+            r = NA,
+            se = NA,
+            p = NA,
+            n = 0,
+            pgs_method = k
+          ))      
+      }
+    }
+  }
+}
+
+library(ggplot2)
+library(cowplot)
+
+ggplot(cor_res, aes(x=gene, y=r , fill = interaction(software, pgs_method))) +
+    geom_errorbar(aes(ymin = r - se, ymax = r + se),
+                  width = 0,
+                  position = position_dodge(width = 1)) +
+    geom_point(stat="identity", position=position_dodge(1), size=3, shape=23) +
+    geom_vline(xintercept = seq(1.5, length(unique(cor_res$gene))), linetype="dotted") +
+    labs(y = "R (SE)", x='Gene', fill = 'Method') +
+    theme_half_open() +
+    background_grid(major = 'y', minor = 'y') + 
+    theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1),
+          legend.position = "top",
+          legend.key.spacing.x = unit(1, "cm"),
+          legend.justification = "center")
+
+ggplot(cor_res[cor_res$pgs_method %in% c('pseudo','mse','prscs'),], aes(x=gene, y=r , fill = interaction(software, pgs_method))) +
+    geom_errorbar(aes(ymin = r - se, ymax = r + se),
+                  width = 0,
+                  position = position_dodge(width = 1)) +
+    geom_point(stat="identity", position=position_dodge(1), size=3, shape=23) +
+    geom_vline(xintercept = seq(1.5, length(unique(cor_res$gene))), linetype="dotted") +
+    labs(y = "R (SE)", x='Gene', fill = 'Method') +
+    theme_half_open() +
+    background_grid(major = 'y', minor = 'y') + 
+    theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1),
+          legend.position = "top",
+          legend.key.spacing.x = unit(1, "cm"),
+          legend.justification = "center")
+
+# GO TO HERE: 8735 is particularly bad compared to other methods. See what is going on. Could indicate alleles are being mixed up. ALSO, the target scoring step did not detect the external score files had been updated.
+
+# Compute medians using aggregate()
+cor_res_comp <- cor_res[complete.cases(cor_res),]
+gene_n<-data.frame(table(cor_res_comp$gene))
+cor_res_comp <- cor_res_comp[cor_res_comp$gene %in% gene_n$Var1[gene_n$Freq == 11],]
+
+medians <- aggregate(r ~ pgs_method + software, data = cor_res_comp, FUN = median, na.rm = TRUE)
+
+counts <- aggregate(r ~ pgs_method + software, data = cor_res_comp, FUN = function(x) sum(!is.na(x)))
+names(counts)[3] <- "n"
+counts$group <- interaction(counts$software, counts$pgs_method)
+
+ggplot(cor_res_comp, aes(x = interaction(software, pgs_method), y = r, fill = interaction(software, pgs_method))) +
+  geom_violin(position = position_dodge(width = 0.9), alpha = 0.6, width = 0.9) +
+  geom_boxplot(width = 0.2, position = position_dodge(width = 0.9), outlier.shape = NA) +
+  geom_text(
+    data = medians,
+    aes(x = interaction(software, pgs_method), y = 0.65, label = round(r, 3)),
+    inherit.aes = FALSE,
+    size = 3.5
+  ) +
+  geom_text(
+    data = counts,
+    aes(x = group, y = 0.55, label = paste0("n=", n)),  # adjust y as needed
+    inherit.aes = FALSE,
+    size = 3
+  ) +
+  labs(y = "R", x = "Method") +
+  theme_half_open() +
+  background_grid(major = 'y', minor = 'y') + 
+  theme(
+    axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+    legend.position = 'none'
   )
 
-# I have posted an issue asking for the annotation and windowfiles for all chromosomes.
-# We could implement this method within GenoPred and include it as another model.
+# Check the correlation between the predicted expression levels
+pred_cor<-list()
+for(i in genes){
+  pgs_all_i_genopred <- pgs_all[['genopred']][[i]]
+  pgs_all_i_genopred_tmp <- do.call(cbind, lapply(pgs_all_i_genopred, function(x) {
+    if(ncol(x) == 3){
+      tmp <- x[,3]
+    } else {
+      tmp <- NA
+    }
+    return(tmp)
+  }))
+  names(pgs_all_i_genopred_tmp)<-paste0('genopred_', names(pgs_all_i_genopred))
+  
+  pgs_all_i_expresso <- pgs_all[['expresso']][[i]]
+  pgs_all_i_expresso_tmp <- do.call(cbind, lapply(pgs_all_i_expresso, function(x) {
+    tmp <- x[,3]
+  }))
+  names(pgs_all_i_expresso_tmp)<-paste0('expresso_', names(pgs_all_i_expresso))
+
+  pred_cor[[i]] <- cor(cbind(pgs_all_i_genopred_tmp, pgs_all_i_expresso_tmp))
+}
+
+# Stack all matrices into an array
+bad_entries <- sapply(pred_cor, function(x) !is.matrix(x) || any(dim(x) != dim(pred_cor[[1]])))
+names(pred_cor)[bad_entries]
+pred_cor_clean <- pred_cor[!bad_entries]
+cor_array <- simplify2array(pred_cor_clean)
+
+# Take the mean across the third dimension (genes)
+avg_cor <- apply(cor_array, c(1, 2), mean, na.rm = TRUE)
+      
+library(reshape2)
+library(ggplot2)
+
+melted_cor <- melt(avg_cor)
+
+ggplot(melted_cor, aes(Var1, Var2, fill = value)) +
+  geom_tile() +
+  scale_fill_viridis_c(option = "plasma", limits = c(0.5, 1)) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(x = "", y = "", fill = "Avg Cor")
 ```
 
 ***
@@ -840,6 +1305,689 @@ res.tmp <-
 # Analysis Phase 5: OTTERS
 
 We will need to run OTTERS ourselves to generate models restricted to HapMap3. Some OTTERS code already in otters_comp.
+
+***
+
+## Install
+
+```{bash}
+# Install OTTERS v1.0.0
+cd /users/k1806347/oliverpainfel/Software
+git clone https://github.com/daiqile96/OTTERS.git 
+cd OTTERS
+git checkout v1.0.0
+
+# Install tabix and bgzip
+cd /users/k1806347/oliverpainfel/Software
+wget https://sourceforge.net/projects/samtools/files/tabix/tabix-0.2.6.tar.bz2
+tar jxvf tabix-0.2.6.tar.bz2
+cd tabix-0.2.6
+make
+
+# copy the binary bgzip and tabix bin folder so can be called from PATH
+mkdir /users/k1806347/oliverpainfel/Software/bin
+cp bgzip tabix /users/k1806347/oliverpainfel/Software/bin
+
+# copy the plink1.9 binary and add to PATH
+cp /users/k1806347/oliverpainfel/Software/plink1.9/plink /users/k1806347/oliverpainfel/Software/bin/
+export PATH=/users/k1806347/oliverpainfel/Software/bin:$PATH 
+
+# Create a conda environment to run otters
+cd /users/k1806347/oliverpainfel/Software/OTTERS
+mamba env create --file otters_env.yaml
+conda activate otters
+
+# Install lassosum
+Rscript -e 'remotes::install_github("tshmak/lassosum@v0.4.5")'
+
+# Install SDPR
+cd /users/k1806347/oliverpainfel/Software/bin
+git clone https://github.com/eldronzhou/SDPR.git
+cd SDPR
+git checkout v0.9.1
+```
+
+***
+
+## Prepare input
+
+```{r}
+# Get the list of genes tested above
+genes <- fread('~/oliverpainfel/Data/eQTLGen/full/cis_only/gene_list.txt', header=F)$V1
+
+##
+# Annotation file (CHROM GeneStart GeneEnd TargetID)
+##
+pos<-fread('/users/k1806347/oliverpainfel/Data/eQTLGen/eQTL_to_TWAS/eQTLGen.eQTL.pos')
+
+pos <- pos[pos$ID %in% genes,]
+annot <- data.table(
+  CHROM = pos$CHR,
+  GeneStart = pos$P0,
+  GeneEnd = pos$P1,
+  TargetID = pos$ID
+)
+
+annot<-annot[order(annot$CHROM, annot$GeneStart),]
+
+dir.create('/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/OTTERS/input', recursive = T)
+fwrite(annot, '/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/OTTERS/input/annot.txt', sep='\t', na='NA', quote=F)
+
+##
+# eQTL sumstats (CHROM POS A1 A2 Z TargetID N)
+##
+
+library(data.table)
+
+cis<-fread('~/oliverpainfel/Data/eQTLGen/full/2019-12-11-cis-eQTLsFDR-ProbeLevel-CohortInfoRemoved-BonferroniAdded.txt.gz')
+cis$GenePos <- NULL
+cis$NrCohorts <- NULL
+cis$FDR <- NULL
+cis$BonferroniP <- NULL
+cis$GeneChr <- NULL
+cis<-cis[cis$Gene %in% genes,]
+
+eqtl_ss<-data.table(
+  CHROM = cis$SNPChr,
+  POS = cis$SNPPos,
+  A1 = cis$AssessedAllele,
+  A2 = cis$OtherAllele,
+  Z = cis$Zscore,
+  TargetID = cis$Gene,
+  N = cis$NrSamples
+)
+
+eqtl_ss<-eqtl_ss[order(eqtl_ss$CHROM, eqtl_ss$POS),]
+
+fwrite(eqtl_ss, '/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/OTTERS/input/eqtl_ss.txt', sep='\t', na='NA', quote=F)
+
+```
+
+***
+
+## Run OTTERS Stage 1
+
+```{bash}
+conda activate otters
+
+# set number of threads to be used
+N_THREADS=3
+
+# set up my OTTERS directory and SDPR directory
+OTTERS_DIR=/users/k1806347/oliverpainfel/Software/OTTERS
+SDPR_DIR=/users/k1806347/oliverpainfel/Software/bin/SDPR
+
+# Load plink
+module add plink
+
+# make sure the dynamic libraries of SDPR are not changed (For SDPR)
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${SDPR_DIR}/MKL/lib
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${SDPR_DIR}/gsl/lib
+
+# prevent automatically using  all available cores on a compute node (For SDPR and PRS-CS)
+export MKL_NUM_THREADS=$N_THREADS
+export NUMEXPR_NUM_THREADS=$N_THREADS
+export OMP_NUM_THREADS=$N_THREADS
+
+# Input for OTTERS STAGE I 
+# Annotation File 
+exp_anno=/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/OTTERS/input/annot.txt
+# eQTL summary statistics 
+sst_file=/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/OTTERS/input/eqtl_ss.txt
+
+# Set LD-clumping threshold in STAGE I
+clump_r2=0.99
+
+# STAGE I
+# train eQTL weights using P+T, lassosum, SDPR and PRS-CS. 
+# It may take several minutes to complete.
+for chr in $(seq 22 22); do
+  # Genotype data from LD reference panel
+  geno_dir=/users/k1806347/oliverpainfel/Data/1KG/FUSION/1000G.EUR.${chr}
+
+  # Set output directory for STAGE I
+  mkdir -p /scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/OTTERS/output_chr${chr}
+  out_dir=/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/OTTERS/output_chr${chr}
+
+  sbatch -p neurohack_cpu,cpu --mem 20G -n 3 -t 200 --wrap="
+    python3 ${OTTERS_DIR}/training.py \
+      --OTTERS_dir=${OTTERS_DIR} \
+      --SDPR_dir=${SDPR_DIR} \
+      --anno_dir=${exp_anno} \
+      --geno_dir=${geno_dir} \
+      --sst_file=${sst_file} \
+      --out_dir=${out_dir} \
+      --chrom=${chr} \
+      --r2=${clump_r2} \
+      --models=PT,lassosum,SDPR,PRScs \
+      --thread=$N_THREADS \
+      --lassosum_ld_blocks EUR.hg19"
+done
+```
+
+```{r}
+# Combine output
+models <- NULL
+for(i in 1:22){
+  if(file.exists(paste0('/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/OTTERS/output_chr', i,'/lassosum.txt'))){
+    for(j in list.files(paste0('/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/OTTERS/output_chr', i))){
+      models_i_j <-
+        fread(
+          paste0(
+            '/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/OTTERS/output_chr',
+            i,
+            '/',
+            j
+          )
+        )
+      names(models_i_j)[names(models_i_j) == 'ES']<-'BETA'
+      models_i_j$method <- gsub('.txt','',j)
+      models <- rbind(models, models_i_j)
+    }
+  }
+}
+
+# Convert into score files
+dir.create('/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/OTTERS/score_files', recursive = T)
+for(i in unique(models$TargetID)){
+  for(j in unique(models$method[models$TargetID == i])){
+    models_i_j <- models[models$TargetID == i & models$method == j,]
+    
+    weights<-data.table(
+      chr_name = models_i_j$CHROM,
+      chr_position = models_i_j$POS,
+      effect_allele = models_i_j$A1,
+      other_allele = models_i_j$A2,
+      effect_weight = models_i_j$BETA
+    )
+
+    weights <- weights[weights$effect_weight != 0 & !is.na(weights$effect_weight),]
+    
+    # Save to a .score file
+    write.table(
+      weights,
+      file = paste0(
+        "/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/OTTERS/score_files/",
+        i,
+        '.',
+        j,
+        ".score"
+      ),
+      sep = "\t",
+      quote = FALSE,
+      row.names = FALSE)
+  }
+}
+```
+
+***
+
+## Predict expression
+
+```{r}
+setwd('/users/k1806347/oliverpainfel/Software/MyGit/GenoPred/pipeline')
+library(data.table)
+
+dir.create('/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config', recursive = T)
+dir.create('/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/output', recursive = T)
+
+conf <- c(
+  'outdir: /scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/output',
+  'config_file: /scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config/config_otters.yaml',
+  'score_list: /scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config/score_list_otters.txt',
+  'target_list: /scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config/target_list.txt',
+  "pgs_scaling: ['discrete']",
+  "target_populations: ['EUR']"
+)
+
+write.table(conf, '/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config/config_otters.yaml', col.names = F, row.names = F, quote = F)
+
+# Create gwas_list
+genes <- fread('~/oliverpainfel/Data/eQTLGen/full/cis_only/gene_list.txt', header=F)$V1
+methods <- c("lassosum", "P0.001", "P0.05", "PRScs", "SDPR")
+
+score_list <- data.table(
+  name = paste0(rep(genes, each = length(methods)), "_otters_", rep(methods, times = length(genes))),
+  path = paste0(
+    "/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/OTTERS/score_files/",
+    rep(genes, each = length(methods)),
+    ".",
+    rep(methods, times = length(genes)),
+    ".score"
+  ),
+  label = paste0(rep(genes, each = length(methods)), "_otters_", rep(methods, times = length(genes)))
+)
+
+write.table(
+  score_list,
+  '/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config/score_list_otters.txt',
+  col.names = T,
+  row.names = F,
+  quote = F,
+  sep = ' '
+)
+
+```
+
+```{bash}
+snakemake \
+  --profile slurm \
+  --use-conda \
+  --configfile=/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config/config_otters.yaml \
+  target_pgs -n 
+```
+
+***
+
+## Evaluate PGS
+
+```{r}
+setwd('~/oliverpainfel/Software/MyGit/GenoPred/pipeline/')
+source('../functions/misc.R')
+source_all('../functions')
+library(data.table)
+
+config<-'/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config/config_otters.yaml'
+pgs_methods <- read_param(config = config, param = 'pgs_methods', return_obj = F)
+outdir <- read_param(config = config, param = 'outdir', return_obj = F)
+
+# Read in PGS
+pgs <- read_pgs(config = config, pop = 'EUR', pseudo_only = T)$gtex_v8$EUR
+
+# Get a list of genes
+genes <- fread('~/oliverpainfel/Data/eQTLGen/full/cis_only/gene_list.txt', header=F)$V1
+
+# Read in observed expression data
+obs<-fread('/users/k1806347/oliverpainfel/Data/GTeX/v8/GTEx_Analysis_v8_eQTL_expression_matrices/Whole_Blood.v8.normalized_expression.bed.gz')
+obs$gene_id<-gsub('\\..*','',obs$gene_id)
+obs<-t(obs[,-1:-3, with = F])
+colnames(obs)<-obs[1,]
+obs<-obs[-1,]
+obs<-cbind(row.names(obs),obs)
+colnames(obs)[1]<-'ID'
+obs<-data.table(obs)
+obs<-cbind(obs[,1],data.frame(lapply(obs[,-1], function(x) as.numeric(as.character(x)))))
+
+both_genes<-intersect(names(obs)[-1], genes)
+
+# Read in covariates
+covs<-fread('/users/k1806347/oliverpainfel/Data/GTeX/v8/GTEx_Analysis_v8_eQTL_covariates/Whole_Blood.v8.covariates.txt')
+covs<-t(covs)
+colnames(covs)<-covs[1,]
+covs<-covs[-1,]
+covs<-cbind(row.names(covs),covs)
+colnames(covs)[1]<-'ID'
+covs<-data.table(covs)
+covs<-cbind(covs[,1],data.frame(lapply(covs[,-1], function(x) as.numeric(as.character(x)))))
+
+# Merge observed expression and covariates
+obs<-obs[,!duplicated(names(obs)),with=F]
+obs_covs<-merge(obs, covs, by='ID')
+
+# Remove GTEx v7 individuals
+gtex_v7 <- fread('/users/k1806347/oliverpainfel/Data/GTeX/GTEx_v7_Annotations_SampleAttributesDS.txt')
+gtex_v7$ID <- sub("^([^-]+-[^-]+)-.*$", "\\1", gtex_v7$SAMPID)
+obs_covs <- obs_covs[!(obs_covs$ID %in% gtex_v7$ID),]
+
+# Residualise the covariates
+obs_resid<-data.frame(ID=obs_covs$ID, stringsAsFactors=F)
+for(i in both_genes){
+  obs_resid[[i]]<-as.numeric(scale(resid(lm(as.formula(paste0(i,' ~ ', paste(names(covs)[-1], collapse=' + '))), data=obs_covs))))
+}
+obs_resid<-data.table(obs_resid)
+
+cor_res<-NULL
+for(i in genes){
+  obs_resid_i <- obs_resid[, c('ID', i), with = F]
+  names(obs_resid_i)<-c('ID','obs')
+  for(j in c('lassosum', 'P0.001', 'P0.05', 'PRScs', 'SDPR')){
+    pgs_i_j <- pgs[[paste0(i,'_otters_',j)]]$external
+    pgs_i_j$FID<-NULL
+    if(ncol(pgs_i_j) == 1){
+      next
+    }
+    names(pgs_i_j)<-c('ID','pred')
+    
+    both_i_j <- merge(obs_resid_i, pgs_i_j, by = 'ID')
+    both_i_j <- both_i_j[complete.cases(both_i_j),]
+    
+    if(nrow(both_i_j) > 0){
+      mod <- summary(lm(scale(obs) ~ scale(pred), data = both_i_j))
+      
+      cor_res <- rbind(
+        cor_res,
+        data.frame(
+          gene = i,
+          pgs_method = j,
+          r = coef(mod)[2,1],
+          se = coef(mod)[2,2],
+          p = coef(mod)[2,4],
+          n = nrow(both_i_j)
+        ))
+    } else {
+      cor_res <- rbind(
+        cor_res,
+        data.frame(
+          gene = i,
+          pgs_method = j,
+          r = NA,
+          se = NA,
+          p = NA,
+          n = 0
+        ))      
+    }
+  }
+}
+
+library(ggplot2)
+library(cowplot)
+
+# Restrict to genes available for all methods
+cor_res <- cor_res[complete.cases(cor_res),]
+cor_res_complete <- NULL
+for(i in names(pgs)){
+    pgs_i <- pgs[[i]]
+    if(all(c('lassosum', 'P0.001', 'P0.05', 'PRScs', 'SDPR') %in% names(pgs_i))){
+      cor_res_complete <- rbind(cor_res_complete, cor_res[cor_res$gene == i,])
+    }
+}
+cor_res <- cor_res_complete
+
+ggplot(cor_res, aes(x=gene, y=r , fill = pgs_method)) +
+    geom_errorbar(aes(ymin = r - se, ymax = r + se),
+                  width = 0,
+                  position = position_dodge(width = 1)) +
+    geom_point(stat="identity", position=position_dodge(1), size=3, shape=23) +
+    geom_vline(xintercept = seq(1.5, length(unique(cor_res$gene))), linetype="dotted") +
+    labs(y = "R (SE)", x='Gene', fill = 'Method') +
+    theme_half_open() +
+    background_grid(major = 'y', minor = 'y') + 
+    theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1),
+          legend.position = "top",
+          legend.key.spacing.x = unit(1, "cm"),
+          legend.justification = "center")
+
+# Compute medians using aggregate()
+medians <- aggregate(r ~ pgs_method, data = cor_res, FUN = median, na.rm = TRUE)
+
+ggplot(cor_res, aes(x = pgs_method, y = r, fill = pgs_method)) +
+  geom_violin(position = position_dodge(width = 0.9), alpha = 0.6, width = 0.9) +
+  geom_boxplot(width = 0.2, position = position_dodge(width = 0.9), outlier.shape = NA) +
+  geom_text(
+    data = medians,
+    aes(x = pgs_method, y = 0.65, label = round(r, 3)),
+    inherit.aes = FALSE,
+    size = 3.5
+  ) +
+  labs(y = "R", x = "Method") +
+  theme_half_open() +
+  background_grid(major = 'y', minor = 'y') + 
+  theme(
+    axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+    legend.position = 'none'
+  )
+
+```
+
+The results are generally consistent with GenoPred and eQTL_to_TWAS. I have noticed that there are a few genes where the lassosum model performs poorly in GenoPred but not eQTL_to_TWAS, and the average performance of lassosum is better on average in OTTERS than in GenoPred and eQTL_to_TWAS. Look into this.
+
+OTTERS uses a different approach when providing lassosum with the correlations for each SNP - It using Z/sqrt(N) and then scales between -1 and 1. This goes against the advice from lassosum authors, but seems to work well.
+
+```{r}
+# Compare predictions from GenoPred and OTTERS directly
+setwd('~/oliverpainfel/Software/MyGit/GenoPred/pipeline/')
+source('../functions/misc.R')
+source_all('../functions')
+library(data.table)
+
+###
+# GenoPred
+###
+
+setwd('~/oliverpainfel/Software/MyGit/GenoPred/pipeline/')
+source('../functions/misc.R')
+source_all('../functions')
+library(data.table)
+
+config<-'/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config/config_cis_only.yaml'
+pgs_methods <- read_param(config = config, param = 'pgs_methods', return_obj = F)
+outdir <- read_param(config = config, param = 'outdir', return_obj = F)
+
+# Read in PGS
+pgs_genopred <- read_pgs(config = config, pop = 'EUR', pseudo_only = T)$gtex_v8$EUR
+
+# Get a list of genes
+genes <- fread('~/oliverpainfel/Data/eQTLGen/full/cis_only/gene_list.txt', header=F)$V1
+
+###
+# OTTERS
+###
+
+config<-'/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config/config_otters.yaml'
+pgs_methods <- read_param(config = config, param = 'pgs_methods', return_obj = F)
+outdir <- read_param(config = config, param = 'outdir', return_obj = F)
+
+# Read in PGS
+score_files <- list_score_files(config = config)
+pgs_otters <- read_pgs(config = config, pop = 'EUR')$gtex_v8$EUR
+
+pgs_otters_new<-list()
+for(i in genes){
+  pgs_otters_new[[i]] <-
+    lapply(pgs_otters[which(grepl(i, names(pgs_otters)))], function(x) {
+      x[[1]]
+    })
+  names(pgs_otters_new[[i]])<-gsub('.*_','',names(pgs_otters_new[[i]]))
+}
+pgs_otters <- pgs_otters_new
+rm(pgs_otters_new)
+
+pgs_all <- list()
+pgs_all[['genopred']] <- pgs_genopred
+pgs_all[['otters']] <- pgs_otters
+
+###
+# Observed
+###
+
+# Read in observed expression data
+obs<-fread('/users/k1806347/oliverpainfel/Data/GTeX/v8/GTEx_Analysis_v8_eQTL_expression_matrices/Whole_Blood.v8.normalized_expression.bed.gz')
+obs$gene_id<-gsub('\\..*','',obs$gene_id)
+obs<-t(obs[,-1:-3, with = F])
+colnames(obs)<-obs[1,]
+obs<-obs[-1,]
+obs<-cbind(row.names(obs),obs)
+colnames(obs)[1]<-'ID'
+obs<-data.table(obs)
+obs<-cbind(obs[,1],data.frame(lapply(obs[,-1], function(x) as.numeric(as.character(x)))))
+
+both_genes<-intersect(names(obs)[-1], genes)
+
+# Read in covariates
+covs<-fread('/users/k1806347/oliverpainfel/Data/GTeX/v8/GTEx_Analysis_v8_eQTL_covariates/Whole_Blood.v8.covariates.txt')
+covs<-t(covs)
+colnames(covs)<-covs[1,]
+covs<-covs[-1,]
+covs<-cbind(row.names(covs),covs)
+colnames(covs)[1]<-'ID'
+covs<-data.table(covs)
+covs<-cbind(covs[,1],data.frame(lapply(covs[,-1], function(x) as.numeric(as.character(x)))))
+
+# Merge observed expression and covariates
+obs<-obs[,!duplicated(names(obs)),with=F]
+obs_covs<-merge(obs, covs, by='ID')
+
+# Remove GTEx v7 individuals
+gtex_v7 <- fread('/users/k1806347/oliverpainfel/Data/GTeX/GTEx_v7_Annotations_SampleAttributesDS.txt')
+gtex_v7$ID <- sub("^([^-]+-[^-]+)-.*$", "\\1", gtex_v7$SAMPID)
+obs_covs <- obs_covs[!(obs_covs$ID %in% gtex_v7$ID),]
+
+# Residualise the covariates
+obs_resid<-data.frame(ID=obs_covs$ID, stringsAsFactors=F)
+for(i in both_genes){
+  obs_resid[[i]]<-as.numeric(scale(resid(lm(as.formula(paste0(i,' ~ ', paste(names(covs)[-1], collapse=' + '))), data=obs_covs))))
+}
+obs_resid<-data.table(obs_resid)
+
+cor_res<-NULL
+for(i in both_genes){
+  for(j in c('genopred', 'otters')){
+    pgs_i_j <- pgs_all[[j]][[i]]
+    for(k in names(pgs_i_j)){
+      obs_resid_i <- obs_resid[, c('ID', i), with = F]
+      names(obs_resid_i)<-c('ID','obs')
+    
+      pgs_i_j_k <- pgs_i_j[[k]]
+      pgs_i_j_k$FID<-NULL
+      if(ncol(pgs_i_j_k) == 1){
+        next
+      }
+      names(pgs_i_j_k)<-c('ID','pred')
+      
+      both_i_j <- merge(obs_resid_i, pgs_i_j_k, by = 'ID')
+      both_i_j <- both_i_j[complete.cases(both_i_j),]
+      
+      if(nrow(both_i_j) > 0){
+        mod <- summary(lm(scale(obs) ~ scale(pred), data = both_i_j))
+        
+        cor_res <- rbind(
+          cor_res,
+          data.frame(
+            gene = i,
+            software = j,
+            r = coef(mod)[2,1],
+            se = coef(mod)[2,2],
+            p = coef(mod)[2,4],
+            n = nrow(both_i_j),
+            pgs_method = k
+          ))
+      } else {
+        cor_res <- rbind(
+          cor_res,
+          data.frame(
+            gene = i,
+            software = j,
+            r = NA,
+            se = NA,
+            p = NA,
+            n = 0,
+            pgs_method = k
+          ))      
+      }
+    }
+  }
+}
+
+library(ggplot2)
+library(cowplot)
+
+ggplot(cor_res, aes(x=gene, y=r , fill = interaction(software, pgs_method))) +
+    geom_errorbar(aes(ymin = r - se, ymax = r + se),
+                  width = 0,
+                  position = position_dodge(width = 1)) +
+    geom_point(stat="identity", position=position_dodge(1), size=3, shape=23) +
+    geom_vline(xintercept = seq(1.5, length(unique(cor_res$gene))), linetype="dotted") +
+    labs(y = "R (SE)", x='Gene', fill = 'Method') +
+    theme_half_open() +
+    background_grid(major = 'y', minor = 'y') + 
+    theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1),
+          legend.position = "top",
+          legend.key.spacing.x = unit(1, "cm"),
+          legend.justification = "center")
+
+ggplot(cor_res[cor_res$pgs_method %in% c('sdpr','SDPR'),], aes(x=gene, y=r , fill = interaction(software, pgs_method))) +
+    geom_errorbar(aes(ymin = r - se, ymax = r + se),
+                  width = 0,
+                  position = position_dodge(width = 1)) +
+    geom_point(stat="identity", position=position_dodge(1), size=3, shape=23) +
+    geom_vline(xintercept = seq(1.5, length(unique(cor_res$gene))), linetype="dotted") +
+    labs(y = "R (SE)", x='Gene', fill = 'Method') +
+    theme_half_open() +
+    background_grid(major = 'y', minor = 'y') + 
+    theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1),
+          legend.position = "top",
+          legend.key.spacing.x = unit(1, "cm"),
+          legend.justification = "center")
+
+
+# Compute medians using aggregate()
+medians <- aggregate(r ~ pgs_method + software, data = cor_res, FUN = median, na.rm = TRUE)
+
+counts <- aggregate(r ~ pgs_method + software, data = cor_res, FUN = function(x) sum(!is.na(x)))
+names(counts)[3] <- "n"
+counts$group <- interaction(counts$software, counts$pgs_method)
+
+ggplot(cor_res, aes(x = interaction(software, pgs_method), y = r, fill = interaction(software, pgs_method))) +
+  geom_violin(position = position_dodge(width = 0.9), alpha = 0.6, width = 0.9) +
+  geom_boxplot(width = 0.2, position = position_dodge(width = 0.9), outlier.shape = NA) +
+  geom_text(
+    data = medians,
+    aes(x = interaction(software, pgs_method), y = 0.65, label = round(r, 3)),
+    inherit.aes = FALSE,
+    size = 3.5
+  ) +
+  geom_text(
+    data = counts,
+    aes(x = group, y = 0.55, label = paste0("n=", n)),  # adjust y as needed
+    inherit.aes = FALSE,
+    size = 3
+  ) +
+  labs(y = "R", x = "Method") +
+  theme_half_open() +
+  background_grid(major = 'y', minor = 'y') + 
+  theme(
+    axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+    legend.position = 'none'
+  )
+
+# Check the correlation between the predicted expression levels
+pred_cor<-list()
+for(i in genes){
+  pgs_all_i_genopred <- pgs_all[['genopred']][[i]]
+  pgs_all_i_genopred_tmp <- do.call(cbind, lapply(pgs_all_i_genopred, function(x) {
+    if(ncol(x) == 3){
+      tmp <- x[,3]
+    } else {
+      tmp <- NA
+    }
+    return(tmp)
+  }))
+  names(pgs_all_i_genopred_tmp)<-paste0('genopred_', names(pgs_all_i_genopred))
+  
+  pgs_all_i_otters <- pgs_all[['otters']][[i]]
+  pgs_all_i_otters_tmp <- do.call(cbind, lapply(pgs_all_i_otters, function(x) {
+    tmp <- x[,3]
+  }))
+  names(pgs_all_i_otters_tmp)<-paste0('otters_', names(pgs_all_i_otters))
+
+  pred_cor[[i]] <- cor(cbind(pgs_all_i_genopred_tmp, pgs_all_i_otters_tmp))
+}
+
+# Stack all matrices into an array
+bad_entries <- sapply(pred_cor, function(x) !is.matrix(x) || any(dim(x) != dim(pred_cor[[1]])))
+names(pred_cor)[bad_entries]
+pred_cor_clean <- pred_cor[!bad_entries]
+cor_array <- simplify2array(pred_cor_clean)
+
+# Take the mean across the third dimension (genes)
+avg_cor <- apply(cor_array, c(1, 2), mean, na.rm = TRUE)
+      
+library(reshape2)
+library(ggplot2)
+
+melted_cor <- melt(avg_cor)
+
+ggplot(melted_cor, aes(Var1, Var2, fill = value)) +
+  geom_tile() +
+  scale_fill_viridis_c(option = "plasma", limits = c(0.5, 1)) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(x = "", y = "", fill = "Avg Cor")
+```
+
+As expected the results of OTTERS and GenoPred are highly concordant.
+
+OTTERS has two p-value thresh models. I could specify these thresholds for ptclump. It also includes the SDPR method. 
 
 ***
 
@@ -858,11 +2006,17 @@ Download published models.
 To do:
 - Fix SBayesRC reference issue - I think it is fixed but reference data download is slow - 
 - Make SBayesRC more efficient when using locus specific sumstats
+- Updating analysis to 50 genes in chr22, so we can then run EXPRESSO with the data they provide.
 - Compare prediction when using models from SUMMIT, SUMMIT-FA, OTTERS and EXPRESSO
 - Look into AdipoExpress meta-analysis sumstats
 - Look into liver eQTL meta-analysis: https://mohlke.web.unc.edu/data/signal-based-liver-eqtl-meta-analysis-broadaway-et-al-ajhg-2024/
 - Could compare to models from OMICSPRED - They have shared sumstats
 - Brain single cell meta-analysis: https://pmc.ncbi.nlm.nih.gov/articles/PMC11908325/#S22
+- SABR - study. New eQTL dataset for AFR ancestry
+
+
+Thoughts overall:
+- GenoPred provides very little over OTTERS as it stands. The main advantage over OTTERS is its scalability to genome-wide QTL data. Another advance could come from modelling multiple PGS methods together.
 
 ***
 
@@ -879,5 +2033,358 @@ library(data.table)
 ss <- fread('/users/k1806347/oliverpainfel/Data/AdipoExpress/marginal_byChr_EURonly/EURonly_marginal_local_eQTL_meta_chr10.txt')
 
 table(ss$ENSG)
+
+export MKL_NUM_THREADS=1;     export NUMEXPR_NUM_THREADS=1;     export OMP_NUM_THREADS=1;     export OPENBLAS_NUM_THREADS=1;
+    export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:resources/software/sdpr/MKL/lib;     export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:resources/software/sdpr/gsl/lib
+
+
+opt$ref_plink_chr<-'resources/data/ref/ref.chr'
+opt$ref_keep<-'resources/data/ref/keep_files/EUR.keep'
+opt$gwas_pop<-'EUR'
+opt$ref_pcs<-'/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/output/reference/pc_score_files/TRANS/ref-TRANS-pcs.profiles'
+opt$sumstats<-'/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/output/reference/gwas_sumstat/ENSG00000002549/ENSG00000002549-cleaned.gz'
+opt$output<-'/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/output/reference/pgs_score_files/sdpr/ENSG00000002549/ref-ENSG00000002549'
+opt$n_cores<-1
+opt$pop_data<-'resources/data/ref/ref.pop.txt'
+opt$sdpr<-'resources/software/sdpr/SDPR'
+opt$test<-NA 
+
+```
+
+***
+
+# Analysis Phase 8: Ensemble approach
+
+```{r}
+library(glmnet)
+library(fastshap)
+library(tibble)
+library(data.table)
+library(dplyr)
+library(psych)
+
+# Read in observed expression
+obs<-fread('/users/k1806347/oliverpainfel/Data/GTeX/v8/GTEx_Analysis_v8_eQTL_expression_matrices/Whole_Blood.v8.normalized_expression.bed.gz')
+obs$gene_id<-gsub('\\..*','',obs$gene_id)
+obs<-t(obs[,-1:-3, with = F])
+colnames(obs)<-obs[1,]
+obs<-obs[-1,]
+obs<-cbind(row.names(obs),obs)
+colnames(obs)[1]<-'ID'
+obs<-data.table(obs)
+obs<-cbind(obs[,1],data.frame(lapply(obs[,-1], function(x) as.numeric(as.character(x)))))
+
+both_genes<-intersect(names(obs)[-1], genes)
+
+# Read in covariates
+covs<-fread('/users/k1806347/oliverpainfel/Data/GTeX/v8/GTEx_Analysis_v8_eQTL_covariates/Whole_Blood.v8.covariates.txt')
+covs<-t(covs)
+colnames(covs)<-covs[1,]
+covs<-covs[-1,]
+covs<-cbind(row.names(covs),covs)
+colnames(covs)[1]<-'ID'
+covs<-data.table(covs)
+covs<-cbind(covs[,1],data.frame(lapply(covs[,-1], function(x) as.numeric(as.character(x)))))
+
+# Merge observed expression and covariates
+obs<-obs[,!duplicated(names(obs)),with=F]
+obs_covs<-merge(obs, covs, by='ID')
+
+# Remove GTEx v7 individuals
+gtex_v7 <- fread('/users/k1806347/oliverpainfel/Data/GTeX/GTEx_v7_Annotations_SampleAttributesDS.txt')
+gtex_v7$ID <- sub("^([^-]+-[^-]+)-.*$", "\\1", gtex_v7$SAMPID)
+obs_covs <- obs_covs[!(obs_covs$ID %in% gtex_v7$ID),]
+
+# Residualise the covariates
+obs_resid<-data.frame(ID=obs_covs$ID, stringsAsFactors=F)
+for(i in both_genes){
+  obs_resid[[i]]<-as.numeric(scale(resid(lm(as.formula(paste0(i,' ~ ', paste(names(covs)[-1], collapse=' + '))), data=obs_covs))))
+}
+obs_resid<-data.table(obs_resid)
+expression_mat <- obs_resid
+
+###
+# Read in prediction expression
+###
+
+# Compare predictions from GenoPred and EXPRESSO directly
+setwd('~/oliverpainfel/Software/MyGit/GenoPred/pipeline/')
+source('../functions/misc.R')
+source_all('../functions')
+library(data.table)
+
+config<-'/scratch/prj/bcn_gtex_eqtl_twas/scratch_tmp/GenoPred/config/config_cis_only.yaml'
+pgs_methods <- read_param(config = config, param = 'pgs_methods', return_obj = F)
+outdir <- read_param(config = config, param = 'outdir', return_obj = F)
+
+# Read in PGS
+pgs_genopred <- read_pgs(config = config, pop = 'EUR', pseudo_only = T)$gtex_v8$EUR
+
+pred_list <- lapply(pgs_genopred, function(x) {
+  tmp <- Reduce(function(dtf1, dtf2) merge(dtf1, dtf2, by = c('FID','IID'), all.x = TRUE), x)
+  names(tmp) <- c('FID','ID', names(x))
+  tmp$FID<-NULL
+  tmp
+})
+
+# Get a list of genes
+genes <- fread('~/oliverpainfel/Data/eQTLGen/full/cis_only/gene_list.txt', header=F)$V1
+genes <- genes[genes %in% names(expression_mat)]
+
+#–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+# 2) Loop over genes, fit elastic‐net & compute SHAP
+#–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+
+# 1) Define the testing function
+test_gene_williams <- function(y, X, alpha = 0.5) {
+  X_df <- as.data.frame(X)
+  stopifnot(!any(is.null(colnames(X_df))))
+  
+  # Fit elastic‐net stacking
+  cvf <- cv.glmnet(
+    x           = as.matrix(X_df), 
+    y           = as.numeric(y), 
+    alpha       = alpha, 
+    standardize = TRUE
+  )
+  pred_ens <- predict(cvf$glmnet.fit, 
+                      newx = as.matrix(X_df), 
+                      s    = cvf$lambda.min)[,1]
+  
+  # If pred_ens is constant, correlations undefined → NAs
+  if (sd(pred_ens) == 0) {
+    return(
+      tibble(
+        method = colnames(X_df),
+        r_ens  = NA_real_,
+        r_m    = NA_real_,
+        r_pred = NA_real_,
+        p_val  = NA_real_
+      )
+    )
+  }
+  
+  # Compute ensemble correlation
+  r_ens <- cor(y, pred_ens, use = "complete.obs")
+  n     <- length(y)
+  
+  # Build results per method
+  out <- tibble(method = colnames(X_df)) %>%
+    rowwise() %>%
+    mutate(
+      r_m    = cor(y,        X_df[[method]],   use = "complete.obs"),
+      r_pred = cor(pred_ens, X_df[[method]],   use = "complete.obs"),
+      p_val  = {
+        if (is.na(r_m) || is.na(r_ens) || is.na(r_pred)) {
+          NA_real_
+        } else {
+          psych::paired.r(
+            xy       = r_ens,
+            yz       = r_m,
+            xz       = r_pred,
+            n         = n,
+            twotailed = FALSE
+          )$p
+        }
+      }
+    ) %>%
+    ungroup() %>%
+    select(method, r_ens, r_m, r_pred, p_val)
+  
+  return(out)
+}
+
+
+test_gene_williams <- function(y, X, alpha = 0.5) {
+  # 1) Ensure y is a plain numeric vector
+  y_vec <- as.numeric(y)
+  stopifnot(length(y_vec) > 1)
+  
+  # 2) Ensure X is a data.frame with colnames
+  X_df <- as.data.frame(X)
+  stopifnot(!is.null(colnames(X_df)))
+  
+  # 3) Fit elastic‐net on the full data
+  cvf <- cv.glmnet(
+    x           = as.matrix(X_df),
+    y           = y_vec,
+    alpha       = alpha,
+    standardize = TRUE
+  )
+  preds_ens <- predict(
+    cvf$glmnet.fit,
+    newx = as.matrix(X_df),
+    s    = cvf$lambda.min
+  )[,1]
+  
+  # 4) If ensemble is constant → return NAs
+  if (sd(preds_ens) == 0) {
+    return(
+      tibble(
+        method = colnames(X_df),
+        r_ens  = NA_real_,
+        r_m    = NA_real_,
+        r_pred = NA_real_,
+        p_val  = NA_real_
+      )
+    )
+  }
+  
+  # 5) Compute ensemble correlation
+  r_ens <- cor(y_vec, preds_ens, use = "complete.obs")
+  n     <- length(y_vec)
+  
+  # 6) Build per‐method stats
+  out <- tibble(method = colnames(X_df)) %>%
+    rowwise() %>%
+    mutate(
+      # correlation of this method with truth
+      r_m    = cor(y_vec, X_df[[method]], use = "complete.obs"),
+      # correlation of this method with the ensemble
+      r_pred = cor(preds_ens, X_df[[method]], use = "complete.obs"),
+      # Williams test (one‐sided: ensemble > method)
+      p_val  = if (any(is.na(c(r_ens, r_m, r_pred)))) {
+                 NA_real_
+               } else {
+                 psych::paired.r(
+                  xy       = r_ens,
+                  yz       = r_m,
+                  xz       = r_pred,
+                   n         = n,
+                   twotailed = FALSE
+                 )$p
+               }
+    ) %>%
+    ungroup() %>%
+    # 7) add the ensemble correlation as a column
+    mutate(r_ens = r_ens) %>%
+    # 8) pick and order your columns
+    select(method, r_ens, r_m, r_pred, p_val)
+  
+  return(out)
+}
+
+set.seed(123)  # for reproducibility of SHAP sampling
+importance_list <- vector("list", length(pred_list))
+names(importance_list) <- names(pred_list)
+cor_res<-NULL
+
+for (gene in genes[-1:-12]) {
+  print(which(genes == gene))
+  
+  merged <- merge(expression_mat, pred_list[[gene]], by = 'ID')
+  # a) Response & predictors for this gene
+  y <- merged[, gene, with=F]
+  X <- merged[, names(pred_list[[gene]])[-1], with = F]
+  X[is.na(X)] <- 0
+  
+  # b) Fit Elastic Net (α = 0.5; you can tune α if desired)
+  cvfit      <- cv.glmnet(as.matrix(X), as.matrix(y), alpha = 0.5)
+  fit        <- cvfit$glmnet.fit
+  lambda_min <- cvfit$lambda.min
+  
+  # Estimate correlation between ensemble model predictions and observed
+  preds_ens <- predict(
+    cvfit$glmnet.fit,
+    newx = as.matrix(X),
+    s    = cvfit$lambda.min
+  )[,1]
+  
+  cor_res <- rbind(cor_res,
+                   data.frame(gene = gene,
+                              r_ens = cor(preds_ens, as.numeric(y))[1]))
+    
+  # c) Wrap the predict() call so fastshap knows how to score new data
+  pred_wrapper <- function(object, newdata) {
+    predict(object, newx = as.matrix(newdata), s = lambda_min)[,1]
+  }
+  
+  # d) Compute SHAP values (nsim = Monte‐Carlo draws; increase for stability)
+  phi <- fastshap::explain(
+    object       = fit,
+    X            = as.data.frame(X),
+    pred_wrapper = pred_wrapper,
+    nsim         = 200
+  )
+  
+  # e) Aggregate to global importances
+  global_imp <- colMeans(abs(phi))
+  
+  # f) Store as a tibble
+  importance_list[[gene]] <- 
+    tibble(
+      gene       = gene,
+      method     = names(global_imp),
+      importance = as.numeric(global_imp)
+    )
+}
+
+#–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+# 3) Combine results across genes
+#–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+importance_df <- bind_rows(importance_list)
+
+# Now you have a data.frame with columns: gene, method, importance.
+# You can, for example, compute mean importance per method across all genes:
+avg_imp_by_method <- 
+  importance_df %>% 
+  group_by(method) %>% 
+  summarize(avg_importance = mean(importance)) %>% 
+  arrange(desc(avg_importance))
+
+print(avg_imp_by_method)
+
+# Ensure methods are ordered by decreasing importance
+avg_imp_by_method <- avg_imp_by_method %>%
+  dplyr::arrange(desc(avg_importance)) %>%
+  dplyr::mutate(method = factor(method, levels = method))
+
+# Plot
+library(ggplot2)
+ggplot(avg_imp_by_method, aes(x = method, y = avg_importance, group = 1)) +
+  geom_line() +
+  geom_point(size = 3) +
+  labs(
+    x = "PGS Method (ranked)",
+    y = "Average SHAP Importance",
+    title = "Elbow Plot of PGS Method Importances"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+
+set.seed(123)  # for reproducibility of SHAP sampling
+cor_res<-NULL
+
+for (gene in genes) {
+  print(which(genes == gene))
+  
+  merged <- merge(expression_mat, pred_list[[gene]], by = 'ID')
+  # a) Response & predictors for this gene
+  y <- merged[, gene, with=F]
+  X <- merged[, names(pred_list[[gene]])[-1], with = F]
+  X[is.na(X)] <- 0
+  
+  # b) Fit Elastic Net (α = 0.5; you can tune α if desired)
+  cvfit      <- cv.glmnet(as.matrix(X), as.matrix(y), alpha = 0.5)
+  fit        <- cvfit$glmnet.fit
+  lambda_min <- cvfit$lambda.min
+  
+  # Estimate correlation between ensemble model predictions and observed
+  preds_ens <- predict(
+    cvfit$glmnet.fit,
+    newx = as.matrix(X),
+    s    = cvfit$lambda.min
+  )[,1]
+  
+  cor_res <- rbind(cor_res,
+                   data.frame(gene = gene,
+                              r_ens = cor(preds_ens, y)[1]))
+    
+}
+
+# This shows me that the gain from the multi model is not large, but it is always best. Not suprising given this is cross validation. It would be more convincing if we could show an improvement in an independent dataset, or do the tuning with sumstats alone.
 
 ```
